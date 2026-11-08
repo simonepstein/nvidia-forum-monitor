@@ -397,3 +397,36 @@ All 11 findings from the review of the #36/#37/#39 commits are addressed.
 - **Trimmed payloads and test quality (11).** `_post_like_count()` returns `None` when the payload carries no like field, and the `"same"` branch then leaves the stored `like_count` (and `accepted_answer`) alone; a test re-fetches a trimmed payload and keeps likes 4 / accepted true. The CLI text assertion now checks the rendered labels.
 
 Full suite: **344 passed, 1 skipped**; ruff check and format clean. Live re-check unchanged apart from the numbers above: 10 of 86 topics, forums 721 + 723, components sum to score, **9,851 bytes compact**, identical rerun, 25 URLs resolve, no `global` cursor row.
+
+## #36/#37/#39 re-test (2026-11-08 19:15, `fix/run-a-issues` @ b643351)
+
+Ran on the live DB, read-only, except for one mark on a `.backup` copy. Live requests: 2 (`/t/384438.json`, plus one `posts.json` batch), 1 s apart.
+
+**Passed:**
+- 344 passed, 1 skipped. ruff is clean.
+- **#39 likes:** the DB shows 9120 posts, 9 with likes, all in topic 384438.
+  - Checked against the live `reaction_users_count` for the OP and posts 134–143, they all match. The exception is post 138, which was 5 in the DB and 6 live: a like added after the 17:52 sync.
+  - Older posts (2–21) are still 0 while live has 1–8. That's expected, since they're outside `refetch_recent_days`.
+  - Sync run 24 shows `posts_new=3` and `posts_changed=0`.
+  - Of the 15 posts fetched at 17:52, only the 3 new ones have `changed_at` after 17:50, each equal to its `first_fetched_at`. So there were no phantom edits.
+- **#37 scores:** I recomputed them independently from SQL: new posts in the window with `created_at >= since-24h`, distinct posters, summed likes, new/accepted/staff indicators, and the factor `0.5+min(rel,40)/40`.
+  - All 86 topics are found, and the top 10 and their order match exactly, with scores within 0.001 (the rounding of the components).
+  - The components sum to `score` for each topic.
+  - Running again with the echoed `until` gives an identical ranking and identical scores.
+  - Paging via `next` (offset 10, then 20, and so on up to 86) covers all 86 topics with no overlap.
+  - The 'global' cursor was never written, and default, tester and claude-review are unchanged.
+  - The compact payload is 9,851 B. With `detail=True` it's 16.1 KB, which is opt-in as documented.
+  - `--until "last week"` prints a one-line error and exits with code 1.
+- **#37 vs my hand ranking (SPEC dry run):** the order is the same: 386125 at 11.24, 381350 at 10.70, 387397 at 9.39. The exception is 384438, which comes in at #3 (10.25) solely through its likes term (+3.58). That topic is the only one re-fetched since the #39 fix, so likes are currently uneven across topics.
+  - This is transient. The next ordinary incremental sync of both forums refreshes likes for recent posts in bumped topics.
+  - Until then, read the likes term with caution.
+- **#37 irrelevant mark (on a copy):** with `relevance_override=0` on 381350, its factor is 0.5 and it shows `relevant:false`, scoring 3.657 at rank 34 of 86. With `--relevant-only` it's absent and the total is 85.
+- **#36:** `list_flags` gives both flags `url` and `title` (/t/382939, /t/382140).
+  - `get_notes` returns sources for notes 3/2/1 of 0/5/2, and the post URLs resolve to the right `/t/topic/n`. For example, 1881645 is /t/382140/20.
+  - `global_digest.knowledge` notes carry `sources`.
+
+### #40 (P2): `global-digest --detail` text lists every top post after all the topics, not under each one
+- **Repro:** `uv run sparkwatch global-digest --since 2026-11-01 --no-advance --detail`.
+- **Observed:** the ten topic blocks print first. Then all twenty `· N likes …/t/<topic>/<n>` lines follow as one block (lines 34–53), so you have to match each URL's topic id by eye.
+- **Expected:** two indented post lines under each topic's `terms:` line, which is what the fix summary described.
+- **Cause:** in `digest.py:render_global_digest` (around line 933), the `for item in payload["hot_topics"]: for post in item["top_posts"]` loop runs after `lines.extend(_render_global_topic(...))`. It should be inside `_render_global_topic`, or run per item. The JSON is correct.
