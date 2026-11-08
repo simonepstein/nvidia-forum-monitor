@@ -811,6 +811,47 @@ def test_a_new_tag_without_a_commit_date_leaves_occurred_at_null(settings, conn,
     assert events[0]["occurred_at"] is None
 
 
+def test_a_tag_published_while_the_row_was_legacy_is_swallowed_by_the_seed(
+    settings, conn, router, github
+):
+    """ISSUES #53: the seeding response has nothing to diff against, so it records only."""
+    baseline(github, tags=("v0.11.0", "v0.10.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    forget_seen_tags(conn)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(f"{BASE}/tags", conditional_tags(["v0.12.0", "v0.11.0", "v0.10.0"]))
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == []
+    assert tag_events(conn) == []
+    assert repo_etags(conn)["seen_tags"] == ["v0.12.0", "v0.11.0", "v0.10.0"]
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        conditional_tags(
+            [
+                {"name": "v0.13.0", "commit": {"sha": SHA2}},
+                {"name": "v0.12.0"},
+                {"name": "v0.11.0"},
+            ],
+            etag='"tags-3"',
+        ),
+    )
+    github.add(
+        f"{BASE}/commits/{SHA2}",
+        {"commit": {"committer": {"date": "2026-03-03T00:00:00+00:00"}}},
+    )
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == [{"repo": REPO, "tag": "v0.13.0"}]
+    assert [event["ref"] for event in tag_events(conn)] == ["v0.13.0"]
+
+
 def test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline(settings, conn, router, github):
     baseline(github, tags=("staging-current-1790687448",))
     github.install(router)

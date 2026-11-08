@@ -835,6 +835,7 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - `test_a_legacy_row_behind_a_304_seeds_seen_tags`: the row's ETag would 304 a conditional request; the fix sends none, the page is recorded, `changed: []`, 0 events, the ETag is kept.
   - `test_a_seeded_legacy_row_emits_one_new_tag_at_the_head`: seed check emits nothing, the next response (new ETag) adds one tag at the head → exactly 1 event with its commit date, and the tags request is conditional again.
   - `test_an_empty_tags_page_still_goes_conditional_next_time`: `seen_tags: []` counts as seeded, so a tagless repo doesn't fetch unconditionally forever.
+  - `test_a_tag_published_while_the_row_was_legacy_is_swallowed_by_the_seed`: the seeding response records a tag it cannot diff and emits nothing; the next genuinely new tag is emitted with its date. Pins the documented price of (a).
   - `test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline` now also asserts the tags request carries no `If-None-Match`.
 - **Rehearsal (on `data/sparkwatch.db.backup-53`, a `sqlite3.backup()` copy; live DB untouched):**
   - The copy's repo 87 had `tags` but no `seen_tags`, exactly the live state. One `repos check --repo eugr/spark-vllm-docker` → 3 requests, `auth: token`, `changed: []`, and `seen_tags` recorded with the 10 `staging-current-*` names. The second check left it unchanged.

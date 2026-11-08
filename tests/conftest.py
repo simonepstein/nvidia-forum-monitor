@@ -309,7 +309,11 @@ class GitHubMock:
         status: int = 200,
         headers: dict[str, str] | None = None,
     ) -> None:
-        """Queue a response for `path`; a callable payload gets the request and returns one."""
+        """Queue a response for `path`; a callable payload gets the request and returns one.
+
+        A callable payload replaces the whole response, so `status` and `headers` are
+        ignored for it: build the `httpx.Response` inside the callable instead.
+        """
         self.routes.setdefault(path, []).append((status, payload, headers or {}))
 
     def install(self, router: respx.Router) -> None:

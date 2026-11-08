@@ -663,11 +663,12 @@ def check_repos(
 
                 etags = _etags(row)
                 seen = etags.get("seen_tags")
+                seeded = isinstance(seen, list)
                 try:
                     status, response, new_etag = client.get(
                         f"/repos/{row['owner']}/{row['name']}/tags",
                         params={"per_page": 10},
-                        etag=etags.get("tags") if isinstance(seen, list) else None,
+                        etag=etags.get("tags") if seeded else None,
                     )
                 except GitHubNotFound:
                     response = None
@@ -676,7 +677,7 @@ def check_repos(
                     entries = [item for item in response.json() if item.get("name")]
                     tags = [item["name"] for item in entries]
                     _update_etags(conn, repo_id, {"tags": new_etag or None, "seen_tags": tags})
-                    if isinstance(seen, list) and not baseline:
+                    if seeded and not baseline:
                         for item in entries:
                             name = item["name"]
                             if name in seen or _has_event(conn, repo_id, "tag", name):
