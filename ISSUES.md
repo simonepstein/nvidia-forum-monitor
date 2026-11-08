@@ -698,3 +698,26 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 8. **#48 review fix, forum filter under `written`.** `uv run sparkwatch global-digest --since 2026-10-25 --until 2026-11-08 --basis written --forum 721 --no-advance --json` → 114 topics, every `hot_topics[].forum_id` 721, `first_linked.count` 88 (repos/HF linked from 721 posts only); `--forum 723` → 33 topics, `first_linked.count` 32. The two topic counts add up to the unfiltered 147, and neither section shows the other forum's repos.
 9. **#49 review fix, queued rows.** `uv run pytest tests/test_repos.py -q -k "watched_rows_sharing or records_the_metadata_check"` → 2 passed; the two-watched-rows case finishes with `checked: 1`, `merged: [{from: 2, to: 1}]` and one row left instead of a `TypeError`.
 10. **#47 review fixes.** `uv run pytest tests/test_sync.py -q -k engagement` and `uv run pytest tests/test_mcp_tools.py -q -k refresh_engagement` → all pass. On a copy, `SPARKWATCH_GENERAL__DB_PATH=data/sparkwatch.db.backup-50 uv run sparkwatch sync --refresh-engagement --days 120 --budget 5` → `days: 60`, a `since` about 60 days back, `hint: "days capped to 60: …"`, and `partial: true` if 5 s runs out; the MCP tool called with only `days` uses a 180 s budget instead of running unbounded.
+
+## #48–#50 re-test (2026-11-08 21:25, `fix/run-a-issues` @ 1947cdc)
+
+**All passed.**
+- 385 passed, 1 skipped. ruff check and ruff format are clean.
+- **#48 (live DB, read-only):** `--since 2026-10-25 --until 2026-11-08 --basis written` returns 147 topics.
+  - The top 3 are 386125 at 19.945, 384438 at 17.056 and 381350 at 16.087.
+  - My independent SQL ranking by `created_at` gives 19.945, 17.056 and 16.086, and the 0.001 difference is component rounding.
+  - The components sum to the score for every topic. The response has `cursor: null` and no `backfilled` key, `next` carries `basis: written`, and it's 8.2 KB compact.
+  - `--basis seen` for the same window returns 0.
+  - `--forum 721` gives 114 topics and `--forum 723` gives 33, which matches SQL (147 = 114 + 33), with every row in the requested forum.
+  - `--basis sideways` and `--since cursor --basis written` each print a one-line error and exit 1.
+  - The text header reads `(basis written)` and has no backfilled line.
+  - `digest_cursors` still has 3 rows and no `global`.
+- **#50:** all five `research_notes.as_of` values are full timestamps, with row 5 now `2026-11-08T00:00:00+00:00`.
+  - The fix session wrote this live (commit 6d01c14), although live writes had been left to the user. The value is correct and a backup was taken, so no action is needed.
+- **#49 (on a `.backup` copy, live GitHub):**
+  - Before: rows 69 (watched, 3 mentions, 2 events) and 71 (unwatched, 3 mentions), 414 repos.
+  - `repos check` made 12 requests. Row 69 became `…-tensorfold-zig` with `github_id 1424520842`, and nothing merged.
+  - `repos check --repo …-zig-testing` made 1 request and returned `merged: [{from: 71, to: 69}]`. After it there's one row: 69, with 6 mentions and 3 events. That leaves 413 repos, the 1131 mentions unchanged, and the 4 installs intact. `foreign_key_check` is clean and `integrity_check` returns ok.
+  - A third `repos check` returned `stopped_early: true` after 1 request, because GitHub's anonymous limit was exhausted (`remaining 0/60`, reset 22:07). It stopped cleanly with no errors, which is the intended behaviour.
+
+**Note, not a bug:** five watched repos at about 4–5 requests each is roughly 25 requests per `repos check`. Anonymous GitHub allows 60 per hour, shared by everything on this IP; today that included rehearsals by two sessions. `GITHUB_TOKEN` is already supported (`repos.py:63`). A fine-grained token with no scopes, used read-only for public repos, raises the limit to 5000 per hour.
