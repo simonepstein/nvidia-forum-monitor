@@ -198,10 +198,14 @@ enabled = false                  # needs BRAVE_API_KEY
 3. **Queue topics:** a topic is queued if it is new, if `highest_post_number` went up, if `bumped_at` changed, or if this is a backfill.
 4. **Fetch each queued topic:**
    1. Call `get_topic`, which gives the first 20 posts plus `stream`.
-   2. **Target IDs** = IDs in `stream` that aren't stored yet, plus stored posts created within the last `refetch_recent_days`.
+   2. **Target IDs** = IDs in `stream` that aren't stored yet, plus stored posts created within the last `refetch_recent_days`. IDs in `missing_posts` are excluded, unless their re-check is due (see below).
    3. Fetch target batches **from newest to oldest**, and stop once a whole batch is older than the floor. The OP is always kept.
    4. Upsert posts with `content_hash = sha256(raw)`.
-   5. Run `links.discover` and `watch.match` for each post that was inserted or changed, then recompute the topic's `relevance_score`.
+   5. **Tombstones:** a requested ID that `posts.json` doesn't return is upserted into `missing_posts` with `reason='absent_from_batch'`.
+      - If a batch fails with 403, record `forbidden`. If the post is returned with `deleted_at` set or `hidden` true, record `deleted` or `hidden`.
+      - An ID that later comes back is removed from `missing_posts` and stored normally.
+      - **Re-check policy:** tombstoned IDs are requested again only during a backfill, or when `last_checked_at` is more than 30 days old. Each re-check updates `last_checked_at`. Deleted posts are occasionally restored, so this keeps re-requests rare without losing anything permanently.
+   6. Run `links.discover` and `watch.match` for each post that was inserted or changed, then recompute the topic's `relevance_score`.
 5. **Time budget:** if `time_budget_s` runs out, finish the current topic, commit, and return `partial=True`.
    - `last_synced_at` is **not** advanced on a partial run, so the next call picks up the rest.
    - Upserts are idempotent, so nothing is lost or duplicated.
@@ -270,6 +274,11 @@ CREATE TABLE posts (
   UNIQUE(topic_id, post_number));
 CREATE INDEX posts_changed ON posts(changed_at);
 CREATE INDEX posts_topic ON posts(topic_id, post_number);
+CREATE TABLE missing_posts (       -- tombstones: IDs in a topic's stream that couldn't be fetched
+  topic_id INTEGER NOT NULL REFERENCES topics(id), post_id INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('absent_from_batch','deleted','hidden','forbidden')),
+  first_seen_at TEXT NOT NULL, last_checked_at TEXT NOT NULL,
+  PRIMARY KEY (topic_id, post_id));
 CREATE VIRTUAL TABLE posts_fts USING fts5(title, body, tokenize='porter unicode61');
 -- A plain FTS5 table with rowid = posts.id and body = raw; title is copied from topics.
 -- Triggers on posts handle INSERT/UPDATE/DELETE. A trigger on topics updates title for that topic's rows.
@@ -638,10 +647,15 @@ MCP prompt templates encode the two main workflows. They're short and instructio
 - **Other sources:** if Spark Arena or similar sites have an API or export, ingest them as an additional `source_type`. Check this during Run C, and don't assume an endpoint exists.
 
 ## Testing approach
-- `scripts/record_fixtures.py` is run **once**. It saves a small live sample to `tests/fixtures/`:
-  - one listing page from each category;
-  - 3 topics, including a long one, with their `posts.json` batches;
-  - GitHub responses for one repo: commit SHA, releases/latest, tags, metadata, a compare between two SHAs, and commits?until=.
+- `scripts/record_fixtures.py` is run **once**, at the start of Stage 2. That's a single approved live session.
+  - It goes through `DiscourseClient` itself, so it uses the real rate limiter and User-Agent, not ad-hoc curl.
+  - GitHub requests are anonymous; no token is needed.
+  - It saves a small live sample to `tests/fixtures/`:
+    - one listing page from each category;
+    - 3 topics with their `posts.json` batches. One is long: topic **381350**, which has about 956 posts, so about 20 batch requests.
+    - GitHub responses for one repo: commit SHA, releases/latest, tags, metadata, a compare between two SHAs, and commits?until=. Use a small repo linked from the recorded posts if there is one, otherwise `vllm-project/vllm`.
+  - Fixtures are committed. It's all public forum content, but trim each topic to the posts the tests actually need, so the repo doesn't carry large JSON files. Keep the full `stream` array, so the pagination logic is still exercised.
+  - The recorder is never run as part of the test suite.
 - An `edited_post.json` variant has its `raw` changed and `version` + 1.
 - **Hand-made fixtures for edge cases** (`tests/fixtures/synthetic/`), built by editing recorded responses:
   - a topic whose `stream` contains the ID of a deleted post, which `posts.json` leaves out;
@@ -668,15 +682,26 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   It uses a single Python 3.12 job, with no secrets and no network access beyond installing dependencies.
 
 ## Build plan
-**Run A (MVP, no LLM):**
+**Run A (MVP, no LLM).** The stages below are numbered 1–7. **There are review pauses after Stage 2 and after Stage 5.** These are where rework is most likely. The build stops at each one and reports to the user before carrying on.
 1. Scaffold:
    - `uv init --package --name sparkwatch`
    - dependencies, config, `db.py` with migration 1, the seed loader
    - the CLI skeleton, `lock.py`
-2. `discourse.py`, `sync.py` (incremental, backfill, time budget), `record_fixtures.py`.
+2. `record_fixtures.py` (run once, live), `discourse.py`, `sync.py` (incremental, backfill, time budget, tombstones).
+   - **⏸ Review pause 1:** report all of the following:
+     - `uv run pytest` passing, including the full Discourse edge-case matrix;
+     - a live `sparkwatch sync --forum 723 --max-pages 1`, with its request count;
+     - an immediate second run making about 1–2 requests;
+     - row counts for topics, posts and `missing_posts`.
 3. FTS triggers, `links.py`, `watch.py`, `filters.py`, `normalize.py`, `fit.py`, `evidence.py`.
 4. `repos.py`: head checks, releases and tags, installs, compare with caching.
 5. `digest.py` and all MCP tools, resources and prompts in §5.
+   - **⏸ Review pause 2:** report all of the following:
+     - the `list_tools`, `list_prompts` and `list_resources` output;
+     - the protocol tests passing;
+     - a real Claude Code run of `catch_up` and `serve_model("GLM 5.3 Flash")` against a live 60-day sync.
+
+     This is also the Run A checkpoint below: fix the watch regexes and canonical names here, before Stages 6–7.
 6. `deploy/` systemd user units, and a README covering install, MCP registration and the timer.
 7. `.github/workflows/ci.yml`, the MCP protocol tests and the live test suite. The eval harness can come at the checkpoint.
 
@@ -728,7 +753,10 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - `since=<date>` resolves to the right base commit.
 - `sql_query` rejects `DELETE`, multiple statements and `PRAGMA`.
 - Discourse edge cases:
-  - a deleted post in `stream` is skipped without an error, and later syncs don't keep re-requesting it (record it in `sync_runs.errors` once, then remember it);
+  - a deleted post in `stream` is skipped without an error and recorded in `missing_posts`;
+    - later syncs don't request it again;
+    - a backfill, or a `last_checked_at` older than 30 days, does request it again;
+    - if it comes back, it's removed from `missing_posts` and stored;
   - a 404 or 403 topic is logged, skipped, and doesn't stop the sync;
   - a 429 with `Retry-After` waits for the stated time, then succeeds;
   - a 5xx that persists past `max_retries` fails that topic only;
