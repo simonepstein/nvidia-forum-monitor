@@ -42,6 +42,8 @@ def _clean_name(name: str) -> str:
 
 
 def normalize_github(url: str) -> str | None:
+    if re.search(r"gist\.github\.com", url or "", re.I):
+        return None
     match = GITHUB_RE.search(url or "")
     if not match:
         return None

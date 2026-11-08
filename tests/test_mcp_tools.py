@@ -200,6 +200,94 @@ def test_model_summary_mention_windows_use_post_dates(settings, conn):
     assert summary["mentions"] == {"7d": 1, "30d": 1, "60d": 2}
 
 
+def test_model_summary_repos_are_ranked_and_capped(settings, conn):
+    seed(conn)
+    for index in range(14):
+        conn.execute(
+            "INSERT INTO repos (id, owner, name, url, watch, first_seen_at, head_sha)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                100 + index,
+                f"owner{index}",
+                f"repo{index}",
+                f"https://github.com/owner{index}/repo{index}",
+                1 if index == 13 else 0,
+                PAST,
+                "a" * 40,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+            " VALUES (?, 7001, 700, ?, ?)",
+            (100 + index, f"https://github.com/owner{index}/repo{index}", PAST),
+        )
+    conn.execute(
+        "INSERT INTO repo_installs (repo_id, label, sha, installed_at, updated_at)"
+        " VALUES (113, 'default', ?, ?, ?)",
+        ("b" * 40, PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO compare_cache (repo_id, base_sha, head_sha, response, fetched_at)"
+        " VALUES (113, ?, ?, ?, ?)",
+        ("b" * 40, "a" * 40, '{"status": "ahead", "ahead_by": 2, "behind_by": 0}', PAST),
+    )
+
+    summary = m.model_summary("GLM 5.3 Flash")
+
+    repos = summary["repos"]
+    assert summary["repos_total"] == 14
+    assert len(repos) == m.REPO_CAP == 10
+    assert repos[0]["repo"] == "owner13/repo13"
+    assert repos[0]["watched"] is True
+    assert repos[0]["installed"]["commits_behind"] == 2
+    assert all("mentions" in entry for entry in repos)
+
+
+def test_model_summary_is_small(settings, conn):
+    import json
+
+    seed(conn)
+    for index in range(20):
+        conn.execute(
+            "INSERT INTO repos (id, owner, name, url, watch, first_seen_at)"
+            " VALUES (?, ?, ?, ?, 0, ?)",
+            (
+                200 + index,
+                f"o{index}",
+                f"r{index}",
+                f"https://github.com/o{index}/r{index}",
+                PAST,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+            " VALUES (?, 7001, 700, ?, ?)",
+            (200 + index, f"https://github.com/o{index}/r{index}", PAST),
+        )
+    size = len(json.dumps(m.model_summary("GLM 5.3 Flash")))
+    assert size < 10_000, size
+
+
+def test_model_summary_includes_flags_on_its_topics(settings, conn):
+    seed(conn)
+    recipe = m.record_recipe(
+        model="GLM 5.3 Flash",
+        topology="dual-spark",
+        status="works",
+        evidence=[{"post_id": 7001, "quote": QUOTE}],
+    )
+    m.flag("topic", "700", "perf-claim", "60 tok/s claim vs a 26 tok/s report", priority=1)
+    m.flag("recipe", str(recipe["recipe_id"]), "recipe", "quant unclear", priority=2)
+    m.flag("model", "glm-5.3-flash", "new-model", "watch this one", priority=3)
+    m.flag("topic", "999", "perf-claim", "unrelated topic", priority=1)
+
+    summary = m.model_summary("GLM 5.3 Flash")
+
+    labels = {flag["label"] for flag in summary["flags"]}
+    assert labels == {"perf-claim", "recipe", "new-model"}
+    assert all(flag["target_id"] != "999" for flag in summary["flags"])
+
+
 def test_whats_new_for_applies_since_to_mentions(settings, conn):
     from conftest import iso_days_ago
 

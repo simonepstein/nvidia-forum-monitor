@@ -115,7 +115,7 @@ def digest(
     since: str = typer.Option("cursor", "--since"),
     cursor: str = typer.Option("default", "--cursor"),
     relevant_only: bool = typer.Option(False, "--relevant-only"),
-    limit: int = typer.Option(10, "--limit"),
+    limit: int = typer.Option(6, "--limit"),
     no_advance: bool = typer.Option(False, "--no-advance"),
     as_json: bool = typer.Option(False, "--json", help="print the JSON the MCP tool returns"),
 ) -> None:

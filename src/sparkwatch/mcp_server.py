@@ -238,7 +238,7 @@ def digest(
     since: str = "cursor",
     cursor: str = "default",
     relevant_only: bool = False,
-    limit: int = 10,
+    limit: int = 6,
     advance: bool = True,
 ) -> dict[str, Any]:
     """Show what changed since the last time the agent looked ("since I last asked").
@@ -1193,12 +1193,117 @@ def list_benchmarks(
     return {"count": len(rows), "benchmarks": [dict(row) for row in rows]}
 
 
+REPO_CAP = 10
+SUMMARY_RECIPES = 5
+SUMMARY_NOTES = 3
+SUMMARY_FLAGS = 5
+SUMMARY_TOPICS = 5
+FLAG_REASON_CHARS = 240
+NOTE_BODY_CHARS = 300
+
+
+def _compact_recipe(row: dict[str, Any]) -> dict[str, Any]:
+    """A summary-sized recipe: the numbers the agent needs, no evidence bodies."""
+    return {
+        key: row.get(key)
+        for key in (
+            "id",
+            "model_canonical",
+            "quant_format",
+            "engine",
+            "engine_version",
+            "topology",
+            "status",
+            "tok_s_decode",
+            "tok_s_prefill",
+            "fit_ok",
+            "reported_at",
+        )
+    }
+
+
+def _compact_note(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "subject": row.get("subject"),
+        "as_of": row.get("as_of"),
+        "body": _snippet(row.get("body"), NOTE_BODY_CHARS),
+    }
+
+
+def _model_flags(
+    conn: sqlite3.Connection,
+    canonical: str,
+    raw_model: str,
+    recipe_ids: list[int],
+    topic_ids: set[int],
+) -> list[dict[str, Any]]:
+    """Open flags on the model, its recipes and its topics — the warnings worth reading."""
+    wanted = {str(canonical), raw_model}
+    flags = []
+    for flag in _flag_rows(conn):
+        target_type = flag["target_type"]
+        target_id = flag["target_id"]
+        if target_type == "model" and target_id in wanted:
+            flags.append(flag)
+        elif target_type == "recipe" and target_id.isdigit() and int(target_id) in recipe_ids:
+            flags.append(flag)
+        elif target_type == "topic" and target_id.isdigit() and int(target_id) in topic_ids:
+            flags.append(flag)
+    return flags
+
+
+def _model_repos(
+    conn: sqlite3.Connection, topic_ids: set[int], cap: int
+) -> tuple[list[dict[str, Any]], int]:
+    """Repos mentioned in the model's topics, watched first, then by mention count."""
+    if not topic_ids:
+        return [], 0
+    placeholders = ",".join("?" for _ in topic_ids)
+    rows = conn.execute(
+        "SELECT r.id, r.owner, r.name, r.url, r.watch, r.head_sha, COUNT(m.post_id) AS mentions"
+        " FROM repo_mentions m JOIN repos r ON r.id = m.repo_id"
+        f" WHERE m.topic_id IN ({placeholders})"
+        " GROUP BY r.id ORDER BY r.watch DESC, mentions DESC, r.owner, r.name",
+        tuple(topic_ids),
+    ).fetchall()
+    output: list[dict[str, Any]] = []
+    for row in rows[:cap]:
+        entry: dict[str, Any] = {
+            "repo": f"{row['owner']}/{row['name']}",
+            "url": row["url"],
+            "watched": bool(row["watch"]),
+            "mentions": row["mentions"],
+        }
+        install = conn.execute(
+            "SELECT sha, installed_at FROM repo_installs WHERE repo_id=? AND label='default'",
+            (row["id"],),
+        ).fetchone()
+        if install is not None:
+            behind = None
+            if row["head_sha"] and install["sha"] != row["head_sha"]:
+                cached = conn.execute(
+                    "SELECT response FROM compare_cache WHERE repo_id=? AND base_sha=? AND head_sha=?",
+                    (row["id"], install["sha"], row["head_sha"]),
+                ).fetchone()
+                if cached is not None:
+                    behind = (json.loads(cached["response"]) or {}).get("ahead_by")
+            entry["installed"] = {
+                "sha": install["sha"][:12],
+                "installed_at": install["installed_at"],
+                "commits_behind": behind,
+            }
+        output.append(entry)
+    return output, len(rows)
+
+
 @tool
 def model_summary(model: str) -> dict[str, Any]:
     """The starting point for a "best way to serve X" question.
 
     Returns metadata, aliases, mention counts over 7/30/60 days, active recipes newest first,
-    benchmarks, latest research notes, open flags, repos mentioned in the model's topics and
+    benchmarks, latest research notes, open flags on the model, its recipes and its topics,
+    the repos mentioned in the model's topics (watched first, at most 10, with a total) and
     the topics with the most mentions.
     """
     settings = _settings()
@@ -1240,36 +1345,30 @@ def model_summary(model: str) -> dict[str, Any]:
     recipes = list_recipes(model=canonical, limit=10)
     benchmarks = list_benchmarks(model=canonical, limit=10)
     notes = get_notes(model=canonical, include_superseded=False)
-    flags = [flag for flag in _flag_rows(conn) if flag["target_id"] in (canonical, model)]
-    repo_rows = conn.execute(
-        "SELECT DISTINCT r.owner, r.name, r.url, r.watch, r.head_sha FROM repos r"
-        " JOIN repo_mentions m ON m.repo_id = r.id"
-        " JOIN posts p ON p.id = m.post_id WHERE p.topic_id IN ("
-        "   SELECT id FROM topics WHERE id IN (SELECT topic_id FROM posts WHERE id IN"
-        "   (SELECT post_id FROM repo_mentions)))"
-    ).fetchall()
+
+    repo_ids = [row["id"] for row in recipes["recipes"]]
+    topic_ids = set(topic_counts)
+    flags = _model_flags(conn, canonical, model, repo_ids, topic_ids)
+    repos, repos_total = _model_repos(conn, topic_ids, REPO_CAP)
+
     return {
         "model": canonical,
         "model_is_new": is_new,
         "metadata": dict(meta) if meta is not None else None,
         "aliases": aliases,
         "mentions": counts,
-        "recipes": recipes["recipes"],
+        "recipes": [_compact_recipe(row) for row in recipes["recipes"][:SUMMARY_RECIPES]],
         "benchmarks": benchmarks["benchmarks"],
-        "notes": notes["notes"],
-        "flags": flags,
-        "repos": [
-            {
-                "repo": f"{row['owner']}/{row['name']}",
-                "url": row["url"],
-                "watched": bool(row["watch"]),
-                "head_sha": row["head_sha"],
-            }
-            for row in repo_rows
+        "notes": [_compact_note(row) for row in notes["notes"][:SUMMARY_NOTES]],
+        "flags": [
+            {**flag, "reason": _snippet(flag.get("reason"), FLAG_REASON_CHARS)}
+            for flag in flags[:SUMMARY_FLAGS]
         ],
+        "repos": repos,
+        "repos_total": repos_total,
         "top_topics": sorted(
             topic_counts.values(), key=lambda item: item["mentions"], reverse=True
-        )[:10],
+        )[:SUMMARY_TOPICS],
     }
 
 

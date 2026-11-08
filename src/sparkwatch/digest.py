@@ -51,7 +51,8 @@ def _topic_url(topic_id: int, slug: str | None = None) -> str:
 SNIPPET_CHARS = 120
 WATCH_HITS_PER_LABEL = 2
 LATEST_POSTS_PER_TOPIC = 2
-SECTION_CAP = 10
+SECTION_CAP = 6
+FLAG_REASON_CHARS = 200
 
 
 def _snippet(text: str | None, length: int = SNIPPET_CHARS) -> str | None:
@@ -212,8 +213,6 @@ def _updated_topics(
                 "url": _topic_url(row["topic_id"]),
                 "new_posts": row["new_posts"],
                 "edits": row["edits"],
-                "relevance_score": row["relevance_score"],
-                "bumped_at": row["bumped_at"],
                 "latest": [
                     {
                         "post_id": post["id"],
@@ -295,7 +294,6 @@ def _repos_first_linked(
             "repo": f"{row['owner']}/{row['name']}",
             "url": row["url"],
             "first_seen_at": row["first_seen_at"],
-            "topic": row["title"],
             "post_url": _post_url(row["topic_id"], row["post_number"]) if row["topic_id"] else None,
         }
         for row in rows
@@ -304,9 +302,10 @@ def _repos_first_linked(
 
 def _open_flags(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT * FROM flags WHERE resolved_at IS NULL ORDER BY priority, created_at DESC"
+        "SELECT id, target_type, target_id, label, priority, reason, created_at FROM flags"
+        " WHERE resolved_at IS NULL ORDER BY priority, created_at DESC"
     ).fetchall()
-    return [dict(row) for row in rows]
+    return [{**dict(row), "reason": _snippet(row["reason"], FLAG_REASON_CHARS)} for row in rows]
 
 
 def build_digest(
@@ -315,7 +314,7 @@ def build_digest(
     since: str = "cursor",
     cursor: str = "default",
     relevant_only: bool = False,
-    limit: int = 10,
+    limit: int = 6,
     advance: bool = True,
 ) -> dict[str, Any]:
     """Build the "since I last asked" view.

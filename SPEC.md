@@ -533,18 +533,19 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - dates on everything;
   - text truncated to `max_chars`, with `truncated: true` and a `next` argument set the agent can pass back to continue.
 - `limit` defaults to `mcp.default_limit` and is capped at `max_limit`.
-  - Two tools keep literal defaults on purpose: `digest` caps each section at its own small default (10 items, and never more than 10) and `sql_query` returns at most 200 rows. Those are per-call shape decisions, not list defaults, so `mcp.default_limit` does not apply to them.
+  - Two tools keep literal defaults on purpose: `digest` caps each section at its own small default (6 items, and never more than 6) and `sql_query` returns at most 200 rows. Those are per-call shape decisions, not list defaults, so `mcp.default_limit` does not apply to them.
 - **Size budget (revised 2026-11-08):** a default call to any tool should return well under 10 KB.
   - Lists are ranked and capped, with a `total` count.
   - `model_summary` lists at most 10 repos, ranked by mentions in the model's topics, with watched repos first.
   - `model_summary` includes open flags on the model, its recipes and its topics.
-  - Snippets are 120 characters, the digest shows at most 2 post snippets per topic and 2 hit snippets per model (3 for anticipated models), and "repos first linked" is one line per repo.
+  - Snippets are 120 characters, the digest shows at most 2 post snippets per topic and 2 hit snippets per model (3 for anticipated models), flag reasons are cut to 200 characters, and "repos first linked" is one line per repo.
+  - `model_summary` returns compact recipes (no evidence bodies) and note excerpts; `list_recipes` and `get_notes` carry the full text.
 - **Tool descriptions are written for the agent.** Each one says when to use the tool. For example: "Call `get_notes` and `list_recipes` before researching a model, so you build on earlier conclusions."
 - Writes are short transactions. Long jobs (sync, repos check) take the lock. If it's already held, they return `{"busy": true, "job": ..., "started_at": ...}` rather than blocking.
 
 ### Keeping up to date
 - `sync_now(forum_id?, include_repos=True, time_budget_s=90)`: runs `sync()` in the server process, then `check_repos()` within the time that's left. It returns the `SyncResult`, with titles for new and updated topics, plus a list of watched repos whose head moved or that got a release. If it returns `partial: true`, the agent calls it again.
-- `digest(since="cursor", cursor="default", relevant_only=False, limit=10, advance=True)`. This is the "since I last asked" view. `since` is `"cursor"` or an ISO date.
+- `digest(since="cursor", cursor="default", relevant_only=False, limit=6, advance=True)`. This is the "since I last asked" view. `since` is `"cursor"` or an ISO date.
   - **Sections, in order:**
     1. Unacknowledged **watch sightings**, i.e. first sightings of an anticipated model.
     2. **Watchlist activity**: per tracked model, new hits since the cursor, each with a topic, post URL and a 120-character snippet.

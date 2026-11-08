@@ -18,6 +18,8 @@ from sparkwatch import links
         ("https://github.com/features/copilot", None),
         ("https://github.com/sponsors/x", None),
         ("https://example.com/a/b", None),
+        ("https://gist.github.com/alice/abc123", None),
+        ("https://gist.github.com/alice/abc123#file-notes", None),
     ],
 )
 def test_github_normalisation(url, expected):
