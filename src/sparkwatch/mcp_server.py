@@ -102,12 +102,17 @@ def _snippet(text: str | None, length: int = 300) -> str | None:
 
 
 def _page(text: str, next_token: dict[str, Any] | None, max_chars: int) -> dict[str, Any]:
+    """A page of `text` that breaks at a line boundary, so words are never split."""
     offset = 0
     if next_token:
         offset = int(next_token.get("offset", 0) or 0)
     offset = max(0, min(offset, len(text)))
-    chunk = text[offset : offset + max_chars]
-    end = offset + len(chunk)
+    end = min(len(text), offset + max_chars)
+    if end < len(text):
+        cut = max(text.rfind("\n", offset, end), text.rfind(" ", offset, end))
+        if cut > offset:
+            end = cut + 1
+    chunk = text[offset:end]
     payload: dict[str, Any] = {"text": chunk, "offset": offset, "total_chars": len(text)}
     if end < len(text):
         payload["truncated"] = True
@@ -738,7 +743,8 @@ def get_posts(
         "topic_id": topic_id,
         "title": topic["title"],
         "url": _topic_url(topic_id),
-        "post_count": len(blocks),
+        "post_count": len(re.findall(r"(?m)^--- post \d+", page["text"])),
+        "topic_total": len(blocks),
         **page,
     }
 
@@ -1438,12 +1444,22 @@ def save_note(
 ) -> dict[str, Any]:
     """Save a research note so the next session starts from your conclusions.
 
-    Use it after answering a "best way to serve X" or "should I update" question.
+    Use it after answering a "best way to serve X" or "should I update" question. A model
+    name that is not in `models` or the alias table is stored as null, with a hint, rather
+    than creating a junk model row.
     """
     conn = _conn()
     canonical = None
+    hint = None
     if model:
-        canonical, _ = normalize.canonical_model(conn, model)
+        candidate, is_new = normalize.canonical_model(conn, model)
+        if is_new:
+            hint = (
+                f"model not recorded: {candidate}; add it with upsert_model or add_model_alias,"
+                " or the note is saved without a model"
+            )
+        else:
+            canonical = candidate
     now = utcnow_iso()
     cursor = conn.execute(
         "INSERT INTO research_notes (subject, model_canonical, body, as_of, created_at, superseded_by)"
@@ -1457,7 +1473,10 @@ def save_note(
         evidence_record(conn, "note", note_id, post_id, quote)
     if supersedes:
         conn.execute("UPDATE research_notes SET superseded_by=? WHERE id=?", (note_id, supersedes))
-    return {"note_id": note_id, "subject": subject, "model": canonical, "as_of": as_of or now}
+    payload = {"note_id": note_id, "subject": subject, "model": canonical, "as_of": as_of or now}
+    if hint:
+        payload["hint"] = hint
+    return payload
 
 
 @tool

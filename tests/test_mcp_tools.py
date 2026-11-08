@@ -232,6 +232,27 @@ def test_notes_and_flags(settings, conn):
     assert m.list_flags()["count"] == 0
 
 
+def test_save_note_does_not_create_junk_models(settings, conn):
+    seed(conn)
+    before = conn.execute("SELECT COUNT(*) FROM models").fetchone()[0]
+
+    note = m.save_note("a note", "body", model="Totally Unknown 900B", as_of=PAST)
+
+    assert note["model"] is None
+    assert "upsert_model" in note["hint"]
+    assert conn.execute("SELECT COUNT(*) FROM models").fetchone()[0] == before
+    assert (
+        conn.execute(
+            "SELECT model_canonical FROM research_notes WHERE id=?", (note["note_id"],)
+        ).fetchone()[0]
+        is None
+    )
+
+    known = m.save_note("another note", "body", model="GLM 5.3 Flash", as_of=PAST)
+    assert known["model"] == "glm-5.3-flash"
+    assert "hint" not in known
+
+
 def test_model_summary(settings, conn):
     seed(conn)
     m.upsert_model("glm-5.3-flash", family="glm", params_total_b=355)
@@ -432,7 +453,8 @@ def test_get_posts_pagination_has_no_gaps_or_overlap(settings, conn):
     assert full["truncated"] is False
     chunk = m.get_posts(700, max_chars=40)
     assert chunk["truncated"] is True
-    assert chunk["next"]["offset"] == 40
+    assert 0 < chunk["next"]["offset"] <= 40
+    assert chunk["text"].endswith(("\n", " "))
 
     collected = chunk["text"]
     token = chunk["next"]
@@ -446,6 +468,32 @@ def test_get_posts_pagination_has_no_gaps_or_overlap(settings, conn):
 def test_get_posts_unknown_topic_raises(settings, conn):
     with pytest.raises(ValueError):
         m.get_posts(424242)
+
+
+def test_get_posts_pages_break_at_word_and_line_boundaries(settings, conn):
+    seed(conn)
+    conn.execute("UPDATE posts SET raw=? WHERE id=7001", ("word " * 60,))
+    conn.execute("UPDATE posts SET raw=? WHERE id=7002", ("alpha beta gamma " * 20,))
+
+    page = m.get_posts(700, max_chars=50)
+    assert page["truncated"] is True
+    assert page["text"].endswith(("\n", " "))
+    assert page["topic_total"] == 2
+    assert page["post_count"] >= 1
+
+    collected = ""
+    token = None
+    pages = 0
+    while True:
+        chunk = m.get_posts(700, max_chars=50, next=token)
+        collected += chunk["text"]
+        pages += 1
+        if not chunk["next"]:
+            break
+        token = chunk["next"]
+    assert pages > 2
+    assert collected == m.get_posts(700, max_chars=100_000)["text"]
+    assert "wordalpha" not in collected.replace(" ", "").replace("\n", "")
 
 
 @pytest.mark.parametrize(

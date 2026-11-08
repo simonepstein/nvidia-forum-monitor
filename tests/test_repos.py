@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import add_github_spec
 
-from sparkwatch.repos import check_repos, watch_repo
+from sparkwatch.repos import check_repos, get_repo, watch_repo
 
 REPO = "vllm-project/vllm"
 BASE = f"/repos/{REPO}"
@@ -216,3 +216,83 @@ def test_link_discovery_never_watches(settings, conn):
         (PAST,),
     )
     assert conn.execute("SELECT watch FROM repos").fetchone()[0] == 0
+
+
+def test_renamed_repo_follows_the_redirect(settings, conn, router, github):
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    conn.execute(
+        "UPDATE repos SET last_checked_at='2025-01-01T00:00:00+00:00' WHERE url=?",
+        (f"https://github.com/{REPO}",),
+    )
+
+    github.add(
+        BASE,
+        None,
+        status=301,
+        headers={"Location": "https://api.github.com/repositories/4242"},
+    )
+    github.add(
+        "/repositories/4242",
+        {
+            "full_name": "NewOwner/NewName",
+            "default_branch": "main",
+            "archived": False,
+            "description": "renamed",
+            "pushed_at": PAST,
+        },
+    )
+    add_github_spec(github, f"{BASE}/commits/main", "github_304.json")
+    add_github_spec(github, f"{BASE}/releases/latest", "github_304.json")
+    add_github_spec(github, f"{BASE}/tags", "github_304.json")
+    check_repos(conn, settings, repo=REPO)
+
+    row = conn.execute("SELECT owner, name, url FROM repos WHERE id=1").fetchone()
+    assert row["owner"] == "newowner"
+    assert row["name"] == "newname"
+    assert row["url"] == "https://github.com/newowner/newname"
+
+
+def test_rename_keeps_mentions_and_events(settings, conn, router, github):
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute(
+        "INSERT INTO topics (id, forum_id, title, first_fetched_at) VALUES (900, 723, 't', ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
+        " first_fetched_at, changed_at) VALUES (9001, 900, 1, 1, 'vllm', '<p>x</p>', 'h', ?, ?)",
+        (PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " SELECT id, 9001, 900, url, ? FROM repos WHERE url=?",
+        (PAST, f"https://github.com/{REPO}"),
+    )
+    conn.execute(
+        "UPDATE repos SET last_checked_at='2025-01-01T00:00:00+00:00' WHERE url=?",
+        (f"https://github.com/{REPO}",),
+    )
+    github.add(
+        BASE, None, status=301, headers={"Location": "https://api.github.com/repositories/4243"}
+    )
+    github.add(
+        "/repositories/4243",
+        {"full_name": "newowner/newname", "default_branch": "main", "archived": False},
+    )
+    add_github_spec(github, f"{BASE}/commits/main", "github_304.json")
+    add_github_spec(github, f"{BASE}/releases/latest", "github_304.json")
+    add_github_spec(github, f"{BASE}/tags", "github_304.json")
+
+    check_repos(conn, settings, repo=REPO)
+
+    mentions = conn.execute("SELECT COUNT(*) FROM repo_mentions").fetchone()[0]
+    assert mentions == 1
+    payload = get_repo(conn, "newowner/newname")
+    assert payload is not None
+    assert payload["repo"] == "newowner/newname"
+    assert payload["mentions"]

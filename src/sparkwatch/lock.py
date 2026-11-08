@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from .util import utcnow_iso
+
+HOLDER_READ_ATTEMPTS = 10
+HOLDER_READ_DELAY_S = 0.02
 
 
 class LockBusy(Exception):
@@ -35,6 +40,16 @@ def _read_holder(handle) -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
+def _holder_for_busy(handle) -> dict[str, object]:
+    """The holder writes its record just after taking the lock, so give it a moment."""
+    for _ in range(HOLDER_READ_ATTEMPTS):
+        holder = _read_holder(handle)
+        if holder.get("job"):
+            return holder
+        time.sleep(HOLDER_READ_DELAY_S)
+    return _read_holder(handle)
+
+
 @contextmanager
 def write_lock(job: str, db_path: str | Path) -> Iterator[None]:
     path = lock_path(db_path)
@@ -44,13 +59,11 @@ def write_lock(job: str, db_path: str | Path) -> Iterator[None]:
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            holder = _read_holder(handle)
+            holder = _holder_for_busy(handle)
             raise LockBusy(holder.get("job"), holder.get("started_at")) from None
         handle.seek(0)
         handle.truncate()
-        handle.write(
-            json.dumps({"job": job, "started_at": utcnow_iso(), "pid": __import__("os").getpid()})
-        )
+        handle.write(json.dumps({"job": job, "started_at": utcnow_iso(), "pid": os.getpid()}))
         handle.flush()
         try:
             yield

@@ -228,6 +228,24 @@ def _release_excerpt(body: str | None) -> str | None:
     return body[:2000]
 
 
+def _follow_rename(conn: sqlite3.Connection, repo_id: int, row: Any, meta: dict[str, Any]) -> bool:
+    """After a 301, GitHub's metadata carries the new owner/name: adopt it."""
+    full_name = str(meta.get("full_name") or "")
+    if "/" not in full_name:
+        return False
+    owner, name = (part.strip().lower() for part in full_name.split("/", 1))
+    if not owner or not name:
+        return False
+    url = f"https://github.com/{owner}/{name}"
+    if url == row["url"]:
+        return False
+    clash = conn.execute("SELECT id FROM repos WHERE url=? AND id<>?", (url, repo_id)).fetchone()
+    if clash is not None:
+        return False
+    conn.execute("UPDATE repos SET owner=?, name=?, url=? WHERE id=?", (owner, name, url, repo_id))
+    return True
+
+
 def check_repos(
     conn: sqlite3.Connection,
     settings: Settings | None = None,
@@ -273,6 +291,8 @@ def check_repos(
                     if status != 304 and response is not None:
                         meta = response.json()
                         _save_etag(conn, repo_id, "meta", new_etag)
+                        _follow_rename(conn, repo_id, row, meta)
+                        row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
                         archived = 1 if meta.get("archived") else 0
                         if row["archived"] and not archived:
                             _event(
@@ -757,39 +777,58 @@ def repo_events(
 
 
 def list_installs(
-    conn: sqlite3.Connection, settings: Settings | None = None
+    conn: sqlite3.Connection,
+    settings: Settings | None = None,
+    client: GitHubClient | None = None,
 ) -> list[dict[str, Any]]:
+    """Every recorded install with its distance from the branch head.
+
+    The compare is read from the cache, and computed when the cache misses.
+    """
     settings = settings or get_settings()
+    owns_client = client is None
+    client = client or GitHubClient(settings)
     rows = conn.execute(
-        "SELECT i.*, r.owner, r.name, r.head_sha FROM repo_installs i JOIN repos r ON r.id = i.repo_id"
-        " ORDER BY r.owner, r.name, i.label"
+        "SELECT i.*, r.owner, r.name, r.head_sha, r.branch, r.default_branch FROM repo_installs i"
+        " JOIN repos r ON r.id = i.repo_id ORDER BY r.owner, r.name, i.label"
     ).fetchall()
     output: list[dict[str, Any]] = []
-    for row in rows:
-        behind = None
-        ahead = None
-        if row["head_sha"] and row["sha"] != row["head_sha"]:
-            cached = conn.execute(
-                "SELECT response FROM compare_cache WHERE repo_id=? AND base_sha=? AND head_sha=?",
-                (row["repo_id"], row["sha"], row["head_sha"]),
-            ).fetchone()
-            if cached is not None:
-                data = loads(cached["response"], {}) or {}
-                behind = data.get("ahead_by")
-                ahead = data.get("behind_by")
-        output.append(
-            {
-                "repo": f"{row['owner']}/{row['name']}",
-                "label": row["label"],
-                "sha": row["sha"],
-                "short_sha": row["sha"][:12],
-                "installed_at": row["installed_at"],
-                "head_sha": row["head_sha"],
-                "behind_by": behind,
-                "ahead_by": ahead,
-                "note": row["note"],
-            }
-        )
+    try:
+        for row in rows:
+            behind = None
+            ahead = None
+            if row["head_sha"] and row["sha"] != row["head_sha"]:
+                cached = conn.execute(
+                    "SELECT response FROM compare_cache WHERE repo_id=? AND base_sha=? AND head_sha=?",
+                    (row["repo_id"], row["sha"], row["head_sha"]),
+                ).fetchone()
+                data = loads(cached["response"], {}) if cached is not None else None
+                if data is None:
+                    repo_row = conn.execute(
+                        "SELECT * FROM repos WHERE id=?", (row["repo_id"],)
+                    ).fetchone()
+                    data = _compare(conn, client, repo_row, row["sha"], row["head_sha"])
+                if data is None:
+                    behind = ahead = "unknown"
+                else:
+                    behind = data.get("ahead_by")
+                    ahead = data.get("behind_by")
+            output.append(
+                {
+                    "repo": f"{row['owner']}/{row['name']}",
+                    "label": row["label"],
+                    "sha": row["sha"],
+                    "short_sha": row["sha"][:12],
+                    "installed_at": row["installed_at"],
+                    "head_sha": row["head_sha"],
+                    "behind_by": behind,
+                    "ahead_by": ahead,
+                    "note": row["note"],
+                }
+            )
+    finally:
+        if owns_client:
+            client.close()
     return output
 
 

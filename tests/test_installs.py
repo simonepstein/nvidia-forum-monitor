@@ -206,3 +206,35 @@ def test_list_installs_and_clear(settings, conn, router, github):
     removed = clear_installed(conn, REPO, label="spark-pair")
     assert removed["removed"] is True
     assert list_installs(conn, settings) == []
+
+
+def test_list_installs_computes_the_compare_on_a_cache_miss(settings, conn, router, github):
+    prepare(settings, conn, router, github)
+    github.add(f"{BASE}/compare/{OLD}...{HEAD}", COMPARE)
+    conn.execute(
+        "INSERT INTO repo_installs (repo_id, label, sha, installed_at, updated_at)"
+        " SELECT id, 'default', ?, ?, ? FROM repos WHERE url=?",
+        (OLD, PAST, PAST, f"https://github.com/{REPO}"),
+    )
+    assert conn.execute("SELECT COUNT(*) FROM compare_cache").fetchone()[0] == 0
+
+    installs = list_installs(conn, settings)
+
+    assert installs[0]["behind_by"] == 3
+    assert installs[0]["ahead_by"] == 0
+    assert conn.execute("SELECT COUNT(*) FROM compare_cache").fetchone()[0] == 1
+
+
+def test_list_installs_reports_unknown_when_the_compare_fails(settings, conn, router, github):
+    prepare(settings, conn, router, github)
+    github.add(f"{BASE}/compare/{OLD}...{HEAD}", {"message": "Not Found"}, status=404)
+    conn.execute(
+        "INSERT INTO repo_installs (repo_id, label, sha, installed_at, updated_at)"
+        " SELECT id, 'default', ?, ?, ? FROM repos WHERE url=?",
+        (OLD, PAST, PAST, f"https://github.com/{REPO}"),
+    )
+
+    installs = list_installs(conn, settings)
+
+    assert installs[0]["behind_by"] == "unknown"
+    assert installs[0]["ahead_by"] == "unknown"
