@@ -305,15 +305,39 @@ def ack_watch_sighting(label: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+_TERM_RE = re.compile(r'"([^"]*)"|(\S+)')
+BOOLEAN_WORDS = {"or", "and", "not", "near"}
+
+
+def _plain_terms(query: str) -> list[tuple[str, bool]]:
+    """Split free text into (text, was_quoted) terms; quoted phrases stay whole."""
+    terms: list[tuple[str, bool]] = []
+    for phrase, word in _TERM_RE.findall(query or ""):
+        text = (phrase or word).strip().strip("\"'()[]{},;:")
+        if not any(character.isalnum() for character in text):
+            continue
+        terms.append((text, bool(phrase)))
+    return terms
+
+
 def _fts_plain_query(query: str) -> str:
     """Turn free text into a safe FTS5 query: quote each term, then AND them."""
-    terms: list[str] = []
-    for term in (query or "").split():
-        cleaned = term.strip("\"'()[]{},;:")
-        if not any(character.isalnum() for character in cleaned):
-            continue
-        terms.append('"' + cleaned.replace('"', '""') + '"')
-    return " AND ".join(terms)
+    return " AND ".join(
+        '"' + text.replace('"', '""') + '"' for text, _quoted in _plain_terms(query)
+    )
+
+
+def _boolean_hint(query: str) -> str | None:
+    """Point at FTS operators when the agent typed a bare or/and/not/near."""
+    words = sorted({text.lower() for text, quoted in _plain_terms(query) if not quoted})
+    found = [word for word in words if word in BOOLEAN_WORDS]
+    if not found:
+        return None
+    joined = ", ".join(f"'{word}'" for word in found)
+    return (
+        f"terms are ANDed, so {joined} is searched as a word;"
+        " pass raw_fts=true for OR/NEAR operators"
+    )
 
 
 @tool
@@ -329,17 +353,17 @@ def search_posts(
 ) -> dict[str, Any]:
     """Full-text search the mirrored forum posts (FTS5, porter stemming).
 
-    Plain text by default: each whitespace-separated term is quoted and the terms are
-    ANDed, so "GLM 5.3 Flash" and "tok/s" work as typed. Pass raw_fts=true to send FTS5
-    operators (OR, NEAR, title:, quotes) unchanged; a syntax error then comes back as a
-    tool error. Use order="recent" to prefer the newest matches. Returns a snippet with
-    the match highlighted in [brackets].
+    Plain text by default: each term is quoted and the terms are ANDed, so "GLM 5.3 Flash"
+    and "tok/s" work as typed, and a quoted phrase ("tensor parallel") stays a phrase. Pass
+    raw_fts=true to send FTS5 operators (OR, NEAR, title:) unchanged. A query that cannot be
+    searched is a tool error. Use order="recent" to prefer the newest matches. Returns a
+    snippet with the match highlighted in [brackets].
     """
     settings = _settings()
     conn = _conn(settings)
     match = query if raw_fts else _fts_plain_query(query)
     if not match:
-        return {"error": f"no searchable terms in query: {query!r}"}
+        raise ValueError(f"no searchable terms in query: {query!r}")
     order_sql = "p.first_fetched_at DESC" if order == "recent" else "bm25(posts_fts)"
     clauses = ["posts_fts MATCH ?"]
     params: list[Any] = [match]
@@ -366,7 +390,7 @@ def search_posts(
     try:
         rows = conn.execute(sql, (*params, _limit(limit, settings))).fetchall()
     except sqlite3.OperationalError as exc:
-        return {"error": f"bad query: {exc}"}
+        raise ValueError(f"bad query: {exc}") from exc
     payload: dict[str, Any] = {
         "query": query,
         "match": match,
@@ -386,11 +410,18 @@ def search_posts(
             for row in rows
         ],
     }
-    if not rows and not raw_fts:
-        payload["hint"] = (
-            "no post matched every term (terms are ANDed); pass raw_fts=true"
-            " for OR/NEAR, or drop a term"
-        )
+    if not raw_fts:
+        hints = []
+        boolean = _boolean_hint(query)
+        if boolean:
+            hints.append(boolean)
+        if not rows:
+            hints.append(
+                "no post matched every term (terms are ANDed); pass raw_fts=true"
+                " for OR/NEAR, or drop a term"
+            )
+        if hints:
+            payload["hint"] = "; ".join(hints)
     return payload
 
 

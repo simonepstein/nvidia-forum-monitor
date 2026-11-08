@@ -438,10 +438,34 @@ def test_search_posts_quotes_terms_so_punctuation_is_safe(settings, conn):
         (PAST, 'he said "nvfp4 works" - and it does', PAST, PAST),
     )
     result = m.search_posts('"nvfp4 works"')
-    assert result["match"] == '"nvfp4" AND "works"'
+    assert result["match"] == '"nvfp4 works"'
     assert result["count"] >= 1
     assert "error" not in m.search_posts("fp8 - nvfp4")
     assert "error" not in m.search_posts("GLM 5.3 Flash (dual-spark)")
+
+
+def test_search_posts_keeps_a_quoted_phrase_whole(settings, conn):
+    seed(conn)
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw, cooked,"
+        " content_hash, first_fetched_at, changed_at)"
+        " VALUES (7004, 700, 4, 1, 'dave', ?, ?, '<p>x</p>', 'h4', ?, ?)",
+        (PAST, "tensor parallel across the pair, not pipeline parallel", PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw, cooked,"
+        " content_hash, first_fetched_at, changed_at)"
+        " VALUES (7005, 700, 5, 1, 'erin', ?, ?, '<p>x</p>', 'h5', ?, ?)",
+        (PAST, "tensor and parallel appear apart here", PAST, PAST),
+    )
+
+    phrase = m.search_posts('"tensor parallel"')
+    assert phrase["match"] == '"tensor parallel"'
+    assert [row["post_id"] for row in phrase["results"]] == [7004]
+
+    loose = m.search_posts("tensor parallel")
+    assert loose["match"] == '"tensor" AND "parallel"'
+    assert {row["post_id"] for row in loose["results"]} == {7004, 7005}
 
 
 def test_search_posts_raw_fts_passes_operators_through(settings, conn):
@@ -449,19 +473,21 @@ def test_search_posts_raw_fts_passes_operators_through(settings, conn):
     plain = m.search_posts("nvfp4 OR fp8")
     assert plain["count"] == 0
     assert plain["match"] == '"nvfp4" AND "OR" AND "fp8"'
+    assert "OR" in plain["hint"]
 
     raw = m.search_posts("nvfp4 OR fp8", raw_fts=True)
     assert raw["count"] == 2
     assert raw["raw_fts"] is True
+    assert "hint" not in raw
 
-    broken = m.search_posts("GLM 5.3 Flash", raw_fts=True)
-    assert "bad query" in broken["error"]
+    with pytest.raises(ValueError, match="bad query"):
+        m.search_posts("GLM 5.3 Flash", raw_fts=True)
 
 
-def test_search_posts_without_terms_is_a_clear_error(settings, conn):
+def test_search_posts_without_terms_is_a_tool_error(settings, conn):
     seed(conn)
-    result = m.search_posts("   ")
-    assert "no searchable terms" in result["error"]
+    with pytest.raises(ValueError, match="no searchable terms"):
+        m.search_posts("   ")
 
 
 def test_search_posts_hints_when_every_term_is_required(settings, conn):

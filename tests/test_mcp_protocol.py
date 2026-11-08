@@ -158,14 +158,19 @@ def test_errors_are_tool_errors_and_server_survives(settings):
     async def scenario(session):
         missing = await session.call_tool("get_posts", {"topic_id": 424242})
         bad_sql = await session.call_tool("sql_query", {"sql": "DELETE FROM posts"})
+        bad_fts = await session.call_tool(
+            "search_posts", {"query": "GLM 5.3 Flash", "raw_fts": True}
+        )
         still_alive = await session.list_tools()
-        return missing, bad_sql, still_alive
+        return missing, bad_sql, bad_fts, still_alive
 
-    missing, bad_sql, still_alive = asyncio.run(with_session(db_path, scenario))
+    missing, bad_sql, bad_fts, still_alive = asyncio.run(with_session(db_path, scenario))
     assert missing.isError is True
     assert "unknown topic" in missing.content[0].text
     assert bad_sql.isError is True
     assert "only SELECT or WITH" in bad_sql.content[0].text
+    assert bad_fts.isError is True
+    assert "bad query" in bad_fts.content[0].text
     assert len(still_alive.tools) > 0
 
 

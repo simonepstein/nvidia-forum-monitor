@@ -574,8 +574,8 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 
 ### Reading and research
 - `search_posts(query, topic_id?, forum_id?, since?, username?, order="rank"|"recent", raw_fts=False, limit)`: FTS5 with `snippet()`.
-  - **Query handling (revised 2026-11-08):** by default, `query` is plain text. Each whitespace-separated term is quoted as an FTS5 string, and the terms are joined with AND. So `GLM 5.3 Flash` and `tok/s` work as typed.
-  - `raw_fts=True` passes the query through unchanged, for FTS5 operators. A syntax error then comes back as a tool error.
+  - **Query handling (revised 2026-11-08):** by default, `query` is plain text. Each whitespace-separated term is quoted as an FTS5 string, and the terms are joined with AND. So `GLM 5.3 Flash` and `tok/s` work as typed, and a phrase the agent quotes (`"tensor parallel"`) stays one FTS5 phrase. A bare `or`, `and`, `not` or `near` is searched as a word, and the response carries a `hint` pointing at `raw_fts`.
+  - `raw_fts=True` passes the query through unchanged, for FTS5 operators. A query that cannot be searched — a syntax error, or no searchable terms — comes back as a tool error.
 - `find_model_mentions(model, since?, limit)`: resolves aliases and the watch regex, then returns matching posts grouped by topic, newest first, with snippets.
 - `list_topics(forum_id?, since?, relevant_only=False, order="bumped"|"relevance"|"likes"|"created", limit)`
 - `get_topic_overview(topic_id)`:
