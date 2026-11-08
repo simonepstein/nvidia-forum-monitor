@@ -7,12 +7,21 @@ import time
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 
 from . import evidence, fit, normalize
 from . import watch as watch_mod
-from .config import Settings, get_settings
+from .config import Settings, describe_validation_error, get_settings
 from .db import open_db
-from .digest import build_digest, resolve_since
+from .digest import (
+    BACKFILLED_POSTS,
+    EDITED_POSTS,
+    NEW_POSTS,
+    build_digest,
+    resolve_since,
+    watch_activity,
+    window_params,
+)
 from .lock import LockBusy, write_lock
 from .repos import (
     check_repos,
@@ -170,17 +179,19 @@ def sync_now(
     """Fetch new and updated forum posts now, then (optionally) check watched repos.
 
     Use this first when the user says "catch me up" or "pull the latest posts". It stops
-    cleanly at the time budget and returns partial=true; call it again to continue.
-    Returns titles for new and updated topics, plus watched repos whose head moved or that
-    got a release.
+    cleanly at the time budget and returns partial=true; call it again to continue. The
+    repo check shares what is left of the budget and reports repos_partial=true if it was
+    cut short. Returns titles for new and updated topics, plus watched repos whose head
+    moved or that got a release.
     """
     from .sync import sync as run_sync
 
     settings = _settings()
     budget = time_budget_s if time_budget_s is not None else settings.sync.sync_now_time_budget_s
     started = time.monotonic()
+    job = "sync+repos" if include_repos else "sync"
     try:
-        with write_lock("sync", settings.db_path):
+        with write_lock(job, settings.db_path):
             conn = _conn(settings)
             result = run_sync(
                 settings=settings,
@@ -193,12 +204,12 @@ def sync_now(
             payload["updated_topics"] = _topic_titles(conn, result.updated_topic_ids)
             payload["repos"] = []
             if include_repos:
-                remaining = max(5.0, budget - (time.monotonic() - started))
-                with write_lock("repos", settings.db_path):
-                    repos_result = check_repos(conn, settings)
+                remaining = max(0.0, budget - (time.monotonic() - started))
+                payload["repos_budget_s"] = round(remaining, 1)
+                repos_result = check_repos(conn, settings, deadline=time.monotonic() + remaining)
                 payload["repos"] = repos_result.get("changed", [])
                 payload["repos_checked"] = repos_result.get("checked", 0)
-                payload["repos_budget_s"] = round(remaining, 1)
+                payload["repos_partial"] = bool(repos_result.get("stopped_early"))
     except LockBusy as exc:
         return exc.as_dict()
     return payload
@@ -251,27 +262,30 @@ def digest(
 
 @tool
 def whats_new_for(model: str, since: str | None = None) -> dict[str, Any]:
-    """Show everything new about one model: watch hits, matching posts and repo events.
+    """Show everything new about one model: watch hits and matching posts.
 
+    `since` applies to every section, using the digest's timing: only posts that are new
+    or edited since then are listed, and older posts picked up by a backfill are a count.
     Use this before answering a "what's the latest on X" question.
     """
     settings = _settings()
     conn = _conn(settings)
-    since_iso = (
-        resolve_since(conn, since or "cursor", "default")
-        if since
-        else resolve_since(conn, "cursor", "default")
-    )
+    since_iso = resolve_since(conn, since or "cursor", "default")
     pattern = _model_pattern(conn, model)
-    mentions = find_model_mentions(model, since=since_iso, limit=settings.mcp.default_limit)
+    limit = settings.mcp.default_limit
+    mentions = find_model_mentions(model, since=since_iso, limit=limit)
+    mentions.pop("since", None)
     watch_rows = [
-        {"label": row["label"], "hits": row["hits"]}
-        for row in digest(limit=settings.mcp.default_limit, advance=False)["sections"][
-            "watchlist_activity"
-        ]
+        {"label": row["label"], "hits": row["hits"], "edits": row["edits"]}
+        for row in watch_activity(conn, since_iso, limit)
         if pattern.search(row["label"])
     ]
-    return {"model": model, "since": since_iso, "watch": watch_rows, "mentions": mentions}
+    return {
+        "model": model,
+        "since": since_iso,
+        "watch": watch_rows,
+        "mentions": mentions,
+    }
 
 
 @tool
@@ -289,6 +303,17 @@ def ack_watch_sighting(label: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+def _fts_plain_query(query: str) -> str:
+    """Turn free text into a safe FTS5 query: quote each term, then AND them."""
+    terms: list[str] = []
+    for term in (query or "").split():
+        cleaned = term.strip("\"'()[]{},;:")
+        if not any(character.isalnum() for character in cleaned):
+            continue
+        terms.append('"' + cleaned.replace('"', '""') + '"')
+    return " AND ".join(terms)
+
+
 @tool
 def search_posts(
     query: str,
@@ -297,18 +322,25 @@ def search_posts(
     since: str | None = None,
     username: str | None = None,
     order: str = "rank",
+    raw_fts: bool = False,
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Full-text search the mirrored forum posts (FTS5, porter stemming).
 
-    Use order="recent" to prefer the newest matches. Returns a snippet with the match
-    highlighted in [brackets].
+    Plain text by default: each whitespace-separated term is quoted and the terms are
+    ANDed, so "GLM 5.3 Flash" and "tok/s" work as typed. Pass raw_fts=true to send FTS5
+    operators (OR, NEAR, title:, quotes) unchanged; a syntax error then comes back as a
+    tool error. Use order="recent" to prefer the newest matches. Returns a snippet with
+    the match highlighted in [brackets].
     """
     settings = _settings()
     conn = _conn(settings)
+    match = query if raw_fts else _fts_plain_query(query)
+    if not match:
+        return {"error": f"no searchable terms in query: {query!r}"}
     order_sql = "p.first_fetched_at DESC" if order == "recent" else "bm25(posts_fts)"
     clauses = ["posts_fts MATCH ?"]
-    params: list[Any] = [query]
+    params: list[Any] = [match]
     if topic_id is not None:
         clauses.append("p.topic_id = ?")
         params.append(topic_id)
@@ -333,8 +365,10 @@ def search_posts(
         rows = conn.execute(sql, (*params, _limit(limit, settings))).fetchall()
     except sqlite3.OperationalError as exc:
         return {"error": f"bad query: {exc}"}
-    return {
+    payload: dict[str, Any] = {
         "query": query,
+        "match": match,
+        "raw_fts": raw_fts,
         "count": len(rows),
         "results": [
             {
@@ -350,6 +384,12 @@ def search_posts(
             for row in rows
         ],
     }
+    if not rows and not raw_fts:
+        payload["hint"] = (
+            "no post matched every term (terms are ANDed); pass raw_fts=true"
+            " for OR/NEAR, or drop a term"
+        )
+    return payload
 
 
 @tool
@@ -358,21 +398,43 @@ def find_model_mentions(
 ) -> dict[str, Any]:
     """Find every post that mentions a model, grouped by topic, newest first.
 
+    With `since`, only posts that are new since then are listed (the digest's timing rule,
+    with its 24-hour grace); edits and backfilled posts are counted, not listed.
     Use this when recipes are missing for a model people keep talking about.
     """
     settings = _settings()
     conn = _conn(settings)
     pattern = _model_pattern(conn, model)
+    params = window_params(since) if since else {}
+    where = f" WHERE ({NEW_POSTS})" if since else ""
     rows = conn.execute(
-        "SELECT p.id, p.topic_id, p.post_number, p.username, p.created_at, p.first_fetched_at,"
-        " p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
-        " ORDER BY p.created_at DESC"
+        "SELECT p.id, p.topic_id, p.post_number, p.username, p.created_at, p.raw, t.title"
+        " FROM posts p JOIN topics t ON t.id = p.topic_id"
+        + where
+        + " ORDER BY julianday(p.created_at) DESC",
+        params,
     ).fetchall()
+
+    edits = 0
+    backfilled = 0
+    if since:
+        for row in conn.execute(
+            f"SELECT p.raw, t.title, CASE WHEN ({EDITED_POSTS}) THEN 'edited'"
+            f" ELSE 'backfilled' END AS timing"
+            " FROM posts p JOIN topics t ON t.id = p.topic_id"
+            f" WHERE ({EDITED_POSTS}) OR ({BACKFILLED_POSTS})",
+            params,
+        ):
+            if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
+                continue
+            if row["timing"] == "edited":
+                edits += 1
+            else:
+                backfilled += 1
+
     grouped: dict[int, dict[str, Any]] = {}
     total = 0
     for row in rows:
-        if since is not None and (row["first_fetched_at"] or "") < since:
-            continue
         if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
             continue
         total += 1
@@ -396,7 +458,14 @@ def find_model_mentions(
                 }
             )
     topics = list(grouped.values())[: _limit(limit, settings)]
-    return {"model": model, "total_posts": total, "topics": topics}
+    return {
+        "model": model,
+        "since": since,
+        "total_posts": total,
+        "edits": edits,
+        "backfilled": backfilled,
+        "topics": topics,
+    }
 
 
 @tool
@@ -1117,7 +1186,7 @@ def model_summary(model: str) -> dict[str, Any]:
         for row in conn.execute("SELECT alias FROM model_aliases WHERE canonical=?", (canonical,))
     ]
     posts = conn.execute(
-        "SELECT p.id, p.topic_id, p.post_number, p.raw, p.first_fetched_at, t.title FROM posts p"
+        "SELECT p.id, p.topic_id, p.post_number, p.raw, p.created_at, t.title FROM posts p"
         " JOIN topics t ON t.id = p.topic_id"
     ).fetchall()
     now = utcnow()
@@ -1126,9 +1195,9 @@ def model_summary(model: str) -> dict[str, Any]:
     for row in posts:
         if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
             continue
-        seen = parse_dt(row["first_fetched_at"])
-        if seen is not None:
-            age_days = (now - seen).total_seconds() / 86400
+        written = parse_dt(row["created_at"])
+        if written is not None:
+            age_days = (now - written).total_seconds() / 86400
             for key, days in (("7d", 7), ("30d", 30), ("60d", 60)):
                 if age_days <= days:
                     counts[key] += 1
@@ -1579,6 +1648,12 @@ def frontier(topology: str = "dual-spark") -> str:
 
 
 def main() -> None:
+    # Refuse to start on an unsafe configuration (e.g. an unlimited rate against the live
+    # forum) rather than failing on the first tool call.
+    try:
+        _settings()
+    except ValidationError as exc:
+        raise SystemExit(f"sparkwatch: {describe_validation_error(exc)}") from None
     mcp.run(transport="stdio")
 
 

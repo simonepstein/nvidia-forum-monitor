@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import timedelta
 from typing import Any
 
 from .config import Settings, get_settings
@@ -8,6 +10,34 @@ from .util import parse_dt, to_iso, utcnow_iso
 
 EPOCH = "1970-01-01T00:00:00+00:00"
 FORUM_URL = "https://forums.developer.nvidia.com"
+GRACE = timedelta(hours=24)
+
+# The digest's three kinds of post (SPEC §5, "Timing"), written once and reused by
+# whats_new_for and find_model_mentions. They take the named parameters :since and :grace.
+NEW_POSTS = (
+    "julianday(p.first_fetched_at) >= julianday(:since)"
+    " AND julianday(p.created_at) >= julianday(:grace)"
+)
+EDITED_POSTS = (
+    "julianday(p.changed_at) >= julianday(:since)"
+    " AND julianday(p.first_fetched_at) < julianday(:since)"
+)
+BACKFILLED_POSTS = (
+    "julianday(p.first_fetched_at) >= julianday(:since)"
+    " AND julianday(p.created_at) < julianday(:grace)"
+)
+
+
+def grace_floor(since_iso: str) -> str:
+    """The 24-hour grace before `since`: posts written shortly before a sync still count."""
+    moment = parse_dt(since_iso)
+    if moment is None:
+        return since_iso
+    return to_iso(moment - GRACE)
+
+
+def window_params(since_iso: str) -> dict[str, str]:
+    return {"since": since_iso, "grace": grace_floor(since_iso)}
 
 
 def _post_url(topic_id: int, post_number: int | None) -> str:
@@ -53,15 +83,26 @@ def _sightings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     ]
 
 
-def _watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list[dict[str, Any]]:
+def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list[dict[str, Any]]:
+    params = window_params(since_iso)
     rows = conn.execute(
-        "SELECT w.label, h.post_id, h.topic_id, h.matched_text, h.created_at, p.post_number,"
-        " p.raw, t.title FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        "SELECT w.label, h.post_id, h.topic_id, h.matched_text, p.post_number, p.raw,"
+        " p.created_at, t.title FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
         " JOIN posts p ON p.id = h.post_id JOIN topics t ON t.id = h.topic_id"
-        " WHERE w.kind='tracking' AND h.created_at >= ? ORDER BY h.created_at DESC LIMIT ?",
-        (since_iso, limit),
+        f" WHERE w.kind='tracking' AND ({NEW_POSTS})"
+        " ORDER BY julianday(p.created_at) DESC LIMIT :limit",
+        {**params, "limit": limit},
     ).fetchall()
-    grouped: dict[str, list[dict[str, Any]]] = {}
+    edited = {
+        row["label"]: row["n"]
+        for row in conn.execute(
+            "SELECT w.label, COUNT(DISTINCT h.post_id) AS n FROM watch_hits h"
+            " JOIN watchlist w ON w.id = h.watch_id JOIN posts p ON p.id = h.post_id"
+            f" WHERE w.kind='tracking' AND ({EDITED_POSTS}) GROUP BY w.label",
+            params,
+        )
+    }
+    grouped: dict[str, list[dict[str, Any]]] = {label: [] for label in edited}
     for row in rows:
         grouped.setdefault(row["label"], []).append(
             {
@@ -72,7 +113,11 @@ def _watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> lis
                 "snippet": _snippet(row["raw"]),
             }
         )
-    return [{"label": label, "hits": hits} for label, hits in grouped.items()]
+    return [
+        {"label": label, "hits": hits, "edits": edited.get(label, 0)}
+        for label, hits in grouped.items()
+        if hits or edited.get(label)
+    ]
 
 
 def _new_topics(
@@ -80,10 +125,10 @@ def _new_topics(
 ) -> list[dict[str, Any]]:
     clause = " AND relevance_score > 0" if relevant_only else ""
     rows = conn.execute(
-        "SELECT * FROM topics WHERE created_at >= ?"
+        "SELECT * FROM topics WHERE julianday(created_at) >= julianday(:since)"
         + clause
-        + " ORDER BY relevance_score DESC LIMIT ?",
-        (since_iso, limit),
+        + " ORDER BY relevance_score DESC LIMIT :limit",
+        {"since": since_iso, "limit": limit},
     ).fetchall()
     return [
         {
@@ -102,28 +147,35 @@ def _new_topics(
 def _updated_topics(
     conn: sqlite3.Connection, since_iso: str, limit: int, relevant_only: bool
 ) -> list[dict[str, Any]]:
+    params = window_params(since_iso)
     clause = " AND t.relevance_score > 0" if relevant_only else ""
     rows = conn.execute(
-        "SELECT t.id, t.title, t.slug, t.relevance_score, t.bumped_at, COUNT(p.id) AS new_posts,"
-        " t.created_at FROM topics t JOIN posts p ON p.topic_id = t.id"
-        " WHERE (p.first_fetched_at >= ? OR p.changed_at >= ?) AND t.created_at < ?"
-        + clause
-        + " GROUP BY t.id ORDER BY t.relevance_score * COUNT(p.id) DESC LIMIT ?",
-        (since_iso, since_iso, since_iso, limit),
+        "SELECT * FROM ("
+        "  SELECT t.id AS topic_id, t.title, t.relevance_score, t.bumped_at,"
+        f"    SUM(CASE WHEN ({NEW_POSTS}) THEN 1 ELSE 0 END) AS new_posts,"
+        f"    SUM(CASE WHEN ({EDITED_POSTS}) THEN 1 ELSE 0 END) AS edits"
+        "  FROM topics t JOIN posts p ON p.topic_id = t.id"
+        f"  WHERE (({NEW_POSTS}) OR ({EDITED_POSTS}))"
+        "    AND julianday(t.created_at) < julianday(:since)" + clause + "  GROUP BY t.id"
+        ") WHERE new_posts > 0 OR edits > 0"
+        " ORDER BY relevance_score * (new_posts + edits) DESC LIMIT :limit",
+        {**params, "limit": limit},
     ).fetchall()
     output: list[dict[str, Any]] = []
     for row in rows:
         posts = conn.execute(
-            "SELECT id, post_number, username, created_at, raw, first_fetched_at FROM posts"
-            " WHERE topic_id=? ORDER BY post_number DESC LIMIT 3",
-            (row["id"],),
+            "SELECT p.id, p.post_number, p.username, p.created_at, p.raw FROM posts p"
+            f" WHERE p.topic_id = :topic_id AND ({NEW_POSTS})"
+            " ORDER BY julianday(p.created_at) DESC LIMIT 3",
+            {**params, "topic_id": row["topic_id"]},
         ).fetchall()
         output.append(
             {
-                "topic_id": row["id"],
+                "topic_id": row["topic_id"],
                 "title": row["title"],
-                "url": _topic_url(row["id"]),
+                "url": _topic_url(row["topic_id"]),
                 "new_posts": row["new_posts"],
+                "edits": row["edits"],
                 "relevance_score": row["relevance_score"],
                 "bumped_at": row["bumped_at"],
                 "latest": [
@@ -131,7 +183,7 @@ def _updated_topics(
                         "post_id": post["id"],
                         "author": post["username"],
                         "date": post["created_at"],
-                        "url": _post_url(row["id"], post["post_number"]),
+                        "url": _post_url(row["topic_id"], post["post_number"]),
                         "snippet": _snippet(post["raw"], 300),
                     }
                     for post in posts
@@ -173,21 +225,19 @@ def _watched_repos(conn: sqlite3.Connection, since_iso: str) -> list[dict[str, A
             ],
         }
         if install is not None:
-            ahead = None
+            behind = None
             if repo["head_sha"] and install["sha"] != repo["head_sha"]:
                 cached = conn.execute(
                     "SELECT response FROM compare_cache WHERE repo_id=? AND base_sha=? AND head_sha=?",
                     (repo["id"], install["sha"], repo["head_sha"]),
                 ).fetchone()
                 if cached is not None:
-                    import json
-
-                    ahead = (json.loads(cached["response"]) or {}).get("ahead_by")
+                    behind = (json.loads(cached["response"]) or {}).get("ahead_by")
             entry["installed"] = {
                 "sha": install["sha"],
                 "short_sha": install["sha"][:12],
                 "installed_at": install["installed_at"],
-                "commits_behind": ahead,
+                "commits_behind": behind,
             }
         output.append(entry)
     return output
@@ -236,10 +286,11 @@ def build_digest(
     since_iso = resolve_since(conn, since, cursor)
     built_at = utcnow_iso()
 
-    backfilled = conn.execute(
-        "SELECT COUNT(*) AS n FROM posts WHERE first_fetched_at >= ? AND created_at < ?",
-        (since_iso, since_iso),
-    ).fetchone()["n"]
+    backfilled_row = conn.execute(
+        f"SELECT COUNT(*) AS posts, COUNT(DISTINCT p.topic_id) AS topics FROM posts p"
+        f" WHERE ({BACKFILLED_POSTS})",
+        window_params(since_iso),
+    ).fetchone()
 
     digest = {
         "since": since_iso,
@@ -247,14 +298,17 @@ def build_digest(
         "cursor": cursor,
         "sections": {
             "watch_sightings": _sightings(conn),
-            "watchlist_activity": _watch_activity(conn, since_iso, limit),
+            "watchlist_activity": watch_activity(conn, since_iso, limit),
             "new_topics": _new_topics(conn, since_iso, limit, relevant_only),
             "updated_topics": _updated_topics(conn, since_iso, limit, relevant_only),
             "watched_repos": _watched_repos(conn, since_iso),
             "repos_first_linked": _repos_first_linked(conn, since_iso, limit),
             "open_flags": _open_flags(conn),
         },
-        "backfilled_posts": backfilled,
+        "backfilled": {
+            "posts": backfilled_row["posts"],
+            "topics": backfilled_row["topics"],
+        },
     }
 
     if advance:
@@ -282,8 +336,11 @@ def render_digest(digest: dict[str, Any]) -> str:
         lines.append(f"\n## {label} ({len(items)})")
         for item in items:
             lines.append(f"- {item}")
-    if digest["backfilled_posts"]:
-        lines.append(f"\nBackfilled posts seen in this window: {digest['backfilled_posts']}")
+    if digest["backfilled"]["posts"]:
+        lines.append(
+            f"\nbackfilled: {digest['backfilled']['posts']} posts"
+            f" in {digest['backfilled']['topics']} topics"
+        )
     return "\n".join(lines)
 
 

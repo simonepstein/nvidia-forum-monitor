@@ -25,6 +25,7 @@ PAST = "2026-01-01T00:00:00+00:00"
 def server_params(db_path: Path) -> StdioServerParameters:
     env = dict(os.environ)
     env["SPARKWATCH_GENERAL__DB_PATH"] = str(db_path)
+    env["SPARKWATCH_FORUM__BASE_URL"] = "http://forum.test"
     env["SPARKWATCH_FORUM__REQUESTS_PER_SECOND"] = "1000"
     return StdioServerParameters(
         command=sys.executable,

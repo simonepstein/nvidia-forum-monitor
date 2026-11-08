@@ -7,7 +7,9 @@ import pytest
 from sparkwatch import watch
 
 
-def _seed_post(conn, post_id: int, topic_id: int, title: str, raw: str) -> None:
+def _seed_post(
+    conn, post_id: int, topic_id: int, title: str, raw: str, created_at: str | None = None
+) -> None:
     conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
     conn.execute(
         "INSERT OR IGNORE INTO topics (id, forum_id, title, first_fetched_at)"
@@ -16,9 +18,15 @@ def _seed_post(conn, post_id: int, topic_id: int, title: str, raw: str) -> None:
     )
     conn.execute(
         "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
-        " first_fetched_at, changed_at) VALUES (?, ?, 1, 1, ?, '<p>x</p>', ?,"
+        " created_at, first_fetched_at, changed_at) VALUES (?, ?, 1, 1, ?, '<p>x</p>', ?, ?,"
         " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
-        (post_id, topic_id, raw, f"h{post_id}"),
+        (
+            post_id,
+            topic_id,
+            raw,
+            f"h{post_id}",
+            created_at or "2026-01-01T00:00:00+00:00",
+        ),
     )
 
 
@@ -112,8 +120,22 @@ def test_invalid_regex_is_rejected(conn):
 
 
 def test_list_watchlist_reports_counts(conn):
-    _seed_post(conn, 7, 6, "GLM 5.3 Flash", "glm 5.3 flash")
+    from conftest import iso_days_ago
+
+    _seed_post(conn, 7, 6, "GLM 5.3 Flash", "glm 5.3 flash", created_at=iso_days_ago(2))
     watch.match_post(conn, 7, 6, "GLM 5.3 Flash", "glm 5.3 flash")
     rows = {row["label"]: row for row in watch.list_watchlist(conn)}
     assert rows["GLM 5.3 Flash"]["hits_7d"] == 1
     assert rows["GLM 5.3 Flash"]["hits_30d"] == 1
+    assert rows["GLM 5.3 Flash"]["latest_hit"] == iso_days_ago(2)
+
+
+def test_list_watchlist_ignores_old_posts_and_backfill_time(conn):
+    from conftest import iso_days_ago
+
+    _seed_post(conn, 8, 7, "GLM 5.3 Flash", "glm 5.3 flash", created_at=iso_days_ago(45))
+    watch.match_post(conn, 8, 7, "GLM 5.3 Flash", "glm 5.3 flash")
+    rows = {row["label"]: row for row in watch.list_watchlist(conn)}
+    assert rows["GLM 5.3 Flash"]["hits_7d"] == 0
+    assert rows["GLM 5.3 Flash"]["hits_30d"] == 0
+    assert rows["GLM 5.3 Flash"]["latest_hit"] == iso_days_ago(45)

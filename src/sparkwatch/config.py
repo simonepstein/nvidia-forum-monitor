@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -13,6 +14,9 @@ from pydantic_settings import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+LIVE_FORUM_HOST = "forums.developer.nvidia.com"
+MAX_LIVE_REQUESTS_PER_SECOND = 1.0
 
 
 def config_path() -> Path:
@@ -44,6 +48,21 @@ class ForumSettings(BaseModel):
     timeout_s: float = 30.0
     posts_batch_size: int = 50
     categories: list[CategorySettings] = []
+
+    @model_validator(mode="after")
+    def _check_rate_safety(self) -> ForumSettings:
+        if self.requests_per_second <= 0:
+            raise ValueError(
+                "forum.requests_per_second must be greater than 0; zero never means unlimited"
+            )
+        host = (urlparse(self.base_url).hostname or "").lower()
+        if host == LIVE_FORUM_HOST and self.requests_per_second > MAX_LIVE_REQUESTS_PER_SECOND:
+            raise ValueError(
+                "forum.requests_per_second must be at most"
+                f" {MAX_LIVE_REQUESTS_PER_SECOND} against the live forum;"
+                " mock the network or point base_url at a test host instead"
+            )
+        return self
 
 
 class SyncSettings(BaseModel):
@@ -135,6 +154,15 @@ def _cached_settings() -> Settings:
 
 def get_settings() -> Settings:
     return _cached_settings()
+
+
+def describe_validation_error(exc: ValidationError) -> str:
+    """One readable line from a settings validation failure."""
+    errors = exc.errors()
+    if not errors:
+        return str(exc)
+    message = str(errors[0].get("msg", exc))
+    return message.removeprefix("Value error, ")
 
 
 def reset_settings() -> None:

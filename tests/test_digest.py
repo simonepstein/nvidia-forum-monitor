@@ -80,8 +80,82 @@ def test_backfilled_posts_are_a_count_not_news(conn, settings):
     seed_post(conn, 31, 3, "an old post", created_at=OLDER, first_fetched_at=PAST)
 
     digest = build_digest(conn, settings, since=PAST, advance=False)
-    assert digest["backfilled_posts"] == 1
+    assert digest["backfilled"] == {"posts": 1, "topics": 1}
     assert all(topic["topic_id"] != 3 for topic in digest["sections"]["new_topics"])
+    assert all(topic["topic_id"] != 3 for topic in digest["sections"]["updated_topics"])
+
+
+def test_updated_topics_counts_only_new_posts(conn, settings):
+    seed_topic(conn, 10, "GLM 5.3 Flash megathread", created_at=OLDER, relevance=9.0)
+    for index in range(40):
+        seed_post(
+            conn,
+            1000 + index,
+            10,
+            f"history post {index} about glm 5.3 flash",
+            created_at=OLDER,
+            first_fetched_at=PAST,
+        )
+    seed_post(
+        conn,
+        2041,
+        10,
+        "a genuinely new reply about glm 5.3 flash",
+        created_at=PAST,
+        first_fetched_at=PAST,
+    )
+
+    digest = build_digest(conn, settings, since=PAST, advance=False)
+    updated = {entry["topic_id"]: entry for entry in digest["sections"]["updated_topics"]}
+    assert updated[10]["new_posts"] == 1
+    assert updated[10]["edits"] == 0
+    assert [post["post_id"] for post in updated[10]["latest"]] == [2041]
+    assert digest["backfilled"] == {"posts": 40, "topics": 1}
+
+
+def test_posts_written_shortly_before_since_are_new(conn, settings):
+    seed_topic(conn, 11, "Qwen thread", created_at=OLDER)
+    seed_post(
+        conn,
+        1101,
+        11,
+        "written ten hours before the cursor but fetched after it",
+        created_at="2025-12-31T14:00:00+00:00",
+        first_fetched_at=PAST,
+    )
+
+    digest = build_digest(conn, settings, since=PAST, advance=False)
+    assert digest["backfilled"] == {"posts": 0, "topics": 0}
+    updated = {entry["topic_id"]: entry for entry in digest["sections"]["updated_topics"]}
+    assert updated[11]["new_posts"] == 1
+
+
+def test_edited_posts_are_counted_separately_from_new_ones(conn, settings):
+    seed_topic(conn, 12, "DeepSeek thread", created_at=OLDER)
+    seed_post(conn, 1201, 12, "edited later", created_at=OLDER, first_fetched_at=OLDER)
+    conn.execute("UPDATE posts SET changed_at=? WHERE id=1201", (PAST,))
+
+    digest = build_digest(conn, settings, since=PAST, advance=False)
+    updated = {entry["topic_id"]: entry for entry in digest["sections"]["updated_topics"]}
+    assert updated[12]["new_posts"] == 0
+    assert updated[12]["edits"] == 1
+    assert updated[12]["latest"] == []
+    assert digest["sections"]["new_topics"] == []
+    assert digest["backfilled"] == {"posts": 0, "topics": 0}
+
+
+def test_watch_hit_dates_come_from_the_post(conn, settings):
+    from sparkwatch import watch
+    from sparkwatch.util import utcnow_iso
+
+    seed_topic(conn, 13, "GLM 5.3 Flash thread", created_at=PAST)
+    seed_post(conn, 1301, 13, "glm 5.3 flash at 30 tok/s", created_at=PAST)
+    watch.match_post(conn, 1301, 13, "GLM 5.3 Flash thread", "glm 5.3 flash at 30 tok/s")
+    conn.execute("UPDATE watch_hits SET created_at=?", (utcnow_iso(),))
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    hit = digest["sections"]["watchlist_activity"][0]["hits"][0]
+    assert hit["date"] == PAST
 
 
 def test_anticipated_sighting_tops_digest_until_acked(conn, settings):

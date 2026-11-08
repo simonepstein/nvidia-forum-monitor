@@ -36,7 +36,10 @@ def test_get_posts_sends_post_ids(settings, router, forum):
     assert forum.post_requests() == [(1202, 1201)]
 
 
-def test_rate_limiter_spaces_requests():
+def test_rate_limiter_spaces_requests(monkeypatch):
+    from sparkwatch import pacing
+
+    monkeypatch.setattr(pacing, "_sleep", time.sleep)
     limiter = RateLimiter(2.0)
     limiter.wait()
     started = time.monotonic()

@@ -4,20 +4,29 @@ import json
 import os
 import re
 import sqlite3
+import time
 from datetime import timedelta
 from typing import Any
 
 import httpx
 
 from .config import Settings, get_settings
+from .pacing import RateLimiter
 from .util import dumps, loads, parse_dt, to_iso, utcnow, utcnow_iso
 
 GITHUB_API = "https://api.github.com"
+GITHUB_REQUESTS_PER_SECOND = 1.0
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SLUG_RE = re.compile(r"^(?P<owner>[\w.\-]+)/(?P<name>[\w.\-]+?)(?:\.git)?/?$")
 URL_RE = re.compile(r"github\.com/(?P<owner>[\w.\-]+)/(?P<name>[\w.\-]+)", re.I)
 RATE_LIMIT_FLOOR = 5
 MAX_COMPARE_COMMITS = 250
+COMPARE_STATUS_FROM_BASE = {
+    "ahead": "behind",
+    "behind": "ahead",
+    "identical": "identical",
+    "diverged": "diverged",
+}
 
 
 class GitHubError(Exception):
@@ -54,6 +63,7 @@ class GitHubClient:
         self.token = token if token is not None else os.environ.get("GITHUB_TOKEN")
         self.request_count = 0
         self.remaining: int | None = None
+        self.limiter = RateLimiter(GITHUB_REQUESTS_PER_SECOND)
         self._client = client or httpx.Client(
             base_url=GITHUB_API, timeout=30.0, follow_redirects=True
         )
@@ -81,6 +91,7 @@ class GitHubClient:
     ) -> tuple[int, httpx.Response | None, str | None]:
         if self.remaining is not None and self.remaining < RATE_LIMIT_FLOOR:
             raise RateLimitStop("github rate limit nearly exhausted")
+        self.limiter.wait()
         self.request_count += 1
         response = self._client.get(path, params=params, headers=self._headers(accept, etag))
         remaining = response.headers.get("X-RateLimit-Remaining")
@@ -222,6 +233,7 @@ def check_repos(
     settings: Settings | None = None,
     repo: str | None = None,
     client: GitHubClient | None = None,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
     owns_client = client is None
@@ -231,6 +243,7 @@ def check_repos(
     changed: list[dict[str, Any]] = []
     errors: list[str] = []
     stopped = False
+    checked = 0
 
     if repo:
         rows = [get_or_create_repo(conn, repo)]
@@ -240,6 +253,10 @@ def check_repos(
     try:
         for row in rows:
             repo_id = row["id"]
+            if deadline is not None and time.monotonic() > deadline:
+                stopped = True
+                break
+            checked += 1
             try:
                 baseline = row["last_checked_at"] is None
                 last_checked = parse_dt(row["last_checked_at"])
@@ -409,7 +426,7 @@ def check_repos(
             client.close()
 
     return {
-        "checked": len(rows),
+        "checked": checked,
         "requests": client.request_count,
         "changed": changed,
         "errors": errors,
@@ -656,10 +673,14 @@ def repo_status(
                 ],
             }
             if compare:
-                entry["status"] = compare.get("status", "unknown")
-                entry["ahead_by"] = compare.get("ahead_by", 0)
-                entry["behind_by"] = compare.get("behind_by", 0)
-                entry["commits_total"] = compare.get("total_commits", entry["ahead_by"])
+                entry["status"] = COMPARE_STATUS_FROM_BASE.get(
+                    compare.get("status", "unknown"), "unknown"
+                )
+                entry["behind_by"] = compare.get("ahead_by", 0) or 0
+                entry["ahead_by"] = compare.get("behind_by", 0) or 0
+                entry["commits_total"] = compare.get(
+                    "total_commits", entry["behind_by"] + entry["ahead_by"]
+                )
                 commits = list(reversed(compare.get("commits") or []))
                 limit = max(1, settings.repos.max_compare_commits)
                 for commit in commits[:limit]:
@@ -745,6 +766,7 @@ def list_installs(
     ).fetchall()
     output: list[dict[str, Any]] = []
     for row in rows:
+        behind = None
         ahead = None
         if row["head_sha"] and row["sha"] != row["head_sha"]:
             cached = conn.execute(
@@ -752,7 +774,9 @@ def list_installs(
                 (row["repo_id"], row["sha"], row["head_sha"]),
             ).fetchone()
             if cached is not None:
-                ahead = (loads(cached["response"], {}) or {}).get("ahead_by")
+                data = loads(cached["response"], {}) or {}
+                behind = data.get("ahead_by")
+                ahead = data.get("behind_by")
         output.append(
             {
                 "repo": f"{row['owner']}/{row['name']}",
@@ -761,6 +785,7 @@ def list_installs(
                 "short_sha": row["sha"][:12],
                 "installed_at": row["installed_at"],
                 "head_sha": row["head_sha"],
+                "behind_by": behind,
                 "ahead_by": ahead,
                 "note": row["note"],
             }

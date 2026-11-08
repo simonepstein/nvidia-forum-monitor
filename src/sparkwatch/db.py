@@ -330,7 +330,37 @@ MIGRATION_2 = """
 ALTER TABLE topics ADD COLUMN posts_complete INTEGER NOT NULL DEFAULT 0;
 """
 
-MIGRATIONS: tuple[str, ...] = (MIGRATION_1, MIGRATION_2)
+MIGRATION_3 = """
+ALTER TABLE forums ADD COLUMN listing_floor TEXT;
+UPDATE forums SET listing_floor = backfill_floor;
+
+ALTER TABLE watchlist ADD COLUMN release_regex TEXT;
+ALTER TABLE watchlist ADD COLUMN sighting_post_id INTEGER;
+ALTER TABLE watchlist ADD COLUMN sighting_at TEXT;
+
+CREATE TABLE missing_posts_v3 (
+  topic_id INTEGER NOT NULL REFERENCES topics(id),
+  post_id INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (
+    reason IN ('absent_from_batch','deleted','hidden','forbidden','not_content')
+  ),
+  first_seen_at TEXT NOT NULL,
+  last_checked_at TEXT NOT NULL,
+  PRIMARY KEY (topic_id, post_id)
+);
+
+INSERT INTO missing_posts_v3 (topic_id, post_id, reason, first_seen_at, last_checked_at)
+  SELECT topic_id, post_id, reason, first_seen_at, last_checked_at FROM missing_posts;
+
+DROP TABLE missing_posts;
+ALTER TABLE missing_posts_v3 RENAME TO missing_posts;
+
+UPDATE missing_posts SET reason='not_content'
+  WHERE reason='hidden'
+    AND post_id IN (SELECT id FROM posts WHERE post_type IN (3, 4));
+"""
+
+MIGRATIONS: tuple[str, ...] = (MIGRATION_1, MIGRATION_2, MIGRATION_3)
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:

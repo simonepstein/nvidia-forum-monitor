@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import timedelta
 from typing import Any
 
-from .util import utcnow_iso
+from .util import to_iso, utcnow, utcnow_iso
 
 
 def _compile(pattern: str) -> re.Pattern[str] | None:
@@ -124,15 +125,22 @@ def ack_sighting(conn: sqlite3.Connection, label: str) -> dict[str, Any] | None:
 
 
 def list_watchlist(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Watch entries with hit counts over 7 and 30 days, counted by post date.
+
+    The windows use `posts.created_at` and count distinct posts: activity, not novelty.
+    """
+    now = utcnow()
     rows = conn.execute(
         """
         SELECT w.*,
-          (SELECT COUNT(*) FROM watch_hits h WHERE h.watch_id = w.id
-             AND h.created_at >= datetime('now', '-7 days')) AS hits_7d,
-          (SELECT COUNT(*) FROM watch_hits h WHERE h.watch_id = w.id
-             AND h.created_at >= datetime('now', '-30 days')) AS hits_30d,
-          (SELECT MAX(h.created_at) FROM watch_hits h WHERE h.watch_id = w.id) AS latest_hit
+          (SELECT COUNT(DISTINCT h.post_id) FROM watch_hits h JOIN posts p ON p.id = h.post_id
+             WHERE h.watch_id = w.id AND julianday(p.created_at) >= julianday(:cut_7)) AS hits_7d,
+          (SELECT COUNT(DISTINCT h.post_id) FROM watch_hits h JOIN posts p ON p.id = h.post_id
+             WHERE h.watch_id = w.id AND julianday(p.created_at) >= julianday(:cut_30)) AS hits_30d,
+          (SELECT MAX(p.created_at) FROM watch_hits h JOIN posts p ON p.id = h.post_id
+             WHERE h.watch_id = w.id) AS latest_hit
         FROM watchlist w ORDER BY w.label
-        """
+        """,
+        {"cut_7": to_iso(now - timedelta(days=7)), "cut_30": to_iso(now - timedelta(days=30))},
     ).fetchall()
     return [dict(row) for row in rows]

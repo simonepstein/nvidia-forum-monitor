@@ -16,14 +16,85 @@ def _table_count(conn: sqlite3.Connection) -> int:
 def test_migration_applies_once(settings, tmp_path):
     path = tmp_path / "mig.db"
     first = connect(path)
-    assert first.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert first.execute("PRAGMA user_version").fetchone()[0] == 3
     tables = _table_count(first)
     first.close()
 
     second = connect(path)
-    assert second.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert second.execute("PRAGMA user_version").fetchone()[0] == 3
     assert _table_count(second) == tables
     second.close()
+
+
+def _v2_connection(path):
+    import sqlite3
+
+    from sparkwatch.db import MIGRATION_1, MIGRATION_2
+
+    conn = sqlite3.connect(path, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.executescript(MIGRATION_1)
+    conn.executescript(MIGRATION_2)
+    conn.execute("PRAGMA user_version=2")
+    return conn
+
+
+def test_migration_three_initialises_listing_floor_and_keeps_coverage(settings, tmp_path):
+    from sparkwatch.db import migrate
+
+    conn = _v2_connection(tmp_path / "mig3.db")
+    conn.execute(
+        "INSERT INTO forums (id, path, name, last_synced_at, backfill_floor)"
+        " VALUES (723, 'p', 'n', '2026-11-08T13:23:51+00:00', '2026-09-09T12:27:53+00:00')"
+    )
+    assert migrate(conn) == 3
+
+    row = conn.execute("SELECT * FROM forums WHERE id=723").fetchone()
+    assert row["listing_floor"] == "2026-09-09T12:27:53+00:00"
+    assert row["backfill_floor"] == "2026-09-09T12:27:53+00:00"
+    assert row["last_synced_at"] == "2026-11-08T13:23:51+00:00"
+    columns = {info["name"] for info in conn.execute("PRAGMA table_info(watchlist)")}
+    assert {"release_regex", "sighting_post_id", "sighting_at"} <= columns
+    conn.close()
+
+
+def test_migration_three_reclassifies_non_content_tombstones(settings, tmp_path):
+    from sparkwatch.db import migrate
+
+    conn = _v2_connection(tmp_path / "mig3b.db")
+    conn.execute("INSERT INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute("INSERT INTO topics (id, forum_id, title) VALUES (900, 723, 't')")
+    for post_id, post_type in ((9001, 1), (9002, 3), (9003, 4)):
+        conn.execute(
+            "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
+            " first_fetched_at, changed_at) VALUES (?, 900, ?, ?, 'x', '<p>x</p>', 'h',"
+            " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            (post_id, post_id % 100, post_type),
+        )
+        conn.execute(
+            "INSERT INTO missing_posts (topic_id, post_id, reason, first_seen_at, last_checked_at)"
+            " VALUES (900, ?, 'hidden', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            (post_id,),
+        )
+    migrate(conn)
+
+    reasons = {
+        row["post_id"]: row["reason"]
+        for row in conn.execute("SELECT post_id, reason FROM missing_posts ORDER BY post_id")
+    }
+    assert reasons == {9001: "hidden", 9002: "not_content", 9003: "not_content"}
+    conn.execute(
+        "INSERT INTO missing_posts (topic_id, post_id, reason, first_seen_at, last_checked_at)"
+        " VALUES (900, 9004, 'not_content', '2026-01-01T00:00:00+00:00',"
+        " '2026-01-01T00:00:00+00:00')"
+    )
+    count = conn.execute(
+        "SELECT COUNT(*) FROM missing_posts WHERE reason='not_content'"
+    ).fetchone()[0]
+    assert count == 3
+    conn.close()
 
 
 def test_wal_and_foreign_keys(settings, tmp_path):

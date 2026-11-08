@@ -59,8 +59,9 @@ def test_set_installed_resolves_short_sha(settings, conn, router, github):
     payload = set_installed(conn, REPO, "abc1234", installed_at=PAST, settings=settings)
     assert payload["sha"] == OLD
     assert payload["subject"] == "old commit"
-    assert payload["status"]["status"] == "ahead"
-    assert payload["status"]["ahead_by"] == 3
+    assert payload["status"]["status"] == "behind"
+    assert payload["status"]["behind_by"] == 3
+    assert payload["status"]["ahead_by"] == 0
 
 
 def test_set_installed_accepts_full_sha_without_a_request(settings, conn, router, github):
@@ -100,13 +101,29 @@ def test_repo_status_reports_commits_releases_and_mentions(settings, conn, route
 
     status = repo_status(conn, settings, repo=REPO)
     entry = status["repos"][0]
-    assert entry["status"] == "ahead"
-    assert entry["ahead_by"] == 3
+    assert entry["status"] == "behind"
+    assert entry["behind_by"] == 3
+    assert entry["ahead_by"] == 0
     assert entry["commits_total"] == 3
     assert entry["commits"][0]["subject"] == "commit 3"
     assert entry["changed_dirs"][0] == {"path": "vllm", "files": 2}
     assert entry["releases"][0]["ref"] == "v0.12.0"
     assert entry["forum_mentions"][0]["post_id"] == 9001
+
+
+def test_repo_status_and_digest_agree_on_direction(settings, conn, router, github):
+    from sparkwatch.digest import build_digest
+
+    prepare(settings, conn, router, github)
+    github.add(f"{BASE}/compare/{OLD}...{HEAD}", COMPARE)
+    set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
+    repo_status(conn, settings, repo=REPO)
+
+    entry = repo_status(conn, settings, repo=REPO)["repos"][0]
+    digest = build_digest(conn, settings, since=BEFORE, advance=False)
+    installed = digest["sections"]["watched_repos"][0]["installed"]
+    assert entry["status"] == "behind"
+    assert entry["behind_by"] == installed["commits_behind"] == 3
 
 
 def test_second_repo_status_is_served_from_cache(settings, conn, router, github):
@@ -139,8 +156,41 @@ def test_large_compare_is_truncated(settings, conn, router, github):
     set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
 
     entry = repo_status(conn, settings, repo=REPO)["repos"][0]
-    assert entry["ahead_by"] == 412
+    assert entry["status"] == "behind"
+    assert entry["behind_by"] == 412
+    assert entry["ahead_by"] == 0
     assert entry["truncated"] is True
+
+
+def test_repo_status_reports_ahead_when_the_install_has_extra_commits(
+    settings, conn, router, github
+):
+    prepare(settings, conn, router, github)
+    github.add(
+        f"{BASE}/compare/{OLD}...{HEAD}",
+        {"status": "behind", "ahead_by": 0, "behind_by": 2, "total_commits": 2, "commits": []},
+    )
+    set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
+
+    entry = repo_status(conn, settings, repo=REPO)["repos"][0]
+    assert entry["status"] == "ahead"
+    assert entry["ahead_by"] == 2
+    assert entry["behind_by"] == 0
+
+
+def test_repo_status_reports_diverged_both_ways(settings, conn, router, github):
+    prepare(settings, conn, router, github)
+    github.add(
+        f"{BASE}/compare/{OLD}...{HEAD}",
+        {"status": "diverged", "ahead_by": 4, "behind_by": 1, "total_commits": 5, "commits": []},
+    )
+    set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
+
+    entry = repo_status(conn, settings, repo=REPO)["repos"][0]
+    assert entry["status"] == "diverged"
+    assert entry["behind_by"] == 4
+    assert entry["ahead_by"] == 1
+    assert entry["commits_total"] == 5
 
 
 def test_list_installs_and_clear(settings, conn, router, github):
@@ -150,7 +200,8 @@ def test_list_installs_and_clear(settings, conn, router, github):
 
     installs = list_installs(conn, settings)
     assert installs[0]["label"] == "spark-pair"
-    assert installs[0]["ahead_by"] == 3
+    assert installs[0]["behind_by"] == 3
+    assert installs[0]["ahead_by"] == 0
 
     removed = clear_installed(conn, REPO, label="spark-pair")
     assert removed["removed"] is True

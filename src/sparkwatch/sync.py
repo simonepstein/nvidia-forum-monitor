@@ -15,6 +15,7 @@ from .discourse import DiscourseClient, DiscourseError, ForbiddenError, NotFound
 from .util import dumps, parse_dt, to_iso, utcnow, utcnow_iso
 
 STORED_POST_TYPES = {1, 2}
+NOT_CONTENT = "not_content"
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +57,15 @@ def _window(
         )
         forum = conn.execute("SELECT * FROM forums WHERE id=?", (category.id,)).fetchone()
     previous_floor = parse_dt(forum["backfill_floor"])
+    listing_floor = parse_dt(forum["listing_floor"])
     last_synced = parse_dt(forum["last_synced_at"])
     window_floor = now - timedelta(days=lookback_days)
     floor = min(previous_floor, window_floor) if previous_floor is not None else window_floor
     backfill = previous_floor is not None and floor < previous_floor
     first_run = last_synced is None
-    cutoff = window_floor if (first_run or backfill) else last_synced
+    # A listing_floor later than the window floor means the listing never covered the gap.
+    gap = listing_floor is not None and listing_floor > window_floor
+    cutoff = window_floor if (first_run or backfill or gap) else last_synced
     return floor, cutoff, backfill, first_run
 
 
@@ -154,10 +158,17 @@ def _list_topics(
     cutoff: datetime,
     backfill: bool,
     result: SyncResult,
-) -> list[int]:
+    deadline: float | None = None,
+) -> tuple[list[int], datetime | None, bool]:
+    """Page through the listing. Returns (queued, oldest listed bumped_at, reached cutoff)."""
     queued: list[int] = []
+    oldest_listed: datetime | None = None
+    reached = False
     page = 0
     while True:
+        if deadline is not None and time.monotonic() > deadline:
+            result.partial = True
+            break
         if max_pages is not None and page >= max_pages:
             break
         data = client.list_category_page(category.id, page)
@@ -165,6 +176,11 @@ def _list_topics(
         topics = topic_list.get("topics") or []
         more = topic_list.get("more_topics_url")
         non_pinned = [topic for topic in topics if not topic.get("pinned")]
+
+        for topic in non_pinned:
+            bumped = parse_dt(topic.get("bumped_at"))
+            if bumped is not None and (oldest_listed is None or bumped < oldest_listed):
+                oldest_listed = bumped
 
         for topic in topics:
             bumped = parse_dt(topic.get("bumped_at"))
@@ -189,11 +205,13 @@ def _list_topics(
         if non_pinned:
             oldest = parse_dt(non_pinned[-1].get("bumped_at"))
             if oldest is not None and oldest < cutoff:
+                reached = True
                 break
         if not more:
+            reached = True
             break
         page += 1
-    return queued
+    return queued, oldest_listed, reached
 
 
 def _tombstone(
@@ -214,7 +232,7 @@ def _tombstone(
         " last_checked_at=excluded.last_checked_at",
         (topic_id, post_id, reason, now_iso, now_iso),
     )
-    if existing is None:
+    if existing is None and reason != NOT_CONTENT:
         result.tombstones_new += 1
 
 
@@ -294,7 +312,8 @@ def _sync_topic(
     missing = {
         row["post_id"]: row
         for row in conn.execute(
-            "SELECT post_id, last_checked_at FROM missing_posts WHERE topic_id=?", (topic_id,)
+            "SELECT post_id, reason, last_checked_at FROM missing_posts WHERE topic_id=?",
+            (topic_id,),
         )
     }
     refetch_cut = now - timedelta(days=settings.sync.refetch_recent_days)
@@ -307,6 +326,8 @@ def _sync_topic(
             if created is not None and created >= refetch_cut:
                 targets.append(post_id)
         elif post_id in missing:
+            if missing[post_id]["reason"] == NOT_CONTENT:
+                continue
             last_checked = parse_dt(missing[post_id]["last_checked_at"])
             if backfill or last_checked is None or last_checked < recheck_cut:
                 targets.append(post_id)
@@ -363,7 +384,7 @@ def _sync_topic(
             _tombstone(conn, topic_id, post_id, "hidden", now_iso, result)
             continue
         if int(post.get("post_type", 1)) not in STORED_POST_TYPES:
-            _tombstone(conn, topic_id, post_id, "hidden", now_iso, result)
+            _tombstone(conn, topic_id, post_id, NOT_CONTENT, now_iso, result)
             continue
 
         outcome = _upsert_post(conn, topic_id, post, now_iso)
@@ -396,6 +417,68 @@ def _sync_topic(
     filters.recompute_topic(conn, topic_id, settings)
 
 
+def _record_coverage(
+    conn: sqlite3.Connection,
+    categories: list[CategorySettings],
+    floors: dict[int, tuple[datetime, datetime]],
+    coverage: dict[int, tuple[datetime | None, bool]],
+    started: datetime,
+    result: SyncResult,
+) -> None:
+    """Record how far back the listing was read, and only then advance the cutoff."""
+    for category in categories:
+        floor, _cutoff = floors.get(category.id, (None, None))
+        if floor is None:
+            continue
+        oldest_listed, reached = coverage.get(category.id, (None, False))
+        row = conn.execute("SELECT listing_floor FROM forums WHERE id=?", (category.id,)).fetchone()
+        previous = parse_dt(row["listing_floor"]) if row is not None else None
+        if reached:
+            listing_floor = floor if previous is None else min(floor, previous)
+        elif oldest_listed is not None:
+            listing_floor = oldest_listed if previous is None else min(previous, oldest_listed)
+        else:
+            listing_floor = previous
+        listing_value = to_iso(listing_floor) if listing_floor is not None else None
+        if result.partial or not reached:
+            # Stopped early: the listing did not cover the window, so the cutoff stays put
+            # and the next sync carries on paging back.
+            conn.execute(
+                "UPDATE forums SET listing_floor=? WHERE id=?", (listing_value, category.id)
+            )
+            continue
+        conn.execute(
+            "UPDATE forums SET last_synced_at=?, backfill_floor=?, listing_floor=? WHERE id=?",
+            (to_iso(started), to_iso(floor), listing_value, category.id),
+        )
+
+
+def repair_coverage(conn: sqlite3.Connection, forum_id: int | None = None) -> dict[str, Any]:
+    """Set a forum's listing_floor to the oldest non-pinned bumped_at actually stored.
+
+    Explicit and per forum only: run automatically, this would invent gaps on forums that
+    were fully synced.
+    """
+    if forum_id is None:
+        return {"error": "repair_coverage needs a forum id"}
+    forum = conn.execute("SELECT * FROM forums WHERE id=?", (forum_id,)).fetchone()
+    if forum is None:
+        return {"error": f"unknown forum: {forum_id}"}
+    row = conn.execute(
+        "SELECT MIN(bumped_at) AS oldest FROM topics"
+        " WHERE forum_id=? AND pinned=0 AND bumped_at IS NOT NULL",
+        (forum_id,),
+    ).fetchone()
+    oldest = row["oldest"] if row is not None else None
+    conn.execute("UPDATE forums SET listing_floor=? WHERE id=?", (oldest, forum_id))
+    return {
+        "forum_id": forum_id,
+        "old_listing_floor": forum["listing_floor"],
+        "new_listing_floor": oldest,
+        "changed": forum["listing_floor"] != oldest,
+    }
+
+
 def sync(
     settings: Settings | None = None,
     forum_ids: list[int] | None = None,
@@ -423,13 +506,15 @@ def sync(
     ]
 
     floors: dict[int, tuple[datetime, datetime]] = {}
+    coverage: dict[int, tuple[datetime | None, bool]] = {}
     try:
         for category in categories:
             floor, cutoff, backfill, _first_run = _window(conn, category, lookback, started)
             floors[category.id] = (floor, cutoff)
-            queued = _list_topics(
-                conn, client, category, max_pages, floor, cutoff, backfill, result
+            queued, oldest_listed, reached = _list_topics(
+                conn, client, category, max_pages, floor, cutoff, backfill, result, deadline
             )
+            coverage[category.id] = (oldest_listed, reached)
             for topic_id in queued:
                 if deadline is not None and time.monotonic() > deadline:
                     result.partial = True
@@ -453,15 +538,7 @@ def sync(
         if owns_client:
             client.close()
 
-    if not result.partial:
-        for category in categories:
-            floor, _cutoff = floors.get(category.id, (None, None))
-            if floor is None:
-                continue
-            conn.execute(
-                "UPDATE forums SET last_synced_at=?, backfill_floor=? WHERE id=?",
-                (to_iso(started), to_iso(floor), category.id),
-            )
+    _record_coverage(conn, categories, floors, coverage, started, result)
 
     conn.execute(
         'INSERT INTO sync_runs (started_at, finished_at, "trigger", requests, new_topic_ids,'

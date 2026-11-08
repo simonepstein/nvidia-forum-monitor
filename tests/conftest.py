@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 from pathlib import Path
@@ -12,6 +13,7 @@ import respx
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SYNTHETIC = FIXTURES / "synthetic"
+TEST_FORUM_URL = "http://forum.test"
 
 
 def fixture(name: str) -> Any:
@@ -22,9 +24,19 @@ def synthetic(name: str) -> Any:
     return json.loads((SYNTHETIC / name).read_text())
 
 
+def live_opted_in(node: pytest.Item) -> bool:
+    """Live tests may use the network, but only when the operator opted in."""
+    return node.get_closest_marker("live") is not None and os.environ.get("SPARKWATCH_LIVE") == "1"
+
+
 @pytest.fixture(autouse=True)
-def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any request that respx has not mocked must fail the test."""
+def _block_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any request that respx has not mocked must fail the test.
+
+    Live tests are exempt when SPARKWATCH_LIVE=1 is set.
+    """
+    if live_opted_in(request.node):
+        return
 
     def guard(self: socket.socket, *args: Any, **kwargs: Any) -> None:
         raise RuntimeError("network access is blocked in tests")
@@ -33,9 +45,21 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket.socket, "connect_ex", guard, raising=True)
 
 
+@pytest.fixture(autouse=True)
+def _no_pacing_sleep(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neutralise request pacing so mocked runs are fast; live tests keep real pacing."""
+    if live_opted_in(request.node):
+        return
+
+    from sparkwatch import pacing
+
+    monkeypatch.setattr(pacing, "_sleep", lambda seconds: None)
+
+
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SPARKWATCH_GENERAL__DB_PATH", str(tmp_path / "sparkwatch.db"))
+    monkeypatch.setenv("SPARKWATCH_FORUM__BASE_URL", TEST_FORUM_URL)
     monkeypatch.setenv("SPARKWATCH_FORUM__REQUESTS_PER_SECOND", "1000")
     from sparkwatch.config import get_settings, reset_settings
 

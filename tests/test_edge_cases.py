@@ -221,6 +221,89 @@ def test_tombstone_is_rechecked_after_thirty_days(settings, conn, router, forum)
     assert refreshed["last_checked_at"] > iso_days_ago(1)
 
 
+def test_non_content_posts_are_tombstoned_once_and_never_requested_again(
+    settings, conn, router, forum
+):
+    topic = make_topic(213, bumped_days_ago=2, posts_count=3, highest_post_number=3)
+    posts = [
+        make_post(2131, 213, 1, "op"),
+        make_post(2132, 213, 2, "spam scanner notice", post_type=3),
+        make_post(2133, 213, 3, "moderator whisper", post_type=4),
+    ]
+    forum.add_page(723, listing([topic]))
+    forum.add_topic(topic_payload(topic, posts), posts)
+    forum.install(router)
+    client = DiscourseClient(settings)
+
+    result = sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    reasons = {
+        row["post_id"]: row["reason"]
+        for row in conn.execute("SELECT post_id, reason FROM missing_posts WHERE topic_id=213")
+    }
+    assert reasons == {2132: "not_content", 2133: "not_content"}
+    assert result.tombstones_new == 0
+
+    forum.calls.clear()
+    forum.pages[723] = [listing([topic])]
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723], lookback_days=90)
+
+    requested = [post_id for batch in forum.post_requests() for post_id in batch]
+    assert 2132 not in requested
+    assert 2133 not in requested
+
+
+def test_missing_posts_reason_is_constrained(settings, conn):
+    import sqlite3
+
+    import pytest
+
+    conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute("INSERT INTO topics (id, forum_id, title) VALUES (214, 723, 't')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO missing_posts (topic_id, post_id, reason, first_seen_at, last_checked_at)"
+            " VALUES (214, 2141, 'bogus', '2026-01-01T00:00:00+00:00',"
+            " '2026-01-01T00:00:00+00:00')"
+        )
+    conn.execute(
+        "INSERT INTO missing_posts (topic_id, post_id, reason, first_seen_at, last_checked_at)"
+        " VALUES (214, 2142, 'not_content', '2026-01-01T00:00:00+00:00',"
+        " '2026-01-01T00:00:00+00:00')"
+    )
+
+
+def test_rechecked_non_content_post_is_reclassified_and_then_left_alone(
+    settings, conn, router, forum
+):
+    topic = make_topic(215, bumped_days_ago=2, posts_count=2, highest_post_number=2)
+    posts = [make_post(2151, 215, 1, "op"), make_post(2152, 215, 2, "notice", post_type=3)]
+    forum.add_page(723, listing([topic]))
+    forum.add_topic(topic_with_stream(topic, [posts[0]], [2151, 2152]), posts)
+    forum.install(router)
+    client = DiscourseClient(settings)
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+
+    conn.execute(
+        "UPDATE missing_posts SET reason='hidden', last_checked_at=? WHERE post_id=2152",
+        (iso_days_ago(40),),
+    )
+    forum.calls.clear()
+    bumped = make_topic(215, bumped_days_ago=1, posts_count=2, highest_post_number=2)
+    forum.pages[723] = [listing([bumped])]
+    forum.add_topic(topic_with_stream(bumped, [posts[0]], [2151, 2152]), posts)
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    assert 2152 in [post_id for batch in forum.post_requests() for post_id in batch]
+    reason = conn.execute("SELECT reason FROM missing_posts WHERE post_id=2152").fetchone()[0]
+    assert reason == "not_content"
+
+    forum.calls.clear()
+    bumped_again = make_topic(215, bumped_days_ago=0.5, posts_count=2, highest_post_number=2)
+    forum.pages[723] = [listing([bumped_again])]
+    forum.add_topic(topic_with_stream(bumped_again, [posts[0]], [2151, 2152]), posts)
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723], lookback_days=90)
+    assert 2152 not in [post_id for batch in forum.post_requests() for post_id in batch]
+
+
 def test_deleted_and_hidden_posts_are_tombstoned(settings, conn, router, forum):
     topic = make_topic(211, bumped_days_ago=2, posts_count=3, highest_post_number=3)
     posts = [

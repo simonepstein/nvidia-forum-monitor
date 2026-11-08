@@ -193,6 +193,22 @@ def test_rate_limit_floor_stops_the_check(settings, conn, router, github):
     assert f"{BASE}/releases/latest" not in github.calls[-1]
 
 
+def test_check_repos_stops_at_its_deadline(settings, conn, router, github):
+    import time
+
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    calls_before = len(github.calls)
+
+    payload = check_repos(conn, settings, repo=REPO, deadline=time.monotonic() - 1.0)
+
+    assert payload["stopped_early"] is True
+    assert payload["checked"] == 0
+    assert payload["requests"] == 0
+    assert len(github.calls) == calls_before
+
+
 def test_link_discovery_never_watches(settings, conn):
     conn.execute(
         "INSERT INTO repos (owner, name, url, origin, watch, first_seen_at)"
