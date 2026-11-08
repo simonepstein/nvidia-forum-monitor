@@ -798,3 +798,29 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   3. `uv run sparkwatch repos check --repo eugr/spark-vllm-docker` → `changed: []`, `auth: token`, and `repos.etags['seen_tags']` holds the 10 current names.
   4. `uv run sparkwatch repos check` → no `tag` entries in `changed` for repos whose tags page only changed ETag.
   5. Optionally `check_repos_now` from the MCP session gives the same result.
+
+## #52 re-test (2026-11-08 22:35, `fix/run-a-issues` @ 23a5539)
+- 396 passed, 1 skipped. ruff is clean. `-k "tag or seen_tags"` gives 6 passed.
+- **On a `.backup` copy, with the token:**
+  - The cleanup `DELETE` removed 9 rows.
+  - `repos check --repo eugr/spark-vllm-docker` made 3 requests with `changed: []`, and the 9 tags didn't re-emit.
+  - A full `repos check` made 15 requests with no tag entries.
+  - The repo merge `repos check --repo …-zig-testing` made 4 requests and returned `merged: [{from: 71, to: 69}]`. Row 69 now has 6 mentions, `foreign_key_check` is clean and `integrity_check` returns ok.
+- **But see #53:** after those checks, repo 87 still has no `seen_tags`.
+
+### #53 (P2): watched repos from before #52 never get `seen_tags` while their tags page is unchanged, so the first real new tag is silently swallowed
+- **Observed (on the copy):** after `repos check --repo eugr/spark-vllm-docker` and a full `repos check`, `etags` for repo 87 has `tags` (an ETag) but no `seen_tags` key. The tags request returned 304, so the branch at `repos.py:674` (`if status != 304 …`) never ran.
+- **Why it matters:**
+  - All 5 watched repos were watched before #52, so none has `seen_tags`.
+  - Their stored tags ETags keep returning 304 until the tag list actually changes, and the usual reason it changes is a **new tag**.
+  - On that response `seen` is `None`, so the code records the page and emits nothing (`isinstance(seen, list)` is false). The first genuine new tag on every existing watched repo is lost.
+  - The digest, `repo_status` and `should_i_update` never hear about it.
+- **Fix (either):**
+  - **(a) Seed on the next check:** when `seen_tags` is missing on a non-baseline row, send the tags request **without** `If-None-Match` once. That costs one request per legacy repo, once, and records the set while nothing has changed.
+  - **(b) Seed from `latest_tag`** when `seen_tags` is missing: names listed *before* the stored `latest_tag` are new, and the rest are seen. If `latest_tag` isn't on the page, record and emit nothing.
+  - (a) is simpler and exact. (b) needs no extra request but is wrong if GitHub's ordering isn't by recency (`/tags` order isn't guaranteed chronological).
+- **Test:**
+  - A legacy row with no `seen_tags` whose tags endpoint 304s seeds `seen_tags` on the next check under (a), or stays correct under (b).
+  - A legacy row whose next tags response adds one tag at the head emits exactly that tag.
+
+**Housekeeping, not a bug:** `data/` now holds 5 full-size backups from the rehearsals (`sparkwatch.db.backup-*`, about 62 MB each). It's gitignored. The user can delete the ones they don't want; nothing reads them.
