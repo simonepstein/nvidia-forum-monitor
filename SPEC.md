@@ -183,6 +183,9 @@ enabled = false                  # needs BRAVE_API_KEY
 ### Client behaviour
 - Use a single `httpx.Client` with the configured User-Agent.
 - A token-bucket limiter keeps requests to `requests_per_second` or fewer.
+- **Rate safety (revised 2026-11-08):** when `forum.base_url` is the live forum host, settings validation requires `0 < requests_per_second <= 1.0`, and sparkwatch refuses to start otherwise. Zero or a negative value never means "unlimited".
+  - Tests and evals that need speed mock the network, or point `base_url` at a non-live host. They never just raise the rate.
+  - The GitHub client paces requests at 1 per second as well.
 - Retry with `tenacity` (exponential backoff with jitter) on 429, 5xx and network errors. On a 429, honour `Retry-After`.
 - Any other 4xx is logged, and the topic is skipped.
 
@@ -195,8 +198,14 @@ enabled = false                  # needs BRAVE_API_KEY
    - Upsert each topic. Pinned topics are always upserted.
    - Stop when there is no `more_topics_url`, when `max_pages` is reached, or when a page's last non-pinned topic has a `bumped_at` earlier than the cutoff:
      - normally the cutoff is `last_synced_at`;
-     - on the first run or during a backfill, it is the floor.
+     - on the first run, during a backfill, or **while `forums.listing_floor` is later than the window floor** (a coverage gap), it is the window floor.
    - Topics bumped before the floor are not upserted.
+   - **Listing coverage (revised 2026-11-08):** `forums.listing_floor` is the oldest `bumped_at` back to which the listing has been read without interruption, starting from page 0.
+     - **Reached the cutoff:** if the listing reaches its cutoff, or runs out of pages, `listing_floor` becomes the window floor (or stays earlier, if it already was).
+     - **Stopped early:** if it stops first, because of `max_pages` or the time budget, `listing_floor` becomes the oldest non-pinned `bumped_at` actually listed, and **`last_synced_at` is not advanced**. The next sync carries on paging back until the gap is closed.
+     - **Topics found while closing a gap** are queued by the normal rules in step 3: new or changed topics only. Closing a gap never re-queues topics that are already complete.
+     - **The two floors:** `backfill_floor` means the window applied to *posts*, and changes only when `lookback_days` grows. `listing_floor` means the window the *listing* has covered.
+   - **Repair is explicit.** `sparkwatch sync --repair-coverage --forum ID` sets that forum's `listing_floor` to the oldest non-pinned `bumped_at` stored for it, and reports the old and new values. It runs for the named forum only, never automatically. An automatic repair would invent gaps on fully synced forums: on 2026-11-08, forum 721's oldest stored topic was 75 minutes later than its true floor.
 3. **Queue topics:** a topic is queued if it is new, if `highest_post_number` went up, if `bumped_at` changed, if this is a backfill, or if `topics.posts_complete` is still 0.
    - `posts_complete` is set to 1 when a topic's fetch ran to its natural end (every target batch older than the floor was skipped), and left at 0 when the time budget interrupted it.
    - That is what makes a partial run resume: the topic is not re-queued once it is complete, and posts outside the window never force a re-fetch.
@@ -207,6 +216,7 @@ enabled = false                  # needs BRAVE_API_KEY
    4. Upsert posts with `content_hash = sha256(raw)`.
    5. **Tombstones:** a requested ID that `posts.json` doesn't return is upserted into `missing_posts` with `reason='absent_from_batch'`.
       - If a batch fails with 403, record `forbidden`. If the post is returned with `deleted_at` set or `hidden` true, record `deleted` or `hidden`.
+      - **Posts that aren't content (revised 2026-11-08):** posts with `post_type` 3 or 4 (small actions and whispers, e.g. spam-scanner notices) are recorded as `not_content`, so they're never requested again. They're excluded from `tombstones_new` and from any count of missing content.
       - An ID that later comes back is removed from `missing_posts` and stored normally.
       - **Re-check policy:** tombstoned IDs are requested again only during a backfill, or when `last_checked_at` is more than 30 days old. Each re-check updates `last_checked_at`. Deleted posts are occasionally restored, so this keeps re-requests rare without losing anything permanently.
    6. Run `links.discover` and `watch.match` for each post that was inserted or changed, then recompute the topic's `relevance_score`.
@@ -237,6 +247,8 @@ This is regex only.
   - Normalise to the lowercase form `https://github.com/owner/name`.
   - Strip `.git`, `/tree|blob/…`, `#…` and `?…`.
   - Skip owners `orgs|features|sponsors|settings|marketplace`.
+  - Skip `gist.github.com` URLs entirely; they aren't repos.
+  - When GitHub answers a repo request with `301 Moved Permanently`, follow it, and update the repo's `url`, `owner` and `name` to the new canonical names.
 - **Hugging Face:** `huggingface\.co/([\w.-]+)/([\w.-]+)`. Skip first path segments `datasets|spaces|docs|blog|papers`.
   - HF links are **recorded only**, so the agent can see which quant repo a recipe uses.
   - HF is never polled. **The forum is the curator for new models.**
@@ -246,7 +258,13 @@ This is regex only.
 ### Watch matching (`watch.py`)
 - For each active `watchlist` row, run `re.search(match_regex, raw, re.I)` against the title and raw text of each new or changed post.
 - On a match, insert a row into `watch_hits(watch_id, post_id)`. These are unique, so re-matching an edited post is a no-op.
-- The first hit for an entry sets `watchlist.first_seen_post_id` and `first_seen_at`. **For an `anticipated` entry this is a "first sighting" alert.** It appears at the top of every digest until the agent acknowledges it with `ack_watch_sighting`.
+- The first hit for an entry sets `watchlist.first_seen_post_id` and `first_seen_at`.
+- **Anticipated entries (revised 2026-11-08).** Speculation about a much-awaited model is constant, so a first *mention* says little. An anticipated entry may therefore have a `release_regex`, which is stricter than `match_regex`, e.g. a Hugging Face URL or phrases like "weights are out".
+  - **With a `release_regex`:** only a post matching it raises the sighting alert (`sighting_post_id`, `sighting_at`). After `ack_watch_sighting`, the next release match raises a new alert.
+  - **Without one:** the first hit raises the alert, as before.
+  - **Every other hit is still recorded,** and appears in the digest only as a count.
+  - **The judgement belongs to the agent:** `catch_up` tells it to classify anticipated-model hits as rumour or release, and to `flag` only releases.
+- An alert appears at the top of every digest until the agent acknowledges it with `ack_watch_sighting`.
 - When a watch entry is added or its regex changes, it is matched against all stored posts once. That's local only, with no fetching.
 
 ## 2. SQLite schema (`db.py`, migration 1)
@@ -257,6 +275,7 @@ Every write is an idempotent upsert keyed on natural or Discourse IDs.
 -- Mirror
 CREATE TABLE forums (id INTEGER PRIMARY KEY, path TEXT NOT NULL, name TEXT NOT NULL,
   last_synced_at TEXT, backfill_floor TEXT);
+  -- migration 3 adds: listing_floor TEXT (see §1, Listing coverage); it starts as a copy of backfill_floor
 CREATE TABLE topics (
   id INTEGER PRIMARY KEY, forum_id INTEGER NOT NULL REFERENCES forums(id),
   slug TEXT, title TEXT NOT NULL, tags TEXT, excerpt TEXT,
@@ -281,7 +300,7 @@ CREATE INDEX posts_changed ON posts(changed_at);
 CREATE INDEX posts_topic ON posts(topic_id, post_number);
 CREATE TABLE missing_posts (       -- tombstones: IDs in a topic's stream that couldn't be fetched
   topic_id INTEGER NOT NULL REFERENCES topics(id), post_id INTEGER NOT NULL,
-  reason TEXT NOT NULL CHECK (reason IN ('absent_from_batch','deleted','hidden','forbidden')),
+  reason TEXT NOT NULL CHECK (reason IN ('absent_from_batch','deleted','hidden','forbidden','not_content')),  -- 'not_content' added in migration 3
   first_seen_at TEXT NOT NULL, last_checked_at TEXT NOT NULL,
   PRIMARY KEY (topic_id, post_id));
 CREATE VIRTUAL TABLE posts_fts USING fts5(title, body, tokenize='porter unicode61');
@@ -295,6 +314,7 @@ CREATE TABLE sync_runs (id INTEGER PRIMARY KEY, started_at TEXT, finished_at TEX
 CREATE TABLE watchlist (id INTEGER PRIMARY KEY, label TEXT NOT NULL UNIQUE, canonical TEXT,
   match_regex TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('tracking','anticipated')),
   first_seen_post_id INTEGER, first_seen_at TEXT, sighting_acked_at TEXT,
+  -- migration 3 adds: release_regex TEXT, sighting_post_id INTEGER, sighting_at TEXT (see §1, Watch matching)
   active INTEGER NOT NULL DEFAULT 1, note TEXT, created_at TEXT NOT NULL);
 CREATE TABLE watch_hits (watch_id INTEGER REFERENCES watchlist(id), post_id INTEGER REFERENCES posts(id),
   topic_id INTEGER, matched_text TEXT, created_at TEXT NOT NULL, PRIMARY KEY (watch_id, post_id));
@@ -404,7 +424,8 @@ match_regex = 'qwen[\s._-]*3\.8[\s._-]*(flash|next)'
 [[watch]]
 label = "Qwen4"
 kind = "anticipated"
-match_regex = 'qwen[\s._-]*4(?![\d.])'
+match_regex = 'qwen[\s._-]*4(?![\d.])(?![\s_-]*exp)(?!\s*b\b)'   # excludes vLLM's Qwen4Exp / qwen4_exp (Qwen3.8 Flash Next's architecture) and "Qwen 4B"
+release_regex = 'huggingface\.co/qwen/qwen[\s._-]*4(?![\d.])|qwen[\s._-]*4\b[^\n]{0,40}\b(released|weights (are )?(out|available)|now available|is out)'
 ```
 - `seed/model_aliases.toml` and `seed/models.toml` start with these four models.
 - Exact canonical names, HF repo IDs and variant naming are confirmed against real posts at the Run A checkpoint.
@@ -480,13 +501,16 @@ This covers watched repos only.
    - A date is resolved to the last commit before that date on the branch, using `GET /commits?sha=<branch>&until=<date>&per_page=1`.
    - The tool then calls `GET /repos/{o}/{n}/compare/{base}...{head_sha}`, and the response is cached in `compare_cache`.
 3. **What it returns:**
-   - `status` (`identical` / `ahead` / `behind` / `diverged`), `ahead_by` and `behind_by`;
+   - `status` (`identical` / `behind` / `ahead` / `diverged`), `behind_by` and `ahead_by`. **These are always from the installed (base) SHA's point of view:**
+     - `behind_by` = commits on the branch head that the install doesn't have, which is GitHub compare's `ahead_by`;
+     - `ahead_by` = commits in the install that aren't on the branch, which is GitHub's `behind_by`;
+     - the digest and `list_installs` use the same names and direction.
    - the commit list: SHA, subject, author, date and URL, with the newest `max_compare_commits` listed and the total always given;
    - a summary of files changed, as the top changed directories with counts;
    - releases and tags published after the base commit's date, with their notes;
    - forum posts that mention this repo since the base date, from `repo_mentions` plus an FTS search for `owner/name`. **People reporting that a new commit breaks or fixes something is the most useful signal here.**
    - any open flags on the repo.
-4. **Large comparisons:** GitHub's compare API lists at most 250 commits. Past that, the tool reports `ahead_by` and the newest 50 commits, plus `truncated: true`.
+4. **Large comparisons:** GitHub's compare API lists at most 250 commits. Past that, the tool reports `behind_by` and the newest 50 commits, plus `truncated: true`.
 
 ### Scheduling
 - `sparkwatch repos check` runs under the lock.
@@ -508,6 +532,10 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - text truncated to `max_chars`, with `truncated: true` and a `next` argument set the agent can pass back to continue.
 - `limit` defaults to `mcp.default_limit` and is capped at `max_limit`.
   - Two tools keep literal defaults on purpose: `digest` caps each section at 30 and `sql_query` returns at most 200 rows. Those are per-call shape decisions, not list defaults, so `mcp.default_limit` does not apply to them.
+- **Size budget (revised 2026-11-08):** a default call to any tool should return well under 10 KB.
+  - Lists are ranked and capped, with a `total` count.
+  - `model_summary` lists at most 10 repos, ranked by mentions in the model's topics, with watched repos first.
+  - `model_summary` includes open flags on the model, its recipes and its topics.
 - **Tool descriptions are written for the agent.** Each one says when to use the tool. For example: "Call `get_notes` and `list_recipes` before researching a model, so you build on earlier conclusions."
 - Writes are short transactions. Long jobs (sync, repos check) take the lock. If it's already held, they return `{"busy": true, "job": ..., "started_at": ...}` rather than blocking.
 
@@ -526,13 +554,23 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
        If an install is recorded, it also shows "installed `abc1234`, now N commits behind; releases since then: …".
     6. **Repos first linked from posts** since the cursor, with their topic and context snippet. These are candidates for `watch_repo`.
     7. **Open flags.**
-  - **Timing:** "since" is based on `posts.first_fetched_at` and `changed_at`, not post `created_at`, so a backfill doesn't flood the digest with old posts as if they were news. Backfilled posts are reported as a count only.
+  - **Timing (revised 2026-11-08).** Three kinds of post are distinguished:
+    - **new:** `first_fetched_at >= since` and `created_at >= since - 24h`. The 24-hour grace covers posts written shortly before a sync and picked up by the next one.
+    - **edited:** `changed_at >= since` and `first_fetched_at < since`.
+    - **backfilled:** `first_fetched_at >= since` and `created_at < since - 24h`.
+  - **How each kind is reported:** sections 2–4 count and show only *new* posts, with edits as a separate count. Backfilled posts appear as a single line, `backfilled: N posts in M topics`. A topic made up only of backfilled posts isn't listed as new or updated.
+  - **Item dates:** every item's `date` is the post's `created_at`.
+  - **Snippets:** watch-hit snippets are taken from around the matched text, not from the start of the post.
+  - **Size:** the default digest should be well under 10 KB. Section caps and snippet lengths are chosen to meet that. "Repos first linked" is one line per repo.
+  - **Anticipated models:** in section 2, hits for an anticipated model (`kind='anticipated'`) are shown as a count, plus the 3 newest hits.
   - **Cursor:** with `advance=True`, the cursor moves to the time the digest was built.
-- `whats_new_for(model, since?)`: the same as the digest, but narrowed to one model. It uses watch hits, an alias regex and FTS.
-- `ack_watch_sighting(label)`
+- `whats_new_for(model, since?)`: the same as the digest, but narrowed to one model. It uses watch hits, an alias regex and FTS. `since` applies to **every** section, using the new, edited and backfilled definitions above.
+- `ack_watch_sighting(label)`: clears the current alert. An anticipated entry with a `release_regex` fires again on the next *release* match (see §1, Watch matching).
 
 ### Reading and research
-- `search_posts(query, topic_id?, forum_id?, since?, username?, order="rank"|"recent", limit)`: FTS5 with `snippet()`.
+- `search_posts(query, topic_id?, forum_id?, since?, username?, order="rank"|"recent", raw_fts=False, limit)`: FTS5 with `snippet()`.
+  - **Query handling (revised 2026-11-08):** by default, `query` is plain text. Each whitespace-separated term is quoted as an FTS5 string, and the terms are joined with AND. So `GLM 5.3 Flash` and `tok/s` work as typed.
+  - `raw_fts=True` passes the query through unchanged, for FTS5 operators. A syntax error then comes back as a tool error.
 - `find_model_mentions(model, since?, limit)`: resolves aliases and the watch regex, then returns matching posts grouped by topic, newest first, with snippets.
 - `list_topics(forum_id?, since?, relevant_only=False, order="bumped"|"relevance"|"likes"|"created", limit)`
 - `get_topic_overview(topic_id)`:
@@ -571,7 +609,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `model_summary(model)`. This is the starting point for a "best way to serve X" question. It returns:
   - the model's metadata;
   - its aliases;
-  - mention counts over 7, 30 and 60 days;
+  - mention counts over 7, 30 and 60 days. These count **distinct posts by `posts.created_at`**, not watch-hit rows or when sparkwatch recorded them. The same rule applies to `list_watchlist`'s `hits_7d` and `hits_30d`.
   - its active recipes, newest first;
   - its benchmarks;
   - its latest research notes;
@@ -598,13 +636,22 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `sparkwatch://flags/open`
 - `sparkwatch://notes/latest`
 
+### Workflows: prompts plus tool and instruction fallbacks (revised 2026-11-08)
+MCP prompts are controlled by the user, and client support varies. Even where a client shows them, the model can't call them. OpenFox, for example, doesn't show them at all. So each workflow below is published through **four channels, all built from a single source** (e.g. `workflows.py`):
+1. **MCP prompts**, as below.
+2. **Tools:** `list_workflows()` returns each name with a one-line purpose and its arguments. `get_workflow(name, args?)` returns the step text, with the arguments filled in.
+3. **Server instructions:** `FastMCP(instructions=…)` gets a short paragraph naming the four workflows and saying "call `get_workflow(name)` for the steps". Many clients put this in the model's context.
+4. **Tool descriptions:** `sync_now`, `digest`, `model_summary` and `repo_status` mention the relevant workflow, e.g. "For a full catch-up, call `get_workflow('catch_up')`."
+
+The README gets a "Workflows" section for people and for clients that show none of these.
+
 ### Prompts
-MCP prompt templates encode the two main workflows. They're short and instructional.
+MCP prompt templates encode the main workflows. They're short and instructional.
 - **`catch_up`:**
   1. `sync_now` (repeat while `partial`)
   2. `digest`
   3. For promising items, read them with `get_posts(last_n=…)` / `get_post`.
-  4. `flag` what matters: new models or quants, performance claims, breaking engine changes, new recipes, watch sightings.
+  4. `flag` what matters: new models or quants, performance claims, breaking engine changes, new recipes, watch sightings. For anticipated models, classify each hit as rumour or release, and flag only releases.
   5. Record clear recipes and benchmarks with quotes.
   6. Reply with a short briefing, with links.
 - **`serve_model(model, topology="dual-spark")`:**
@@ -632,7 +679,13 @@ MCP prompt templates encode the two main workflows. They're short and instructio
 ## 6. Run B: local-LLM triage (`triage.py`, `llm.py`), phase 2
 **Purpose:** lower agent token use and pre-flag items without supervision. Everything works without it.
 - **Migration 2 (Run A):** `ALTER TABLE topics ADD COLUMN posts_complete INTEGER NOT NULL DEFAULT 0;` — the sync resume marker above.
-- **Migration 3 (Run B):**
+- **Migration 3 (Run A fixes, 2026-11-08):**
+  - `forums.listing_floor`, initialised from `backfill_floor`;
+  - `watchlist.release_regex`, `sighting_post_id` and `sighting_at`;
+  - rebuild `missing_posts` to add `'not_content'` to the CHECK, then reclassify existing rows whose post has `post_type` 3 or 4.
+
+  The migration must not touch any coverage value other than initialising `listing_floor`, which keeps 721 out of any re-sync.
+- **Migration 4 (Run B):**
   - `post_tags(post_id PK, content_hash, models JSON, has_perf INT, has_benchmark INT, has_recipe INT, is_question INT, is_solution INT, summary TEXT, triage_model, prompt_version, tagged_at)`
   - `triage_runs`
 - **`sparkwatch triage`:**
