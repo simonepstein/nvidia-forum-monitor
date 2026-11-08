@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+tests/evals/frozen.db
+tests/evals/mcp_config.json
