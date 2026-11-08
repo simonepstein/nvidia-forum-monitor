@@ -274,7 +274,7 @@ This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It correct
   - `days` is capped at `lookback_days`;
   - a larger refresh is a deliberate, separate run.
 - **CLI:** `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]`.
-- **MCP:** none in Run A. It's an operator task, not an agent one.
+- **MCP:** `refresh_engagement(days=14, forum_id=None, time_budget_s=None)`, calling the same function (the user runs sparkwatch from an MCP client on a laptop, so maintenance goes through MCP too). Its description says to use it **only when the user asks** to refresh likes or accepted answers, never as part of `catch_up` or any other workflow.
 
 `sparkwatch backfill --days D` is `sync(lookback_days=D)`. You never need to start from scratch.
 

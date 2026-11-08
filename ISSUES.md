@@ -535,4 +535,5 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - one `posts.json` call per topic for posts from the last N days (default 14);
   - it writes only `like_count`, `accepted_answer` and `fetched_at`;
   - it never moves floors or cursors, and is never automatic.
+  - CLI `sync --refresh-engagement` plus an MCP tool `refresh_engagement`, to be called only when the user asks.
 - **Acceptance:** first rehearse on a copy, then run `--days 14 --budget 180` live. That's about 90 requests, with `posts_changed` 0 and likes present across many topics.
