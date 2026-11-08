@@ -24,6 +24,7 @@ uv run sparkwatch sync                 # mirror the last 60 days (configurable i
 uv run sparkwatch digest               # what's new since the last digest
 uv run sparkwatch global-digest        # what's hot across both categories, ranked
 uv run sparkwatch global-digest --since 2026-11-01 --detail   # with the top posts
+uv run sparkwatch global-digest --since 2026-10-25 --until 2026-11-08 --basis written   # a past period, backfill included
 uv run sparkwatch sync --forum 723 --max-pages 1     # a small, polite live run
 uv run sparkwatch backfill --days 120  # widen the window; never re-crawls from scratch
 uv run sparkwatch repos check          # watched repos: head moved? new release or tag?

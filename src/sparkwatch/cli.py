@@ -175,6 +175,9 @@ def global_digest(
     since: str = typer.Option("cursor", "--since"),
     until: str | None = typer.Option(None, "--until"),
     cursor: str = typer.Option("global", "--cursor"),
+    basis: str = typer.Option(
+        "seen", "--basis", help="rank by when sparkwatch saw posts (seen) or when they were written"
+    ),
     forum: int | None = typer.Option(None, "--forum", help="category id"),
     limit: int = typer.Option(10, "--limit"),
     relevant_only: bool = typer.Option(False, "--relevant-only"),
@@ -197,6 +200,7 @@ def global_digest(
             since=since,
             until=until,
             cursor=cursor,
+            basis=basis,
             forum_id=forum,
             limit=limit,
             relevant_only=relevant_only,

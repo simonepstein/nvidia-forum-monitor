@@ -571,3 +571,132 @@ def test_knowledge_line_dedupes_source_urls(settings, conn):
     assert line.count("https://forums.developer.nvidia.com/t/1/11") == 1
     assert "https://forums.developer.nvidia.com/t/1/12" in line
     assert len(payload["knowledge"]["items"][0]["urls"]) == 3
+
+
+LATER_FETCH = "2026-03-01T00:00:00+00:00"
+
+
+def test_written_basis_counts_backfilled_posts(settings, conn):
+    seed_topic(conn, 1, created_at=BEFORE_GRACE, relevance=20.0)
+    seed_post(conn, 11, 1, created_at=IN_WINDOW, first_fetched_at=LATER_FETCH, likes=2)
+    seed_post(conn, 12, 1, created_at=BEFORE_GRACE, first_fetched_at=IN_WINDOW, likes=5)
+
+    seen = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+    written = global_digest(
+        conn, settings, since=SINCE, until=UNTIL, basis="written", advance=False
+    )
+
+    assert seen["hot_topics_total"] == 0
+    assert seen["backfilled"] == {"posts": 1, "topics": 1}
+    assert written["hot_topics_total"] == 1
+    assert written["hot_topics"][0]["new_posts"] == 1
+    assert written["hot_topics"][0]["likes"] == 2
+    assert "backfilled" not in written
+
+
+def test_written_basis_rejects_the_cursor_and_writes_no_cursor(settings, conn):
+    import pytest
+
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    conn.execute(
+        "INSERT INTO digest_cursors (name, last_seen_at) VALUES ('global', ?)", (BEFORE_GRACE,)
+    )
+
+    with pytest.raises(ValueError, match="basis='written' needs an ISO 'since'"):
+        global_digest(conn, settings, since="cursor", until=UNTIL, basis="written")
+    with pytest.raises(ValueError, match="invalid basis"):
+        global_digest(conn, settings, since=SINCE, until=UNTIL, basis="sideways")
+
+    payload = global_digest(conn, settings, since=SINCE, until=UNTIL, basis="written", advance=True)
+
+    assert payload["cursor"] is None
+    assert payload["basis"] == "written"
+    cursor = conn.execute("SELECT last_seen_at FROM digest_cursors WHERE name='global'").fetchone()
+    assert cursor["last_seen_at"] == BEFORE_GRACE
+
+
+def test_written_basis_first_linked_counts_backfilled_mentions(settings, conn):
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    seed_topic(conn, 2)
+    seed_post(conn, 21, 2, created_at=IN_WINDOW, first_fetched_at=LATER_FETCH)
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, first_seen_at)"
+        " VALUES (1, 'o', 'r', 'https://github.com/o/r', ?)",
+        (LATER_FETCH,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (1, 21, 2, 'https://github.com/o/r', ?)",
+        (IN_WINDOW,),
+    )
+
+    seen = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+    written = global_digest(
+        conn, settings, since=SINCE, until=UNTIL, basis="written", advance=False
+    )
+
+    assert seen["first_linked"]["count"] == 0
+    assert written["first_linked"]["count"] == 1
+    assert written["first_linked"]["top"][0]["first_post_url"] == (
+        "https://forums.developer.nvidia.com/t/2/21"
+    )
+
+
+def test_written_basis_pages_with_the_same_basis(settings, conn):
+    for topic_id in (1, 2, 3):
+        seed_topic(conn, topic_id)
+        seed_post(conn, topic_id * 10 + 1, topic_id, first_fetched_at=LATER_FETCH)
+
+    first = global_digest(
+        conn, settings, since=SINCE, until=UNTIL, basis="written", limit=1, advance=False
+    )
+
+    assert first["next"]["basis"] == "written"
+    second = global_digest(conn, settings, limit=1, next=first["next"])
+
+    assert second["basis"] == "written"
+    assert "backfilled" not in second
+    assert second["hot_topics"][0]["topic_id"] != first["hot_topics"][0]["topic_id"]
+
+
+def test_cli_global_digest_basis_written_and_rejects_a_bad_basis(settings, conn):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    seed_topic(conn, 1, title="GLM on two Sparks")
+    seed_post(conn, 11, 1, first_fetched_at=LATER_FETCH, likes=2)
+    runner = CliRunner()
+
+    text = runner.invoke(
+        app,
+        ["global-digest", "--since", SINCE, "--until", UNTIL, "--basis", "written", "--no-advance"],
+    )
+    assert text.exit_code == 0
+    assert "basis written" in text.stdout
+    assert "backfilled:" not in text.stdout
+
+    as_json = runner.invoke(
+        app,
+        [
+            "global-digest",
+            "--since",
+            SINCE,
+            "--until",
+            UNTIL,
+            "--basis",
+            "written",
+            "--no-advance",
+            "--json",
+        ],
+    )
+    assert as_json.exit_code == 0
+    assert '"basis": "written"' in as_json.stdout
+
+    bad = runner.invoke(
+        app, ["global-digest", "--since", SINCE, "--until", UNTIL, "--basis", "sideways"]
+    )
+    assert bad.exit_code == 1
+    assert "invalid basis" in bad.stdout

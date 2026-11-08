@@ -111,6 +111,7 @@ def test_list_tools_matches_snapshot(settings, tmp_path):
         "since",
         "until",
         "cursor",
+        "basis",
         "forum_id",
         "limit",
         "relevant_only",

@@ -132,6 +132,156 @@ def _save_meta_checked(conn: sqlite3.Connection, repo_id: int, when_iso: str) ->
     conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
 
 
+GITHUB_ID_KEY = "github_id"
+
+
+def _github_id(repo: Any) -> int | None:
+    """GitHub's numeric repository id, kept in `etags` so no migration is needed.
+
+    SPEC §4b: the id is the repo's identity, so two rows that resolve to the same id are one
+    repo stored under two old names.
+    """
+    value = _etags(repo).get(GITHUB_ID_KEY)
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _save_github_id(conn: sqlite3.Connection, repo_id: int, github_id: int) -> None:
+    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
+    etags = loads(row["etags"], {}) or {}
+    etags[GITHUB_ID_KEY] = int(github_id)
+    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+
+
+def _repo_row(conn: sqlite3.Connection, repo_id: int) -> Any:
+    return conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
+
+
+def _merge_repos(conn: sqlite3.Connection, winner_id: int, loser_id: int) -> int:
+    """Fold one row into the other, keeping every mention, install, event and cache entry.
+
+    SPEC §4b: rows that share a GitHub id are one repo, so the loser's children move to the
+    winner (INSERT OR IGNORE keeps the existing row on a key clash) and the loser is dropped.
+    """
+    if winner_id == loser_id:
+        return winner_id
+    winner = _repo_row(conn, winner_id)
+    loser = _repo_row(conn, loser_id)
+    if winner is None or loser is None:
+        return winner_id
+    moves = {
+        "repo_mentions": "post_id, topic_id, url, context_snippet, mentioned_at",
+        "repo_installs": "label, sha, ref_given, branch, installed_at, note, updated_at",
+        "repo_events": (
+            "kind, ref, prev_ref, commits_ahead, title, body_excerpt, url, occurred_at, detected_at"
+        ),
+        "compare_cache": "base_sha, head_sha, response, fetched_at",
+    }
+    for table, columns in moves.items():
+        conn.execute(
+            f"INSERT OR IGNORE INTO {table} (repo_id, {columns})"
+            f" SELECT ?, {columns} FROM {table} WHERE repo_id=?",
+            (winner_id, loser_id),
+        )
+        conn.execute(f"DELETE FROM {table} WHERE repo_id=?", (loser_id,))
+
+    for name in (loser["url"], f"{loser['owner']}/{loser['name']}"):
+        conn.execute(
+            "UPDATE flags SET target_id=? WHERE target_type='repo' AND lower(target_id)=lower(?)",
+            (winner["url"], name),
+        )
+
+    head_sha = winner["head_sha"] or loser["head_sha"]
+    head_seen_at = winner["head_seen_at"] or loser["head_seen_at"]
+    if loser["head_seen_at"] and (
+        winner["head_seen_at"] is None or loser["head_seen_at"] > winner["head_seen_at"]
+    ):
+        head_sha, head_seen_at = loser["head_sha"], loser["head_seen_at"]
+    etags = {**(loads(loser["etags"], {}) or {}), **(loads(winner["etags"], {}) or {})}
+    conn.execute(
+        "UPDATE repos SET watch=?, branch=?, note=?, head_sha=?, head_seen_at=?,"
+        " latest_release_tag=?, latest_tag=?, first_seen_at=?, watched_at=?,"
+        " last_checked_at=?, origin=?, description=?, default_branch=?, archived=?,"
+        " pushed_at=?, etags=? WHERE id=?",
+        (
+            1 if (winner["watch"] or loser["watch"]) else 0,
+            winner["branch"] or loser["branch"],
+            winner["note"] or loser["note"],
+            head_sha,
+            head_seen_at,
+            winner["latest_release_tag"] or loser["latest_release_tag"],
+            winner["latest_tag"] or loser["latest_tag"],
+            min(winner["first_seen_at"], loser["first_seen_at"]),
+            min(
+                [value for value in (winner["watched_at"], loser["watched_at"]) if value],
+                default=None,
+            ),
+            max(
+                [value for value in (winner["last_checked_at"], loser["last_checked_at"]) if value],
+                default=None,
+            ),
+            "forum" if "forum" in (winner["origin"], loser["origin"]) else winner["origin"],
+            winner["description"] if winner["description"] is not None else loser["description"],
+            winner["default_branch"] or loser["default_branch"],
+            winner["archived"] if winner["archived"] is not None else loser["archived"],
+            winner["pushed_at"] or loser["pushed_at"],
+            dumps(etags),
+            winner_id,
+        ),
+    )
+    conn.execute("DELETE FROM repos WHERE id=?", (loser_id,))
+    return winner_id
+
+
+def _merge_by_github_id(conn: sqlite3.Connection, repo_id: int, github_id: int) -> int:
+    """Merge every row that shares a GitHub id, returning the surviving row's id.
+
+    The watched row wins, then the older `first_seen_at`, then the lower id, so a repo keeps
+    the row the user flagged and the row that has been in the mirror longest.
+    """
+    matches = [
+        row
+        for row in conn.execute("SELECT * FROM repos").fetchall()
+        if _github_id(row) == github_id
+    ]
+    if len(matches) < 2:
+        return repo_id
+    matches.sort(key=lambda row: (0 if row["watch"] else 1, row["first_seen_at"] or "", row["id"]))
+    winner_id = matches[0]["id"]
+    for loser in matches[1:]:
+        _merge_repos(conn, winner_id, loser["id"])
+    return winner_id
+
+
+def _resolve_github_id(conn: sqlite3.Connection, client: GitHubClient, row: Any) -> Any:
+    """Learn GitHub's numeric id from one metadata request, then merge rows that share it.
+
+    SPEC §4b: discovery stores repos from post links, so an unwatched row has no id until it
+    is touched. `set_installed` resolves it here, once, so a stale alias is merged into the
+    watched row instead of keeping its own mentions.
+    """
+    try:
+        _status, response, _etag = client.get(f"/repos/{row['owner']}/{row['name']}")
+    except GitHubError:
+        return row
+    if response is None:
+        return row
+    try:
+        meta = response.json()
+    except ValueError:
+        return row
+    github_id = meta.get("id")
+    if not isinstance(github_id, int):
+        return row
+    repo_id = row["id"]
+    _save_github_id(conn, repo_id, github_id)
+    repo_id = _merge_by_github_id(conn, repo_id, github_id)
+    _follow_rename(conn, repo_id, _repo_row(conn, repo_id), meta)
+    return _repo_row(conn, repo_id)
+
+
 def get_or_create_repo(conn: sqlite3.Connection, repo: str) -> Any:
     owner, name = parse_repo(repo)
     url = f"https://github.com/{owner}/{name}"
@@ -254,6 +404,11 @@ def _follow_rename(conn: sqlite3.Connection, repo_id: int, row: Any, meta: dict[
     clash = conn.execute("SELECT id FROM repos WHERE url=? AND id<>?", (url, repo_id)).fetchone()
     if clash is not None:
         return False
+    for alias in (row["url"], f"{row['owner']}/{row['name']}"):
+        conn.execute(
+            "UPDATE flags SET target_id=? WHERE target_type='repo' AND lower(target_id)=lower(?)",
+            (url, alias),
+        )
     conn.execute("UPDATE repos SET owner=?, name=?, url=? WHERE id=?", (owner, name, url, repo_id))
     return True
 
@@ -272,6 +427,7 @@ def check_repos(
     now_iso = to_iso(now)
     changed: list[dict[str, Any]] = []
     errors: list[str] = []
+    merged: list[dict[str, int]] = []
     stopped = False
     checked = 0
 
@@ -300,9 +456,23 @@ def check_repos(
                     except GitHubNotFound as exc:
                         errors.append(f"{row['owner']}/{row['name']}: {exc}")
                         continue
-                    _save_meta_checked(conn, repo_id, now_iso)
+                    meta = None
                     if status != 304 and response is not None:
-                        meta = response.json()
+                        try:
+                            meta = response.json()
+                        except ValueError:
+                            meta = None
+                        github_id = meta.get("id") if isinstance(meta, dict) else None
+                        if isinstance(github_id, int):
+                            _save_github_id(conn, repo_id, github_id)
+                            survivor = _merge_by_github_id(conn, repo_id, github_id)
+                            if survivor != repo_id:
+                                merged.append({"from": repo_id, "to": survivor})
+                                repo_id = survivor
+                                row = _repo_row(conn, repo_id)
+                                baseline = row["last_checked_at"] is None
+                    _save_meta_checked(conn, repo_id, now_iso)
+                    if meta is not None:
                         _save_etag(conn, repo_id, "meta", new_etag)
                         _follow_rename(conn, repo_id, row, meta)
                         row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
@@ -464,6 +634,7 @@ def check_repos(
         "requests": client.request_count,
         "changed": changed,
         "errors": errors,
+        "merged": merged,
         "stopped_early": stopped,
     }
 
@@ -478,16 +649,19 @@ def watch_repo(
     client: GitHubClient | None = None,
 ) -> dict[str, Any]:
     row = get_or_create_repo(conn, repo)
+    repo_id = row["id"]
     now = utcnow_iso()
     conn.execute(
         "UPDATE repos SET watch=?, branch=?, note=COALESCE(?, note), watched_at=? WHERE id=?",
-        (1 if watch else 0, branch, note, now, row["id"]),
+        (1 if watch else 0, branch, note, now, repo_id),
     )
-    row = conn.execute("SELECT * FROM repos WHERE id=?", (row["id"],)).fetchone()
+    row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
     baseline = None
     if watch:
         baseline = check_repos(conn, settings, repo=row["url"], client=client)
-    row = conn.execute("SELECT * FROM repos WHERE id=?", (row["id"],)).fetchone()
+        merged = {item["from"]: item["to"] for item in baseline.get("merged", [])}
+        repo_id = merged.get(repo_id, repo_id)
+    row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
     return {
         "repo": f"{row['owner']}/{row['name']}",
         "url": row["url"],
@@ -543,6 +717,8 @@ def set_installed(
     client = client or GitHubClient(settings)
     try:
         row = get_or_create_repo(conn, repo)
+        if _github_id(row) is None:
+            row = _resolve_github_id(conn, client, row)
         resolved = _resolve_ref(client, row, ref)
         now = utcnow_iso()
         installed = installed_at or now
@@ -722,8 +898,9 @@ def repo_status(
                 "flags": [
                     dict(flag)
                     for flag in conn.execute(
-                        "SELECT * FROM flags WHERE target_type='repo' AND target_id=? AND resolved_at IS NULL",
-                        (f"{row['owner']}/{row['name']}",),
+                        "SELECT * FROM flags WHERE target_type='repo' AND resolved_at IS NULL"
+                        " AND target_id IN (?, ?)",
+                        (row["url"], f"{row['owner']}/{row['name']}"),
                     )
                 ],
             }

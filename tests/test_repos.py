@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from conftest import add_github_spec
 
-from sparkwatch.repos import check_repos, get_repo, watch_repo
+from sparkwatch.repos import check_repos, get_repo, set_installed, watch_repo
 from sparkwatch.util import dumps, loads
 
 REPO = "vllm-project/vllm"
@@ -390,3 +390,175 @@ def test_archived_event_is_created_once(settings, conn, router, github, monkeypa
     check_repos(conn, settings, repo=REPO)
 
     assert conn.execute("SELECT COUNT(*) FROM repo_events WHERE kind='archived'").fetchone()[0] == 1
+
+
+GITHUB_ID = 1424520842
+OLD_REPO = "gilesco/glm-old"
+NEW_REPO = "gilesco/glm"
+
+
+def seed_repo(
+    conn,
+    repo_id: int,
+    repo: str,
+    *,
+    watch: int = 0,
+    first_seen: str = PAST,
+    github_id: int | None = None,
+) -> None:
+    owner, name = repo.split("/", 1)
+    etags = {"github_id": github_id} if github_id is not None else {}
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, watch, origin, first_seen_at, etags)"
+        " VALUES (?, ?, ?, ?, ?, 'forum', ?, ?)",
+        (repo_id, owner, name, f"https://github.com/{repo}", watch, first_seen, dumps(etags)),
+    )
+
+
+def seed_posts(conn, *post_ids: int) -> None:
+    conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (721, 'p', 'n')")
+    conn.execute(
+        "INSERT OR IGNORE INTO topics (id, forum_id, title, created_at, bumped_at, posts_count,"
+        " like_count, relevance_score, first_fetched_at) VALUES (900, 721, 't', ?, ?, 2, 0, 1.0, ?)",
+        (PAST, PAST, PAST),
+    )
+    for post_id in post_ids:
+        conn.execute(
+            "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw,"
+            " cooked, content_hash, first_fetched_at, changed_at)"
+            " VALUES (?, 900, ?, 1, 'alice', ?, 'x', '<p>x</p>', ?, ?, ?)",
+            (post_id, post_id % 100, PAST, f"h{post_id}", PAST, PAST),
+        )
+
+
+def serve_metadata(github, repo: str, payload: dict) -> None:
+    github.add(f"/repos/{repo}", payload)
+    github.add(f"/repos/{repo}/commits/main", SHA1, headers={"ETag": '"head"'})
+    github.add(f"/repos/{repo}/releases/latest", {"message": "Not Found"}, status=404)
+    github.add(f"/repos/{repo}/tags", [], headers={"ETag": '"tags"'})
+
+
+def test_metadata_stores_githubs_numeric_id(settings, conn, router, github):
+    serve_metadata(github, REPO, {"id": GITHUB_ID, "default_branch": "main", "archived": False})
+    github.install(router)
+
+    watch_repo(conn, REPO, settings=settings)
+
+    row = conn.execute(
+        "SELECT etags FROM repos WHERE url=?", (f"https://github.com/{REPO}",)
+    ).fetchone()
+    assert loads(row["etags"], {})["github_id"] == GITHUB_ID
+
+
+def test_rows_sharing_a_github_id_merge_into_the_watched_row(settings, conn, router, github):
+    seed_posts(conn, 9001, 9002)
+    seed_repo(
+        conn, 1, OLD_REPO, watch=1, github_id=GITHUB_ID, first_seen="2026-02-01T00:00:00+00:00"
+    )
+    seed_repo(conn, 2, NEW_REPO, first_seen=PAST)
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (1, 9001, 900, 'u', ?), (2, 9002, 900, 'u', ?)",
+        (PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO repo_installs (repo_id, label, sha, installed_at, updated_at)"
+        " VALUES (2, 'spark-pair', ?, ?, ?)",
+        (SHA1, PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO repo_events (repo_id, kind, ref, detected_at) VALUES (2, 'tag', 'v1', ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO compare_cache (repo_id, base_sha, head_sha, response, fetched_at)"
+        " VALUES (2, ?, ?, '{}', ?)",
+        ("c" * 40, "d" * 40, PAST),
+    )
+    conn.execute(
+        "INSERT INTO flags (target_type, target_id, label, reason, priority, created_at)"
+        " VALUES ('repo', ?, 'recipe', 'worth watching', 2, ?)",
+        (NEW_REPO, PAST),
+    )
+    serve_metadata(
+        github,
+        NEW_REPO,
+        {"id": GITHUB_ID, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    github.install(router)
+
+    payload = check_repos(conn, settings, repo=NEW_REPO)
+
+    assert payload["merged"] == [{"from": 2, "to": 1}]
+    rows = conn.execute("SELECT id, url, watch FROM repos").fetchall()
+    assert [(row["id"], row["url"], row["watch"]) for row in rows] == [
+        (1, f"https://github.com/{NEW_REPO}", 1)
+    ]
+    assert conn.execute("SELECT COUNT(*) FROM repo_mentions").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM repo_installs WHERE repo_id=1").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM repo_events WHERE repo_id=1").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM compare_cache WHERE repo_id=1").fetchone()[0] == 1
+    assert conn.execute("SELECT target_id FROM flags").fetchone()[0] == (
+        f"https://github.com/{NEW_REPO}"
+    )
+
+
+def test_merge_prefers_the_older_row_when_neither_is_watched(settings, conn, router, github):
+    seed_posts(conn, 9001)
+    seed_repo(conn, 1, OLD_REPO, github_id=GITHUB_ID, first_seen="2026-01-01T00:00:00+00:00")
+    seed_repo(conn, 2, NEW_REPO, first_seen="2026-02-01T00:00:00+00:00")
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (2, 9001, 900, 'u', ?)",
+        (PAST,),
+    )
+    serve_metadata(
+        github,
+        NEW_REPO,
+        {"id": GITHUB_ID, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    github.install(router)
+
+    payload = check_repos(conn, settings, repo=NEW_REPO)
+
+    assert payload["merged"] == [{"from": 2, "to": 1}]
+    assert conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM repo_mentions WHERE repo_id=1").fetchone()[0] == 1
+
+
+def test_rows_with_different_github_ids_are_not_merged(settings, conn, router, github):
+    seed_posts(conn, 9001)
+    seed_repo(conn, 1, OLD_REPO, github_id=GITHUB_ID)
+    seed_repo(conn, 2, NEW_REPO)
+    serve_metadata(
+        github,
+        NEW_REPO,
+        {"id": GITHUB_ID + 1, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    github.install(router)
+
+    payload = check_repos(conn, settings, repo=NEW_REPO)
+
+    assert payload["merged"] == []
+    assert conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0] == 2
+
+
+def test_set_installed_resolves_the_id_and_merges_an_alias(settings, conn, router, github):
+    seed_repo(conn, 1, NEW_REPO, watch=1, github_id=GITHUB_ID)
+    seed_repo(conn, 2, OLD_REPO)
+    github.add(
+        f"/repos/{OLD_REPO}",
+        {"id": GITHUB_ID, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    github.add(
+        f"/repos/{NEW_REPO}/commits/{SHA1}",
+        {"sha": SHA1, "commit": {"message": "head", "author": {"date": PAST}}},
+    )
+    github.add(f"/repos/{NEW_REPO}/commits/main", SHA1, headers={"ETag": '"h"'})
+    github.install(router)
+
+    payload = set_installed(conn, OLD_REPO, SHA1, installed_at=PAST, settings=settings)
+
+    assert payload["repo"] == NEW_REPO
+    assert conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0] == 1
+    assert conn.execute("SELECT repo_id FROM repo_installs").fetchone()[0] == 1

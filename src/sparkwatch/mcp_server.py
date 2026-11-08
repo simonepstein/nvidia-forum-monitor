@@ -52,7 +52,7 @@ from .repos import (
 from .repos import (
     watch_repo as _watch_repo,
 )
-from .util import parse_dt, utcnow, utcnow_iso
+from .util import parse_dt, to_iso, utcnow, utcnow_iso
 from .workflows import INSTRUCTIONS
 from .workflows import get_workflow as _get_workflow
 from .workflows import list_workflows as _list_workflows
@@ -315,6 +315,7 @@ def global_digest(
     detail: bool = False,
     advance: bool = True,
     next: dict[str, Any] | None = None,
+    basis: str = "seen",
 ) -> dict[str, Any]:
     """Show what the whole forum is talking about: hot topics across both categories.
 
@@ -322,12 +323,16 @@ def global_digest(
     struggling with?", or as the basis for a summary. Topics are ranked by a deterministic
     score; every term is returned in `components`, already multiplied by the topic's
     relevance `factor`, with the pre-factor `base` alongside, so the ranking can be explained.
-    Only posts sparkwatch first saw and that were written in `[since, until)` count: backfilled
-    posts are a count and edits are not counted. `until` defaults to now and is echoed back, so
-    the same `since`/`until` gives the same ranking. Its cursor is `'global'`, separate from
-    `digest`'s `'default'`; pass `advance=False` to look without moving it, and pass `next`
-    back for the next page of hot topics. The default response is lean; `detail=True` adds each
-    topic's 2 most-liked new posts with snippets, and `get_posts` reads a thread in full.
+    With the default `basis="seen"`, only posts sparkwatch first saw and that were written in
+    `[since, until)` count: backfilled posts are a count and edits are not counted. Use
+    `basis="written"` for a report or blog post about a past period: then a post counts by
+    when it was written, whenever it was fetched, backfilled posts included, `since` must be
+    an ISO date, and the cursor is neither read nor moved (`advance` is ignored). `until`
+    defaults to now and is echoed back, so the same `since`/`until` gives the same ranking. The
+    seen cursor is `'global'`, separate from `digest`'s `'default'`; pass `advance=False` to
+    look without moving it, and pass `next` back for the next page of hot topics. The default
+    response is lean; `detail=True` adds each topic's 2 most-liked in-window posts with
+    snippets, and `get_posts` reads a thread in full.
     """
     settings = _settings()
     conn = _conn(settings)
@@ -343,6 +348,7 @@ def global_digest(
         detail=detail,
         advance=advance,
         next=next,
+        basis=basis,
     )
 
 
@@ -1579,7 +1585,8 @@ def save_note(
 
     Use it after answering a "best way to serve X" or "should I update" question. A model
     name that is not in `models` or the alias table is stored as null, with a hint, rather
-    than creating a junk model row.
+    than creating a junk model row. `as_of` is normalised to `YYYY-MM-DDTHH:MM:SS+00:00`, so a
+    bare date means midnight UTC (SPEC §2, Timestamps); an unparseable value is rejected.
     """
     conn = _conn()
     canonical = None
@@ -1594,10 +1601,17 @@ def save_note(
         else:
             canonical = candidate
     now = utcnow_iso()
+    if as_of:
+        moment = parse_dt(as_of)
+        if moment is None:
+            raise ValueError(f"invalid as_of: {as_of!r}; use an ISO date, e.g. 2026-11-08")
+        as_of_iso = to_iso(moment)
+    else:
+        as_of_iso = now
     cursor = conn.execute(
         "INSERT INTO research_notes (subject, model_canonical, body, as_of, created_at, superseded_by)"
         " VALUES (?, ?, ?, ?, ?, NULL)",
-        (subject, canonical, body, as_of or now, now),
+        (subject, canonical, body, as_of_iso, now),
     )
     note_id = cursor.lastrowid
     for post_id in source_post_ids or []:
@@ -1606,7 +1620,7 @@ def save_note(
         evidence_record(conn, "note", note_id, post_id, quote)
     if supersedes:
         conn.execute("UPDATE research_notes SET superseded_by=? WHERE id=?", (note_id, supersedes))
-    payload = {"note_id": note_id, "subject": subject, "model": canonical, "as_of": as_of or now}
+    payload = {"note_id": note_id, "subject": subject, "model": canonical, "as_of": as_of_iso}
     if hint:
         payload["hint"] = hint
     return payload

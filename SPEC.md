@@ -287,6 +287,8 @@ This is regex only.
   - Skip owners `orgs|features|sponsors|settings|marketplace`.
   - Skip `gist.github.com` URLs entirely; they aren't repos.
   - When GitHub answers a repo request with `301 Moved Permanently`, follow it, and update the repo's `url`, `owner` and `name` to the new canonical names.
+  - **Identity (added 2026-11-08, ISSUES #49):** a metadata response also carries GitHub's numeric repository `id`, which is stored in `repos.etags['github_id']` (like `meta_checked_at`, so no migration). Two rows that resolve to the same id are one repo under two old names: they are merged into the watched row (else the older `first_seen_at`, else the lower row id), moving `repo_mentions`, `repo_installs`, `repo_events` and `compare_cache`, retargeting repo `flags` at the survivor, and deleting the other row. A rename whose canonical name is already held by a row with a *different* id is refused, as before.
+    - An unwatched row has no id until it is touched, so the merge happens on the next metadata fetch: `watch_repo` (its baseline check), `repos check --repo <alias>` on the stale name, or `set_installed`, which resolves the id with one metadata request when it is missing.
 - **Hugging Face:** `huggingface\.co/([\w.-]+)/([\w.-]+)`. Skip first path segments `datasets|spaces|docs|blog|papers`.
   - HF links are **recorded only**, so the agent can see which quant repo a recipe uses.
   - HF is never polled. **The forum is the curator for new models.**
@@ -540,7 +542,7 @@ This covers watched repos only.
      - Then update `head_sha` and `head_seen_at`.
      - A 404 or 422 means the branch has gone: create a `branch_gone` event.
   2. **Releases and tags:** `GET /repos/{o}/{n}/releases/latest` creates a `release` event, with the notes cut to 2,000 characters; a 404 means no releases. `GET /repos/{o}/{n}/tags?per_page=10` creates a `tag` event for each new tag.
-  3. **Repo metadata:** `GET /repos/{o}/{n}`, at most once a day, measured from the last **metadata** fetch (`repos.etags['meta_checked_at']`), not from `last_checked_at`, which every check moves. A 304 on the metadata ETag also counts as fetched. It refreshes `default_branch`, `archived` and `description`. `archived` turning true creates an `archived` event; a repo that stays archived does not repeat the event.
+  3. **Repo metadata:** `GET /repos/{o}/{n}`, at most once a day, measured from the last **metadata** fetch (`repos.etags['meta_checked_at']`), not from `last_checked_at`, which every check moves. A 304 on the metadata ETag also counts as fetched. It refreshes `default_branch`, `archived` and `description`. `archived` turning true creates an `archived` event; a repo that stays archived does not repeat the event. It also stores GitHub's numeric `id` and merges rows that share it (§1, Identity); the response's `merged: [{from, to}]` reports any merge.
 - **Baseline:** the first check after `watch_repo` records the current head, latest release and tags. It creates no events.
 
 ### Comparing against what's installed (`repo_status`)
@@ -634,7 +636,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
       - A post counts if `created_at >= since` and `created_at < until`, whenever sparkwatch fetched it. Backfilled posts count; edits still don't.
       - `backfilled` is omitted.
       - `since` must be an ISO date (`"cursor"` is rejected), and the cursor is never read or moved: `advance` is ignored, and the response says `cursor: null`.
-      - `unanswered`, `first_linked`, `knowledge` and `repo_events` use the same written-date window.
+      - `unanswered`, `first_linked`, `knowledge` and `repo_events` use the same written-date window. `first_linked` then means "linked from a post written in the window", whether or not the repo was recorded then (the `seen` basis additionally requires `first_seen_at` in the window).
       - The score, tie-breaks, `next` paging and size budget are unchanged.
     - **Why:** the whole mirror was first fetched on 2026-11-08, so a `seen` window ending before that is empty. With any mirror, a `seen` window leaves out posts that arrived by backfill. Ranking by written date is the only correct basis for a report.
     - **Likes:** they're as of each post's last fetch. Before a report, run `refresh_engagement` with `days` covering the range (§1 Engagement refresh).
@@ -655,7 +657,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
     - **Weights** come from `[global_digest]` in config (below).
     - **Known limits:** `posts.like_count` is the value as of the last fetch, so likes that arrive after a post was fetched are only seen when `refetch_recent_days` re-fetches it (ISSUES #39). `topics.views` is a snapshot and is **not** used. A view-delta term would need a `topic_stats` snapshot table, which is deferred to Run C.
   - **Response** (compact JSON, the default response under 10 KB):
-    - `since`, `until`, `cursor`, `weights`, `hot_topics_total`.
+    - `since`, `until`, `basis`, `cursor`, `weights`, `hot_topics_total`. `cursor` is `null` under `basis="written"`.
     - `hot_topics[]` (at most `limit`, cap 25), each with:
       - `topic_id`, `forum_id`, `title`, `url`, `created_at`, `is_new_topic`, `relevance_score`, `relevant`;
       - `new_posts`, `posters`, `likes`, `accepted_answer`, `staff`, `base`, `factor`, `score`, `components` (each weighted term **already multiplied by `factor`**, so they add up to `score`; `base` is the pre-factor total);
@@ -667,8 +669,8 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
     - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), at most 5 lines: recipe and benchmark lines carry their evidence `url`s, and a note line carries `sources: [{post_id, url, date}]` (§5 Knowledge). Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
     - `repo_events`: releases and tags of watched repos in the window, as `{count, top: [5]}`, each with `url`.
     - `backfilled: {posts, topics}`.
-    - `next`: when more hot topics remain, an argument set (`since`, `until`, `offset`) to pass back for the next page.
-- **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--forum ID] [--limit N] [--relevant-only] [--detail] [--no-advance] [--json]` runs the same library function, with readable text by default.
+    - `next`: when more hot topics remain, an argument set (`since`, `until`, `offset`, `basis`) to pass back for the next page; the page continues on the same basis.
+- **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--basis seen|written] [--forum ID] [--limit N] [--relevant-only] [--detail] [--no-advance] [--json]` runs the same library function, with readable text by default.
 
 ### Newsletter (enhancement, ISSUES #38; build after `global_digest` has been in use)
 A regular "what's hot on the Spark forums" issue, written by the agent from `global_digest`. It adds one tool and one workflow, and no migration.
@@ -734,6 +736,7 @@ A regular "what's hot on the Spark forums" issue, written by the agent from `glo
   - `threads`: topics whose title matches the model, with `body_posts` and `title_posts` counts (at most 3). These are all-time and only cover title-matching topics, unlike the windowed `mentions` above.
 - `save_note(subject, body, model?, as_of, source_post_ids: [int], supersedes?: note_id)` and `get_notes(model?, subject_query?, include_superseded=False)`
   - A `model` that resolves through `models`/`model_aliases` is stored; an unknown name is stored as null with a `hint`, so a free-text name never creates a junk model row.
+  - **`as_of` (revised 2026-11-08, ISSUES #50):** normalised on write through `parse_dt` → `to_iso`, so a bare date means midnight UTC (`2026-11-08` → `2026-11-08T00:00:00+00:00`); it defaults to the write time, and an unparseable value is rejected with a clear error and no row.
   - **Sources (revised 2026-11-08, ISSUES #36):** `get_notes`, `model_summary.notes` and `global_digest.knowledge` return each note's `sources: [{post_id, url, date}]`, read from `evidence` (`kind='note'`), so a conclusion can always be traced to its posts.
 - `flag(target_type, target_id, label, reason, priority=2)`, `list_flags(open_only=True)`, `resolve_flag(id, resolution)`
   - **URLs (revised 2026-11-08, ISSUES #36):** every flag returned (by `list_flags`, the digest's open flags, `model_summary`, `get_topic_overview`, `global_digest` and the `sparkwatch://flags/open` resource) carries a `url` derived from its target:
@@ -955,6 +958,12 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - Its top 3 by score match an independent SQL ranking by `created_at` with the same weights.
   - `basis="seen"` with the same window still returns 0.
   - No cursor row is written.
+
+**Run A follow-up (2026-11-08, ISSUES #49 and #50):** repo identity by GitHub id (§1 Identity, §4 metadata) and `as_of` normalisation (§5 `save_note`). No migration: the id lives in `repos.etags['github_id']`, so Run B keeps migration 6, and the one bad `research_notes.as_of` is a documented `UPDATE`.
+- **Acceptance for #49:** rehearse on a `.backup` copy against live GitHub.
+  - `repos check` stores ids for watched repos; then `repos check --repo <stale alias>` merges the alias row into the watched one: one row left, its `url` canonical, mentions summed, installs and events kept, no row deleted from the mirror's posts.
+  - The live DB is repaired by the same two commands, in that order.
+- **Acceptance for #50:** `save_note(as_of="2026-11-08")` stores `2026-11-08T00:00:00+00:00`; an unparseable `as_of` is rejected with no row. The live row 5 is fixed by `UPDATE research_notes SET as_of='2026-11-08T00:00:00+00:00' WHERE id=5 AND as_of='2026-11-08';`, after which every `research_notes.as_of` matches the one stored format.
 
 **Enhancement, after `global_digest` has been in use (ISSUES #38):** `save_newsletter`, the `'newsletter'` cursor and the `newsletter` workflow through all four channels (§5 Newsletter).
 - **Acceptance:** one real `newsletter` run in an MCP client. The issue is saved with sources, and `unresolved_links` is empty. The `'newsletter'` cursor moves, while `'global'` and `'default'` are unchanged.

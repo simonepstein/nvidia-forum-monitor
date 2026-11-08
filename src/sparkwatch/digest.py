@@ -370,7 +370,9 @@ def _repos_first_linked(
             "url": row["url"],
             "first_seen_at": row["first_seen_at"],
             "mentions": row["mentions"],
-            "post_url": _first_new_mention_url(conn, row["id"], params),
+            "post_url": _first_in_window_mention_url(
+                conn, "repo_mentions", "repo_id", row["id"], NEW_POSTS, params
+            ),
         }
         for row in rows
     ]
@@ -459,6 +461,22 @@ GLOBAL_REPO_EVENTS = 5
 GLOBAL_POSTS = NEW_POSTS_UNTIL
 GLOBAL_BACKFILLED = BACKFILLED_POSTS_UNTIL
 
+# Ranking bases (SPEC §5, Hot topics, Basis). "seen" is the new-post rule above; "written"
+# counts a post by when it was written, whenever sparkwatch fetched it, so a report over a
+# past range sees backfilled posts too.
+WRITTEN_POSTS = (
+    "julianday(p.created_at) >= julianday(:since) AND julianday(p.created_at) < julianday(:until)"
+)
+
+
+def posts_predicate(basis: str) -> str:
+    """The SQL predicate a basis ranks by; an unknown basis is a clear error."""
+    if basis == "written":
+        return WRITTEN_POSTS
+    if basis == "seen":
+        return GLOBAL_POSTS
+    raise ValueError(f"invalid basis: {basis!r}; use 'seen' or 'written'")
+
 
 def _global_window(since_iso: str, until_iso: str) -> dict[str, str]:
     return {"since": since_iso, "until": until_iso, "grace": grace_floor(since_iso)}
@@ -505,6 +523,7 @@ def _global_aggregates(
     conn: sqlite3.Connection,
     params: dict[str, Any],
     forum_id: int | None,
+    basis: str = "seen",
 ) -> list[Any]:
     sql = (
         "SELECT t.id AS topic_id, t.forum_id, t.title, t.created_at, t.relevance_score,"
@@ -513,7 +532,7 @@ def _global_aggregates(
         " MAX(CASE WHEN p.accepted_answer = 1 THEN 1 ELSE 0 END) AS accepted,"
         " MAX(CASE WHEN p.staff = 1 THEN 1 ELSE 0 END) AS staff,"
         " MAX(p.created_at) AS newest_post"
-        f" FROM topics t JOIN posts p ON p.topic_id = t.id WHERE ({GLOBAL_POSTS})"
+        f" FROM topics t JOIN posts p ON p.topic_id = t.id WHERE ({posts_predicate(basis)})"
     )
     values = dict(params)
     if forum_id is not None:
@@ -524,11 +543,11 @@ def _global_aggregates(
 
 
 def _topic_top_posts(
-    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int
+    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int, basis: str = "seen"
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT p.id, p.post_number, p.username, p.created_at, p.raw, p.like_count"
-        f" FROM posts p WHERE p.topic_id = :topic_id AND ({GLOBAL_POSTS})"
+        f" FROM posts p WHERE p.topic_id = :topic_id AND ({posts_predicate(basis)})"
         " ORDER BY p.like_count DESC, julianday(p.created_at) DESC, p.id DESC LIMIT :n",
         {**params, "topic_id": topic_id, "n": GLOBAL_TOP_POSTS},
     ).fetchall()
@@ -546,12 +565,12 @@ def _topic_top_posts(
 
 
 def _topic_watch_labels(
-    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int
+    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int, basis: str = "seen"
 ) -> list[str]:
     rows = conn.execute(
         "SELECT DISTINCT w.label FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
         " JOIN posts p ON p.id = h.post_id"
-        f" WHERE h.topic_id = :topic_id AND h.matched_in = 'body' AND ({GLOBAL_POSTS})"
+        f" WHERE h.topic_id = :topic_id AND h.matched_in = 'body' AND ({posts_predicate(basis)})"
         " ORDER BY w.label",
         {**params, "topic_id": topic_id},
     ).fetchall()
@@ -583,6 +602,7 @@ def _hot_topic(
     settings: Settings,
     params: dict[str, Any],
     detail: bool,
+    basis: str = "seen",
 ) -> dict[str, Any]:
     topic_id = int(row["topic_id"])
     hotness = _hotness(row, settings, params["since"], params["until"])
@@ -604,8 +624,8 @@ def _hot_topic(
         "factor": hotness["factor"],
         "score": hotness["score"],
         "components": hotness["components"],
-        "top_posts": _topic_top_posts(conn, params, topic_id) if detail else [],
-        "watch_labels": _topic_watch_labels(conn, params, topic_id),
+        "top_posts": _topic_top_posts(conn, params, topic_id, basis) if detail else [],
+        "watch_labels": _topic_watch_labels(conn, params, topic_id, basis),
         "flags": _topic_flags(conn, topic_id),
     }
 
@@ -648,49 +668,54 @@ def _unanswered(
     }
 
 
-def _first_mention_url(
-    conn: sqlite3.Connection, table: str, id_column: str, model_id: int
+def _first_in_window_mention_url(
+    conn: sqlite3.Connection,
+    table: str,
+    id_column: str,
+    model_id: int,
+    predicate: str,
+    params: dict[str, str],
 ) -> str | None:
-    """The URL of the post that first mentioned a repo or HF model, by post date."""
+    """The earliest in-window post that links a repo or HF model, under the basis's rule."""
     row = conn.execute(
         f"SELECT m.post_id FROM {table} m JOIN posts p ON p.id = m.post_id"
-        f" WHERE m.{id_column} = ? ORDER BY p.created_at, m.post_id LIMIT 1",
-        (model_id,),
-    ).fetchone()
-    return knowledge.post_url(conn, row["post_id"]) if row is not None else None
-
-
-def _first_new_mention_url(
-    conn: sqlite3.Connection, repo_id: int, params: dict[str, str]
-) -> str | None:
-    """The earliest in-window new post that links the repo, using the digest's new rule."""
-    row = conn.execute(
-        "SELECT m.post_id FROM repo_mentions m JOIN posts p ON p.id = m.post_id"
-        f" WHERE m.repo_id = :repo_id AND ({NEW_POSTS})"
+        f" WHERE m.{id_column} = :model_id AND ({predicate})"
         " ORDER BY p.created_at, m.post_id LIMIT 1",
-        {**params, "repo_id": repo_id},
+        {**params, "model_id": model_id},
     ).fetchone()
     return knowledge.post_url(conn, row["post_id"]) if row is not None else None
 
 
 def _window_first_linked(
-    conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
+    conn: sqlite3.Connection,
+    params: dict[str, Any],
+    forum_id: int | None,
+    basis: str = "seen",
 ) -> dict[str, Any]:
     """Repos and HF models first linked anywhere in the window, by mention count.
 
-    Only links with at least one mention on a new post in the window count, so a repo first
-    recorded during a backfill is not reported as news.
+    Only links with at least one mention on an in-window post count, so a repo first recorded
+    during a backfill is not reported as news under `basis="seen"`.
     """
+    predicate = posts_predicate(basis)
     forum_clause = " AND t.forum_id = :forum_id" if forum_id is not None else ""
+    # A written-basis report lists what the window's posts link, whether or not the repo was
+    # recorded then; the seen basis additionally wants a repo first recorded in the window.
+    where = (
+        " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until" if basis == "seen" else ""
+    )
+    hf_where = (
+        " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until" if basis == "seen" else ""
+    )
     values = dict(params)
     if forum_id is not None:
         values["forum_id"] = forum_id
     repos = conn.execute(
         "SELECT r.id, r.owner, r.name, r.url, r.first_seen_at, COUNT(m.post_id) AS mentions"
         " FROM repos r LEFT JOIN repo_mentions m ON m.repo_id = r.id"
-        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({GLOBAL_POSTS}))"
+        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({predicate}))"
         " LEFT JOIN topics t ON t.id = m.topic_id"
-        " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until"
+        + where
         + forum_clause
         + " GROUP BY r.id HAVING mentions > 0"
         " ORDER BY mentions DESC, r.first_seen_at DESC",
@@ -699,9 +724,9 @@ def _window_first_linked(
     hf = conn.execute(
         "SELECT h.id, h.repo_id, h.first_seen_at, COUNT(m.post_id) AS mentions"
         " FROM hf_models h LEFT JOIN hf_mentions m ON m.hf_model_id = h.id"
-        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({GLOBAL_POSTS}))"
+        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({predicate}))"
         " LEFT JOIN topics t ON t.id = m.topic_id"
-        " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until"
+        + hf_where
         + forum_clause
         + " GROUP BY h.id HAVING mentions > 0"
         " ORDER BY mentions DESC, h.first_seen_at DESC",
@@ -713,7 +738,9 @@ def _window_first_linked(
             "name": f"{row['owner']}/{row['name']}",
             "url": row["url"],
             "mentions": row["mentions"],
-            "first_post_url": _first_mention_url(conn, "repo_mentions", "repo_id", row["id"]),
+            "first_post_url": _first_in_window_mention_url(
+                conn, "repo_mentions", "repo_id", row["id"], predicate, params
+            ),
         }
         for row in repos
     ]
@@ -723,7 +750,9 @@ def _window_first_linked(
             "name": row["repo_id"],
             "url": f"https://huggingface.co/{row['repo_id']}",
             "mentions": row["mentions"],
-            "first_post_url": _first_mention_url(conn, "hf_mentions", "hf_model_id", row["id"]),
+            "first_post_url": _first_in_window_mention_url(
+                conn, "hf_mentions", "hf_model_id", row["id"], predicate, params
+            ),
         }
         for row in hf
     )
@@ -844,27 +873,44 @@ def global_digest(
     detail: bool = False,
     advance: bool = True,
     next: dict[str, Any] | None = None,
+    basis: str = "seen",
 ) -> dict[str, Any]:
     """ "What is the forum talking about": hot topics across both forums, deterministically.
 
-    The window is `[since, until)`. Only posts sparkwatch first saw in the window count, and
-    they must have been written in it (24-hour grace); backfilled posts are a count, and edits
-    are not counted. `until` is echoed back, so the same `since`/`until` gives the same
-    ranking. Its cursor (`'global'`) is separate from the digest's `'default'`.
+    The window is `[since, until)`. With `basis="seen"` (the default) only posts sparkwatch
+    first saw in the window count, and they must have been written in it (24-hour grace);
+    backfilled posts are a count, and edits are not counted. With `basis="written"` a post
+    counts by `created_at` alone, whenever it was fetched, so a report over a past range sees
+    backfilled posts too; there is no backfilled count, `since` must be an ISO date and the
+    cursor is neither read nor moved. `until` is echoed back, so the same `since`/`until`
+    gives the same ranking. The seen cursor (`'global'`) is separate from the digest's
+    `'default'`.
 
-    `detail=True` adds each topic's 2 most-liked new posts with snippets; the default stays
-    lean so ten topics still fit the 10 KB response budget.
+    `detail=True` adds each topic's 2 most-liked in-window posts with snippets; the default
+    stays lean so ten topics still fit the 10 KB response budget.
     """
     settings = settings or get_settings()
     if next:
         since = str(next.get("since") or since)
         until = str(next.get("until") or until or "")
+        basis = str(next.get("basis") or basis)
         offset = int(next.get("offset") or 0)
     else:
         offset = 0
-    since_iso = resolve_since(conn, since, cursor)
-    if parse_dt(since_iso) is None:
-        raise ValueError(f"invalid since date: {since!r}; use an ISO date or 'cursor'")
+    posts_predicate(basis)
+    if basis == "written":
+        if since == "cursor":
+            raise ValueError(
+                "basis='written' needs an ISO 'since': 'cursor' is a seen-basis window"
+            )
+        parsed_since = parse_dt(since)
+        if parsed_since is None:
+            raise ValueError(f"invalid since date: {since!r}; use an ISO date")
+        since_iso = to_iso(parsed_since)
+    else:
+        since_iso = resolve_since(conn, since, cursor)
+        if parse_dt(since_iso) is None:
+            raise ValueError(f"invalid since date: {since!r}; use an ISO date or 'cursor'")
     if until:
         parsed_until = parse_dt(until)
         if parsed_until is None:
@@ -876,7 +922,7 @@ def global_digest(
     cap = max(1, min(int(limit), GLOBAL_LIMIT_CAP))
 
     ranked = []
-    for row in _global_aggregates(conn, params, forum_id):
+    for row in _global_aggregates(conn, params, forum_id, basis):
         hotness = _hotness(row, settings, since_iso, until_iso)
         if relevant_only and not hotness["relevant"]:
             continue
@@ -885,35 +931,41 @@ def global_digest(
 
     page = ranked[offset : offset + cap]
     hot_topics = [
-        _hot_topic(conn, row, settings, params, detail) for _score, _new, _id, row in page
+        _hot_topic(conn, row, settings, params, detail, basis) for _score, _new, _id, row in page
     ]
     next_token = None
     if offset + len(page) < len(ranked):
-        next_token = {"since": since_iso, "until": until_iso, "offset": offset + len(page)}
-
-    backfilled = conn.execute(
-        f"SELECT COUNT(*) AS posts, COUNT(DISTINCT p.topic_id) AS topics FROM posts p"
-        f" WHERE ({GLOBAL_BACKFILLED})",
-        params,
-    ).fetchone()
+        next_token = {
+            "since": since_iso,
+            "until": until_iso,
+            "offset": offset + len(page),
+            "basis": basis,
+        }
 
     payload: dict[str, Any] = {
         "since": since_iso,
         "until": until_iso,
-        "cursor": cursor,
+        "basis": basis,
+        "cursor": cursor if basis == "seen" else None,
         "weights": settings.global_digest.weights,
         "hot_topics": hot_topics,
         "hot_topics_total": len(ranked),
         "unanswered": _unanswered(conn, params, forum_id),
-        "first_linked": _window_first_linked(conn, params, forum_id),
+        "first_linked": _window_first_linked(conn, params, forum_id, basis),
         "knowledge": _window_knowledge(conn, params),
         "repo_events": _window_repo_events(conn, params, forum_id),
-        "backfilled": {"posts": backfilled["posts"], "topics": backfilled["topics"]},
     }
+    if basis == "seen":
+        backfilled = conn.execute(
+            f"SELECT COUNT(*) AS posts, COUNT(DISTINCT p.topic_id) AS topics FROM posts p"
+            f" WHERE ({GLOBAL_BACKFILLED})",
+            params,
+        ).fetchone()
+        payload["backfilled"] = {"posts": backfilled["posts"], "topics": backfilled["topics"]}
     if next_token is not None:
         payload["next"] = next_token
 
-    if advance and next is None:
+    if basis == "seen" and advance and next is None:
         current = conn.execute(
             "SELECT last_seen_at FROM digest_cursors WHERE name=?", (cursor,)
         ).fetchone()
@@ -948,10 +1000,9 @@ def _capped_header(shown: int, total: int) -> str:
 
 def render_global_digest(payload: dict[str, Any]) -> str:
     """Readable CLI rendering: a block per hot topic, then the extra sections."""
-    lines = [
-        f"sparkwatch global-digest — {payload['since']} → {payload['until']}"
-        f" (cursor {payload['cursor']})"
-    ]
+    basis = payload.get("basis", "seen")
+    where = "basis written" if basis == "written" else f"basis seen, cursor {payload['cursor']}"
+    lines = [f"sparkwatch global-digest — {payload['since']} → {payload['until']} ({where})"]
     lines.append(
         f"\n## Hot topics ({_capped_header(len(payload['hot_topics']), payload['hot_topics_total'])})"
     )
@@ -988,7 +1039,7 @@ def render_global_digest(payload: dict[str, Any]) -> str:
     for item in repo_events["top"]:
         lines.append(f"- {item['repo']} {item['kind']} {item['ref']} — {item['url']}")
 
-    if payload["backfilled"]["posts"]:
+    if payload.get("backfilled", {}).get("posts"):
         lines.append(
             f"\nbackfilled: {payload['backfilled']['posts']} posts"
             f" in {payload['backfilled']['topics']} topics"

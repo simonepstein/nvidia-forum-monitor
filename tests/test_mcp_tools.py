@@ -253,6 +253,43 @@ def test_save_note_does_not_create_junk_models(settings, conn):
     assert "hint" not in known
 
 
+def test_save_note_normalises_as_of(settings, conn):
+    seed(conn)
+
+    note = m.save_note("a note", "body", as_of="2026-11-08")
+    assert note["as_of"] == "2026-11-08T00:00:00+00:00"
+    assert (
+        conn.execute("SELECT as_of FROM research_notes WHERE id=?", (note["note_id"],)).fetchone()[
+            0
+        ]
+        == "2026-11-08T00:00:00+00:00"
+    )
+
+    offset = m.save_note("another note", "body", as_of="2026-11-08T13:00:00+02:00")
+    assert offset["as_of"] == "2026-11-08T11:00:00+00:00"
+
+
+def test_save_note_defaults_as_of_to_the_write_time(settings, conn):
+    seed(conn)
+
+    note = m.save_note("a note", "body")
+    row = conn.execute(
+        "SELECT as_of, created_at FROM research_notes WHERE id=?", (note["note_id"],)
+    ).fetchone()
+
+    assert note["as_of"] == row["as_of"] == row["created_at"]
+
+
+def test_save_note_rejects_an_unparseable_as_of(settings, conn):
+    seed(conn)
+    before = conn.execute("SELECT COUNT(*) FROM research_notes").fetchone()[0]
+
+    with pytest.raises(ValueError, match="invalid as_of"):
+        m.save_note("a note", "body", as_of="last tuesday")
+
+    assert conn.execute("SELECT COUNT(*) FROM research_notes").fetchone()[0] == before
+
+
 def test_model_summary(settings, conn):
     seed(conn)
     m.upsert_model("glm-5.3-flash", family="glm", params_total_b=355)
