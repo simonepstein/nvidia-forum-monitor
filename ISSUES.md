@@ -749,3 +749,22 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   1. `cp .env.example .env` and fill in `GITHUB_TOKEN`.
   2. `uv run sparkwatch repos check` should show `"auth": "token"`.
   3. Run `/mcp` and reconnect sparkwatch, then `check_repos_now` (or `sync_now`) should also show `auth: token`.
+
+### #52 (P2): `repos check` reports every listed tag as new whenever the tags response changes
+- **Observed (2026-11-08 22:12, the first authenticated `repos check`):**
+  - `eugr/spark-vllm-docker` produced 9 `tag` events, `staging-current-1787746223` through `…-1772668553`.
+  - Their names encode push dates from 2026-03-04 to 2026-08-26, but every event has `occurred_at = 22:12:13`.
+  - None of them is new. The live `/tags?per_page=10` still lists `staging-current-1790687448` (2026-09-29) first, which is the stored `latest_tag`, followed by exactly those 9.
+- **Cause:** `repos.py` (around line 632) computes `new_tags = [tag for tag in tags if tag != known]`, where `known` is the single stored `latest_tag`.
+  - Any non-304 tags response therefore emits every listed tag except the latest as new.
+  - Here the response changed only because its ETag differed. That probably comes from switching from anonymous to token auth, but any ETag change would do it, and a single genuinely new tag would also bring 9 false ones with it.
+  - `occurred_at` is set to the check time, not the tag's date.
+- **Impact:**
+  - Noise in the `repos check` output, the digest's watched-repo events and `global_digest.repo_events`.
+  - `repo_status().releases` (`kind IN ('release','tag')`) now lists 9 bogus "since install" tags for this repo, which misleads `should_i_update`.
+- **Fix:**
+  - Store the names seen in the last tags page, e.g. `etags['seen_tags']` (no migration), and only emit names not seen before.
+  - The baseline records the set and emits nothing.
+  - `occurred_at` should be the tag's commit date if it's worth one request per genuinely new tag; otherwise leave it null rather than claiming now.
+- **Cleanup:** a documented one-off, run by the user after the fix: `DELETE FROM repo_events WHERE repo_id=87 AND kind='tag' AND detected_at='2026-11-08T22:12:13+00:00';` (9 rows).
+- **Test:** two checks whose tag lists differ only in ETag should emit 0 events. Adding one new tag at the head should emit exactly 1.
