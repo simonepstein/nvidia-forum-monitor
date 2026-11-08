@@ -145,3 +145,43 @@ def test_mcp_server_refuses_to_start_with_an_unsafe_rate(monkeypatch, tmp_path):
         assert "must be at most 1.0" in str(excinfo.value)
     finally:
         reset_settings()
+
+
+def test_env_file_supplies_secrets_but_the_environment_wins(tmp_path, monkeypatch):
+    from sparkwatch.config import load_env_file
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SW_TEST_FILE_ONLY=from-file\nSW_TEST_BOTH=from-file\n")
+    monkeypatch.setenv("SPARKWATCH_ENV_FILE", str(env_file))
+    monkeypatch.delenv("SW_TEST_FILE_ONLY", raising=False)
+    monkeypatch.setenv("SW_TEST_BOTH", "from-env")
+
+    assert load_env_file() is True
+    import os
+
+    assert os.environ["SW_TEST_FILE_ONLY"] == "from-file"
+    assert os.environ["SW_TEST_BOTH"] == "from-env"
+    monkeypatch.delenv("SW_TEST_FILE_ONLY")
+
+
+def test_missing_env_file_is_fine(tmp_path, monkeypatch):
+    from sparkwatch.config import load_env_file
+
+    monkeypatch.setenv("SPARKWATCH_ENV_FILE", str(tmp_path / "absent.env"))
+    assert load_env_file() is False
+    reset_settings()
+    assert get_settings() is not None
+    reset_settings()
+
+
+def test_get_settings_loads_the_env_file(tmp_path, monkeypatch, settings):
+    import os
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SW_TEST_VIA_SETTINGS=yes\n")
+    monkeypatch.setenv("SPARKWATCH_ENV_FILE", str(env_file))
+    monkeypatch.delenv("SW_TEST_VIA_SETTINGS", raising=False)
+    reset_settings()
+    get_settings()
+    assert os.environ.get("SW_TEST_VIA_SETTINGS") == "yes"
+    monkeypatch.delenv("SW_TEST_VIA_SETTINGS")

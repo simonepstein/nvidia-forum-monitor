@@ -732,3 +732,20 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - Secret values are never output. `repos check` reports `auth: token|anonymous`.
   - Also fixes the SPEC line that said anonymous is plenty.
 - **Acceptance:** the build plan's "Run A follow-up (ISSUES #51)". Do not create a real `.env`; the user will add the token.
+
+## #51 fix: secrets from `.env` (2026-11-08, implemented by the review session at the user's request)
+- **Dependency:** `uv add python-dotenv`.
+- **`config.py`:**
+  - `env_file_path()` returns `SPARKWATCH_ENV_FILE`, else `PROJECT_ROOT/.env`.
+  - `load_env_file()` calls `load_dotenv(path, override=False)` only if the file exists.
+  - `get_settings()` calls it first, so the CLI and the MCP server load it before any `GitHubClient` reads `GITHUB_TOKEN`.
+- **`repos.check_repos`** reports `auth: "token"|"anonymous"`.
+- **`.gitignore`** has `.env`; `.env.example` lists `GITHUB_TOKEN`, `BRAVE_API_KEY` and `SPARKWATCH_LLM__API_KEY`, empty. README updated.
+- **Tests:**
+  - An autouse `_no_env_file` fixture points `SPARKWATCH_ENV_FILE` at a missing file.
+  - New tests check that the env file loads and an exported variable wins, that a missing file is fine, that `get_settings` loads the file, and that `auth` is reported in both modes without the token appearing in the result.
+  - 390 passed, 1 skipped. ruff is clean. `git check-ignore .env` succeeds.
+- **What to test:**
+  1. `cp .env.example .env` and fill in `GITHUB_TOKEN`.
+  2. `uv run sparkwatch repos check` should show `"auth": "token"`.
+  3. Run `/mcp` and reconnect sparkwatch, then `check_repos_now` (or `sync_now`) should also show `auth: token`.

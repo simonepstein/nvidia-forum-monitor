@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 tests/evals/frozen.db
 tests/evals/mcp_config.json
+
+# secrets (see .env.example)
+.env

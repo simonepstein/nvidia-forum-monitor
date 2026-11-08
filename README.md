@@ -42,7 +42,7 @@ re-page to close.
 Configuration lives in `config.toml`; any value can be overridden with `SPARKWATCH_*`
 environment variables using `__` for nesting, e.g.
 `SPARKWATCH_GENERAL__DB_PATH=/tmp/sw.db` or `SPARKWATCH_FORUM__REQUESTS_PER_SECOND=0.5`.
-`GITHUB_TOKEN` is optional (a handful of watched repos fits in the anonymous rate limit).
+`GITHUB_TOKEN` is optional but recommended: a `repos check` costs about 4–5 requests per watched repo, and anonymous GitHub allows only 60 an hour. A fine-grained token with "Public repositories" read access and no permissions raises that to 5000. Put it in `.env` at the project root (copy `.env.example`; `.env` is gitignored), or export it. An exported variable wins over `.env`. `repos check` reports `auth: token|anonymous` and never prints the token.
 
 ## Register the MCP server
 

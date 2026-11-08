@@ -659,6 +659,7 @@ def check_repos(
 
     return {
         "checked": checked,
+        "auth": "token" if client.token else "anonymous",
         "requests": client.request_count,
         "changed": changed,
         "errors": errors,

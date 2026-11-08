@@ -46,6 +46,12 @@ def _block_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.fixture(autouse=True)
+def _no_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's real .env must never leak into the test suite."""
+    monkeypatch.setenv("SPARKWATCH_ENV_FILE", str(tmp_path / "no-such.env"))
+
+
+@pytest.fixture(autouse=True)
 def _no_pacing_sleep(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Neutralise request pacing so mocked runs are fast; live tests keep real pacing."""
     if live_opted_in(request.node):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from conftest import add_github_spec
 
 from sparkwatch.repos import check_repos, get_repo, set_installed, watch_repo
@@ -620,3 +621,14 @@ def test_set_installed_records_the_metadata_check(settings, conn, router, github
     before = github.calls.count(f"/repos/{NEW_REPO}")
     check_repos(conn, settings, repo=NEW_REPO)
     assert github.calls.count(f"/repos/{NEW_REPO}") == before
+
+
+@pytest.mark.parametrize(("token", "auth"), [(None, "anonymous"), ("ghp_dummy", "token")])
+def test_repos_check_reports_auth_mode_without_the_token(settings, conn, monkeypatch, token, auth):
+    if token:
+        monkeypatch.setenv("GITHUB_TOKEN", token)
+    else:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    result = check_repos(conn, settings)
+    assert result["auth"] == auth
+    assert "ghp_dummy" not in dumps(result)

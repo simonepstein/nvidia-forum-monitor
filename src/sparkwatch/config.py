@@ -19,6 +19,26 @@ LIVE_FORUM_HOST = "forums.developer.nvidia.com"
 MAX_LIVE_REQUESTS_PER_SECOND = 1.0
 
 
+def env_file_path() -> Path:
+    """The secrets file: SPARKWATCH_ENV_FILE if set, else .env at the project root."""
+    explicit = os.environ.get("SPARKWATCH_ENV_FILE")
+    return Path(explicit).expanduser() if explicit else PROJECT_ROOT / ".env"
+
+
+def load_env_file() -> bool:
+    """Load secrets such as GITHUB_TOKEN from the .env file into the environment.
+
+    Variables already set in the environment win (override=False). A missing file is
+    fine. Values are never logged or echoed.
+    """
+    path = env_file_path()
+    if not path.is_file():
+        return False
+    from dotenv import load_dotenv
+
+    return load_dotenv(path, override=False)
+
+
 def config_path() -> Path:
     explicit = os.environ.get("SPARKWATCH_CONFIG")
     if explicit:
@@ -187,6 +207,7 @@ def _cached_settings() -> Settings:
 
 
 def get_settings() -> Settings:
+    load_env_file()
     return _cached_settings()
 
 
