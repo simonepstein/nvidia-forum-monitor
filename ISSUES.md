@@ -846,3 +846,16 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   3. `uv run sparkwatch repos check` → every watched repo gains `seen_tags`; no `tag` entries in `changed`.
   4. `uv run sparkwatch repo_status --repo eugr/spark-vllm-docker` → `releases` no longer lists the 9 deleted tags.
   5. When a genuinely new tag appears, `changed` lists exactly that tag with the tag's commit date as `occurred_at`.
+
+## #53 re-test (2026-11-08 22:50, `fix/run-a-issues` @ 8ce887c)
+- 400 passed, 1 skipped. ruff is clean.
+- **On a `.backup` copy, with the token:**
+  - The cleanup `DELETE` removed 9 rows.
+  - A full `repos check` made 15 requests with `changed: []`. Every watched repo now has `seen_tags`: 87 has 10 names, and the four tagless repos have `[]`.
+  - **Simulated real new tag:** I removed the head name from 87's `seen_tags` and invalidated its tags ETag. The next check made 4 requests (3 plus 1 for the tag's commit date) and emitted exactly `staging-current-1790687448` with `occurred_at 2026-09-28T17:39:45Z`.
+  - An immediate re-check made 3 requests with `changed: []`.
+
+### #54 (P3): repo event `occurred_at` stores GitHub's `…Z` format, not the canonical `+00:00`
+- **Observed:** the tag event above stored `2026-09-28T17:39:45Z`. The timestamp scanner flags `repo_events.occurred_at` as MIXED on the copy. The live DB is still clean, because no real tag or release has been stored since migration 4.
+- **Cause:** `_tag_commit_date` returns GitHub's `committer.date` verbatim, and the release path passes `release["published_at"]` verbatim (`repos.py`, `occurred_at=release.get("published_at")`). This breaks SPEC §2's single timestamp format (#27), and `repo_status` compares `COALESCE(occurred_at, detected_at)` as strings.
+- **Fix:** normalise both with `to_iso(parse_dt(...))` before `_event`. Add a test that a `…Z` release or tag date is stored as `+00:00`.
