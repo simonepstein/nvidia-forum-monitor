@@ -53,6 +53,7 @@ The forum runs on Discourse, so **no JS rendering is needed**. Base URL: `https:
 
 - **Topic list fields used:** `id, slug, title, tags, created_at, bumped_at, last_posted_at, posts_count, highest_post_number, views, like_count, pinned, has_accepted_answer, excerpt`.
 - **Post fields used:** `id, topic_id, post_number, post_type, username, trust_level, staff, created_at, updated_at, version, reply_to_post_number, reactions, accepted_answer, cooked, raw, link_counts[] {url, internal, reflection, title, clicks}`.
+- **Post likes (revised 2026-11-08, ISSUES #39):** the forum runs the Discourse reactions plugin. Posts carry no `like_count`; `reactions` is a **list** (`[{"id": "heart", "type": "emoji", "count": 4}]`). Store `posts.like_count` from the first of these that's present: `reaction_users_count`; then `actions_summary[id=2].count`; then the sum of `reactions[].count`; otherwise 0. **A re-fetch with unchanged content must still update `like_count` and `accepted_answer`.** These are engagement metadata, not content, so they don't touch `content_hash` or `changed_at` and the post isn't reported as edited. Today the unchanged path only writes `fetched_at`, so likes and accepted answers freeze at first fetch. With that fixed, existing rows get corrected as posts are re-fetched (`refetch_recent_days`), which covers the recent posts `global_digest` scores. A full re-fetch of history is never automatic; if it's ever wanted, it's an explicit, budgeted command.
 - **`post_type`:** 1 is regular, 2 is a moderator action, 3 is a small action, and 4 is a whisper. Store types 1 and 2.
 - **`print=true` returns 422.** Don't use it.
 - **No rate-limit headers.** Assume anonymous limits of about 60 requests/min.
@@ -156,6 +157,10 @@ bench = ["humaneval", "mbpp", "livecodebench", "swe-bench", "aider", "bfcl", "ta
 dual_spark_usable_gb = 240
 single_spark_usable_gb = 120
 kv_overhead_frac = 0.10
+
+[global_digest]                  # hotness score, §5 "Hot topics and the newsletter"
+weights = { posts = 1.0, posters = 1.5, likes = 1.0, new_topic = 1.0, accepted = 1.0, staff = 0.5 }
+relevance_cap = 40.0             # relevance_score at or above this gets the maximum factor, 1.5
 
 [repos]
 max_compare_commits = 50       # commits listed in a repo_status response (the total count is always given)
@@ -584,6 +589,55 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `whats_new_for(model, since?)`: the same as the digest, but narrowed to one model. It uses watch hits, an alias regex and FTS. `since` applies to **every** section, using the new, edited and backfilled definitions above.
 - `ack_watch_sighting(label)`: clears the current alert. An anticipated entry with a `release_regex` fires again on the next *release* match (see §1, Watch matching).
 
+### Hot topics: `global_digest` (added 2026-11-08, ISSUES #37)
+`digest` answers "what changed for *me*": the watchlist, my repos, my flags. `global_digest` answers "what is the forum talking about": hot topics across both categories, ranked by a deterministic score, whether or not they touch the watchlist. It needs no LLM and is useful on its own. The newsletter (next subsection, ISSUES #38) is a later enhancement built on it.
+
+- `global_digest(since="cursor", until?, cursor="global", forum_id?, limit=10, relevant_only=False, advance=True, next?)`
+  - **Window:** `[since, until)`. `since` is `"cursor"` (read from `digest_cursors[cursor]`; the epoch if it's unset) or an ISO date. `until` defaults to the build time and is echoed back, so a newsletter can name its exact period and a rerun with the same `since`/`until` against the same DB returns the same ranking.
+  - **Posts counted:** only *new* posts in the window, using the digest's definitions (§5 `digest`, Timing): `first_fetched_at >= since`, `first_fetched_at < until`, `created_at >= since - 24h` and `created_at < until`. Backfilled posts are never hot; they appear as one `backfilled: {posts, topics}` count. Edits are not counted.
+  - **Cursor:** its own cursor (`'global'`), separate from `digest`'s `'default'`, so asking "what's hot?" never consumes the user's catch-up and vice versa. With `advance=True` (the default, as for `digest`), the cursor moves to `until`. Pass `advance=False` to look without moving it.
+  - **Hotness score**, per topic with at least one new post. Every component is returned, so the agent can explain the ranking:
+    ```
+    base  = w.posts   · ln(1 + new_posts)
+          + w.posters · ln(1 + distinct new posters)
+          + w.likes   · ln(1 + sum of like_count over the new posts)
+          + w.new_topic  · [topic created in the window]
+          + w.accepted   · [a new post is the accepted answer]
+          + w.staff      · [a new post is by staff]
+    score = base · (0.5 + min(relevance_score, relevance_cap) / relevance_cap)
+    ```
+    - The relevance factor ranges from 0.5 to 1.5, so a busy but off-topic thread (shipping, RMA) ranks below a smaller dual-Spark one without being hidden. A topic marked irrelevant (`mark_topic(relevant=False)`) gets the minimum factor, 0.5, and `relevant: false`. With `relevant_only=True`, topics that `filters` judges irrelevant are left out, as in `digest`.
+    - **Ties:** score desc, then newest new post desc, then `topic_id`.
+    - **Weights** come from `[global_digest]` in config (below).
+    - **Known limits:** the likes term depends on ISSUES #39 (posts' `like_count` is stored as 0 today). Until that's fixed, the term is 0 for every topic and the ranking still works from the other terms. Once fixed, `posts.like_count` is the value as of the last fetch, so likes that arrive after a post was fetched are only seen when `refetch_recent_days` re-fetches it. `topics.views` is a snapshot and is **not** used. A view-delta term would need a `topic_stats` snapshot table, which is deferred to Run C.
+  - **Response** (compact JSON, the default response well under 10 KB):
+    - `since`, `until`, `cursor`, `weights`.
+    - `hot_topics[]` (at most `limit`, cap 25), each with:
+      - `topic_id`, `forum_id`, `title`, `url`, `created_at`, `is_new_topic`, `relevance_score`, `relevant`;
+      - `new_posts`, `posters`, `likes`, `accepted_answer`, `staff`, `score`, `components` (each term's contribution);
+      - `top_posts`: the 2 most-liked new posts (ties go to the newest), each with `post_id`, `url`, `date`, `author`, `likes` and a 160-character snippet from the start of the post;
+      - `watch_labels`: labels with a body mention among the new posts;
+      - `first_linked`: up to 3 repos or HF models first linked from this topic's new posts, each with `url`;
+      - `flags`: open flags on the topic or its posts, each with `id`, `label` and `url`.
+    - `unanswered`: new topics in the window with no replies, as `{count, top: [3]}` by relevance, each with `url`, `date` and an OP snippet. These are often questions worth surfacing.
+    - `first_linked`: repos and HF models first linked anywhere in the window, as `{count, top: [5]}` by mention count, each with `url` and its first post's `url`.
+    - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), one line each with their evidence `url`s. Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
+    - `repo_events`: releases and tags of watched repos in the window, with `url`.
+    - `backfilled: {posts, topics}`.
+    - `next`: when more hot topics remain, an argument set to pass back for the next page.
+- **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--forum ID] [--limit N] [--json]` runs the same library function, with readable text by default.
+
+### Newsletter (enhancement, ISSUES #38; build after `global_digest` has been in use)
+A regular "what's hot on the Spark forums" issue, written by the agent from `global_digest`. It adds one tool and one workflow, and no migration.
+- **Cursor:** issues use their own cursor, `'newsletter'`. The workflow calls `global_digest(cursor="newsletter", advance=False)`, and only `save_newsletter` moves that cursor, so a failed or abandoned draft doesn't lose its window. Ad-hoc `global_digest` use (`'global'`) and the catch-up digest (`'default'`) are unaffected.
+- `save_newsletter(body, since, until, source_post_ids, title?)`: stores an issue and moves the `'newsletter'` cursor to `until`.
+  - It's stored as a `research_notes` row: subject `newsletter <until as YYYY-MM-DD>` (or `title`), `model_canonical` null, `as_of = until`, `body` the markdown issue. Sources go in `evidence` with `kind='note'`, as `save_note` does. **No migration is needed.**
+  - **Link check:** every forum link in `body` (`/t/<topic>/<post_number>` or `/t/<topic>`) must resolve to a stored topic or post. Unresolved links are returned in `unresolved_links`. The issue is still saved, so the agent can fix and supersede it.
+  - The cursor only moves forward: if `until` is earlier than the current cursor, it's left alone and the response says so.
+  - Returns `note_id`, `subject`, `since`, `until`, `cursor_moved`, `unresolved_links`, `sources`.
+- **Past issues:** `get_notes(subject_query="newsletter")`. The newest issue's `as_of` is the next issue's `since`, and `global_digest(since="cursor", cursor="newsletter")` resolves to the same value once an issue has been saved.
+- **Writing an issue needs an LLM:** an agent through the `newsletter` workflow (§5 Prompts), a headless agent on a timer (§7), or the local LLM from Run B. There's no `sparkwatch newsletter` CLI until then.
+
 ### Reading and research
 - `search_posts(query, topic_id?, forum_id?, since?, username?, order="rank"|"recent", raw_fts=False, limit)`: FTS5 with `snippet()`.
   - **Query handling (revised 2026-11-08):** by default, `query` is plain text. Each whitespace-separated term is quoted as an FTS5 string, and the terms are joined with AND. So `GLM 5.3 Flash` and `tok/s` work as typed, and a phrase the agent quotes (`"tensor parallel"`) stays one FTS5 phrase. A bare `or`, `and`, `not` or `near` is searched as a word, and the response carries a `hint` pointing at `raw_fts`.
@@ -637,7 +691,14 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - `threads`: topics whose title matches the model, with `body_posts` and `title_posts` counts (at most 3). These are all-time and only cover title-matching topics, unlike the windowed `mentions` above.
 - `save_note(subject, body, model?, as_of, source_post_ids: [int], supersedes?: note_id)` and `get_notes(model?, subject_query?, include_superseded=False)`
   - A `model` that resolves through `models`/`model_aliases` is stored; an unknown name is stored as null with a `hint`, so a free-text name never creates a junk model row.
+  - **Sources (revised 2026-11-08, ISSUES #36):** `get_notes`, `model_summary.notes` and `global_digest.knowledge` return each note's `sources: [{post_id, url, date}]`, read from `evidence` (`kind='note'`), so a conclusion can always be traced to its posts.
 - `flag(target_type, target_id, label, reason, priority=2)`, `list_flags(open_only=True)`, `resolve_flag(id, resolution)`
+  - **URLs (revised 2026-11-08, ISSUES #36):** every flag returned (by `list_flags`, the digest's open flags, `model_summary`, `get_topic_overview`, `global_digest` and the `sparkwatch://flags/open` resource) carries a `url` derived from its target:
+    - `topic` → `/t/<id>`, `post` → `/t/<topic_id>/<post_number>`, both with a `title`;
+    - `repo` → its GitHub URL, `hf_model` → its Hugging Face URL;
+    - `recipe` → its first evidence post's URL;
+    - `model` → no URL, but the canonical name.
+  - A target that no longer resolves gets `url: null` and `target_missing: true`. It isn't silently dropped.
 - `review_proposed(kind="recipe"|"benchmark"|"alias")`, `set_review(kind, id, review)`
 - `add_model_alias(alias, canonical)`, `upsert_model(canonical, family?, params_total_b?, params_active_b?, released_at?, hf_repo_id?, note?)`
 - `list_watchlist()` (with mention and reply counts over 7 and 30 days, first-seen dates and the latest of each), `add_watch(label, match_regex, kind, canonical?, release_regex?)`, `update_watch(label, …)`
@@ -661,8 +722,8 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 MCP prompts are controlled by the user, and client support varies. Even where a client shows them, the model can't call them. OpenFox, for example, doesn't show them at all. So each workflow below is published through **four channels, all built from a single source** (`workflows.py`):
 1. **MCP prompts**, as below.
 2. **Tools:** `list_workflows()` returns each name with a one-line purpose and its arguments. `get_workflow(name, args?)` returns the step text, with the arguments filled in.
-3. **Server instructions:** `FastMCP(instructions=…)` gets a short paragraph naming the four workflows and saying "call `get_workflow(name)` for the steps". Many clients put this in the model's context.
-4. **Tool descriptions:** `sync_now`, `digest`, `model_summary` and `repo_status` mention the relevant workflow, e.g. "For a full catch-up, call `get_workflow('catch_up')`."
+3. **Server instructions:** `FastMCP(instructions=…)` gets a short paragraph naming the workflows (four in Run A; `newsletter` joins them with #38) and saying "call `get_workflow(name)` for the steps". Many clients put this in the model's context.
+4. **Tool descriptions:** `sync_now`, `digest`, `global_digest`, `model_summary` and `repo_status` mention the relevant workflow, e.g. "For a full catch-up, call `get_workflow('catch_up')`", or for `global_digest` once #38 lands, "To write a newsletter issue, call `get_workflow('newsletter')`."
 
 The README gets a "Workflows" section for people and for clients that show none of these.
 
@@ -696,6 +757,26 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   5. Fill gaps with `find_model_mentions` for heavily mentioned models that have no recipes yet.
   6. Answer with a ranked list and its reasoning, showing quant and benchmark evidence.
   7. `save_note(subject="frontier dual-spark")`.
+- **`newsletter(since?, audience="me"|"public")`** (enhancement, ISSUES #38; published with `save_newsletter`): a regular "what's hot on the Spark forums" issue.
+  1. `sync_now` (repeat while `partial`).
+  2. `global_digest(since=since or "cursor", cursor="newsletter", advance=False)`. Keep its `until`; that's the issue's period end.
+  3. Read the top 5–8 hot topics: `get_posts(topic_id, since=<since>)`, plus `get_topic_overview` where the thread's context matters. For tracked models with activity, check `model_summary`. For watched repos with releases, check `repo_status`.
+  4. **Write the issue in markdown:**
+     - a title and the period (`since` → `until`);
+     - a 2–3 sentence lead;
+     - **Hot threads:** 3–6 items, each covering what happened and why it matters for Spark and dual-Spark users, with a post link and date;
+     - **New recipes and benchmarks:** numbers only as posted, each with its link;
+     - **Model watch:** for anticipated models, label each item rumour or release;
+     - **Repo updates;**
+     - **New and unanswered:** questions worth an answer;
+     - a one-line stats footer: new posts, topics, posters.
+  5. **Rules:**
+     - every claim links to its post;
+     - numbers come only from posts, never inferred;
+     - quotes are at most two sentences, attributed by forum `@username`;
+     - when `audience="public"`, summarise and link rather than reproduce post text, code or logs, and mention no one beyond their forum username.
+  6. `save_newsletter(body, since, until, source_post_ids)`. If it returns `unresolved_links`, fix them and save again, superseding the first issue.
+  7. Reply with the issue.
 
 ## 6. Run B: local-LLM triage (`triage.py`, `llm.py`), phase 2
 **Purpose:** lower agent token use and pre-flag items without supervision. Everything works without it.
@@ -732,7 +813,7 @@ MCP prompt templates encode the main workflows. They're short and instructional.
 
 ## 7. Run C: optional extras
 - **Leaderboard** (`rank.py`): a deterministic score over accepted recipes and benchmarks. Design it only after Run A/B usage shows the agent's `frontier` answers need a stable baseline. The quant penalty and benchmark normalisation are decided then.
-- **Scheduled report** (`report.py`): a timer runs a headless agent, or the triage LLM, through the `catch_up` workflow, and writes markdown to `reports/`.
+- **Scheduled report** (`report.py`): a timer runs a headless agent (e.g. `claude -p` with the sparkwatch MCP server), or the triage LLM, through the `newsletter` workflow (§5), and writes markdown to `reports/`. `save_newsletter` (#38) already stores each issue and moves the `'newsletter'` cursor, so the timer job only has to run the workflow and export the issue. Optional extra: a `topic_stats(topic_id, views, like_count, posts_count, captured_at)` snapshot per sync, so `global_digest` can add a views-delta term.
 - **Web search** (`websearch.py`): the Brave Search API (`X-Subscription-Token: $BRAVE_API_KEY`), cached in `web_cache` for 7 days. Exposed as MCP `web_search(query)` for finding model cards and benchmark tables when the agent's own web tools are blocked. Results feed into `record_benchmark(source_type='model_card'|'leaderboard')`.
 - **Other sources:** if Spark Arena or similar sites have an API or export, ingest them as an additional `source_type`. Check this during Run C, and don't assume an endpoint exists.
 
@@ -806,6 +887,20 @@ MCP prompt templates encode the main workflows. They're short and instructional.
    - run `should_i_update`.
 3. Note where agent token use hurts. That decides how much triage is worth.
 
+**Run A addendum (2026-11-08, ISSUES #36, #37 and #39):** build these on the Run A branch, before Run B. No migration is needed.
+1. #36: flag `url`s and note `sources` everywhere they're returned (§5 Knowledge).
+2. #39: store post likes from the reactions plugin fields (§1 Sync, Post likes).
+3. #37: `global_digest`, the `global-digest` CLI and the `[global_digest]` config (§5 Hot topics).
+   - **Acceptance, against the live DB, read-only except for the `'global'` cursor:**
+     - `global_digest(since="2026-11-01", advance=False)` returns hot topics in both forums, with components that add up to `score`. It's under 10 KB compact.
+     - Rerunning with the returned `until` gives an identical ranking.
+     - No backfilled post is counted.
+     - Every `url` resolves to a stored topic or post.
+     - The `'default'` cursor is unchanged.
+
+**Enhancement, after `global_digest` has been in use (ISSUES #38):** `save_newsletter`, the `'newsletter'` cursor and the `newsletter` workflow through all four channels (§5 Newsletter).
+- **Acceptance:** one real `newsletter` run in an MCP client. The issue is saved with sources, and `unresolved_links` is empty. The `'newsletter'` cursor moves, while `'global'` and `'default'` are unchanged.
+
 **Run B:** triage (§6).
 
 **Run C:** optional extras (§7), as usage shows they're needed.
@@ -825,6 +920,21 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - `qwen4` doesn't match `Qwen3.8` or `qwen 4.5`;
   - the first hit for an anticipated model sets `first_seen` and appears at the top of the digest until it's acknowledged.
 - Digest: the cursor advances; a digest run immediately after another returns empty sections.
+- `global_digest`:
+  - a fixture window gives the expected ranking, and each topic's `components` add up to `score`;
+  - backfilled posts and edits contribute nothing;
+  - a topic marked irrelevant gets factor 0.5 and `relevant: false`;
+  - the same `since`/`until` gives identical output;
+  - it never moves the `'default'` cursor; `advance=True` moves `'global'` to `until`, and `advance=False` moves nothing;
+  - `next` pages without gaps or overlaps;
+  - the default response is under 10 KB on a large fixture.
+- `save_newsletter` (#38, with the enhancement):
+  - it stores a note with `model_canonical` null and sources in `evidence`;
+  - it moves `'newsletter'` to `until`, and never backwards, and leaves `'global'` alone;
+  - a link to a topic or post that isn't stored comes back in `unresolved_links`;
+  - `global_digest.knowledge` leaves out newsletter notes.
+- Post likes (#39): a fixture post with `reaction_users_count: 4` and `actions_summary [{id: 2, count: 4}]` stores `like_count = 4`; a post with neither stores 0.
+- Links (#36): every flag target type gives the expected `url`; a deleted target gives `url: null, target_missing: true`; `get_notes` returns `sources` with URLs.
 - `record_recipe`:
   - a fabricated quote gives `review='proposed'`;
   - a similar existing recipe is returned;

@@ -245,34 +245,57 @@ Notes:
 
 ---
 
-## P1/P2 fix: title matches are notifications (2026-11-08 17:15, `fix/run-a-issues` @ 6a28e85 + working tree)
+## #34/#35 re-test (2026-11-08 17:35, `fix/run-a-issues` @ dbd3d08)
+Verified independently:
+- Recomputing title versus body from the stored posts agrees with `matched_in` on all 3,640 hits (0 disagreements), and `matched_text` matches the body text. Body 1,142 / title 2,498.
+- Migration 5, replayed on a v4 scratch copy: integrity ok, every table's row count identical, Qwen4 sighting still null.
+- Live DB: v5, and Qwen4 is still quiet.
+- Digest: the Qwen4 line is as expected, and GLM shows "(+1 more)". Compact JSON is 8.1 KB; the CLI's `--json` is pretty-printed, at 11.3 KB.
+- `model_summary`: top_topics[0] is 381350, mentions 17/124/372.
+- `list_watchlist` and `get_topic_overview(383964)` (count 2, replies 29) are as stated.
+- A Kimi K2 anticipated watch with no release_regex, then a regex change (2→170 hits), raised no sighting.
+- Tests: 306 passed, 1 skipped. Ruff is clean.
 
-#34 and #35 are fixed. Title matches are kept as notifications, but they now go to watch **activity**; they never raise the sighting alert and never count as mentions.
+(Committed as dbd3d08.)
 
-- **Where a hit matched** is recorded on `watch_hits.matched_in` (`title` | `body`), with `matched_text` from the same match. One matcher, `watch._match`, checks the body first and is shared by `match_post`, `rematch_watch` and `rematch_all`; both rematch paths run with `is_new=False`, so changing a regex can never raise a sighting.
-- **Sighting (#34):** a release raises the alert only from a **post body**, or from the **OP** (`post_number = 1`) of a **newly stored topic** whose title matches. A reply that only matches the topic title is thread activity, so a thread titled "Qwen4 is out" can no longer reopen the alert. After an ack, only a post **created after** it re-arms the alert. An edit raises nothing (now a documented choice in SPEC §1, not a gap).
-- **Thread activity (#35):** the digest's `watchlist_activity[].threads` and `find_model_mentions.threads` report title-only hits per topic with ordinary (start-of-post) snippets. Every reply is counted — the digest head line carries `replies` and `threads_total`, e.g. `GLM 5.3 Flash (tracking): 21 new mention(s), 31 new replies in 3 threads (+1 more)` — while `threads` lists at most 2 topics with their 2 newest replies. `model_summary` gains `threads` (3 at most) with `body_posts` / `title_posts`.
-- **Mention counts are body-only:** `model_summary.mentions` and `top_topics`, `find_model_mentions.total_posts`, `list_watchlist.hits_7d` / `hits_30d` (beside new `replies_7d` / `replies_30d` and `latest_reply`), `get_topic_overview.watch_hits[].count` (beside `replies` and `latest_reply`).
-- **Migration 5** adds `matched_in` and backfills it **in one transaction** (a callable migration step, because `executescript` would commit the ALTER on its own). A crash leaves v4 and the next open retries. Run B triage moves to migration 6 (SPEC §6).
-- **Tests:** 306 passed, 1 skipped. Ruff clean.
-- **Rehearsal:** `/tmp/swcopy4/sparkwatch.db` is a genuine **v4** copy of the live data (3,640 hits, taken 16:29). Migrating it produced exactly the numbers below.
-- **Note:** by the time a fresh copy was taken, the live DB was **already v5** — a process using the new code had opened it after the edits (any `open_db` migrates). Its post-state matches the rehearsal exactly, and a one-page `sync --forum 723` afterwards changed nothing.
-
-### What to test
-
-| # | Check | Expected |
+| # | Issue | Evidence |
 |---|---|---|
-| 1 | `PRAGMA user_version` | `5` |
-| 2 | `select matched_in, count(*) from watch_hits group by 1` | `body\|1142`, `title\|2498` |
-| 3 | `select count(*) from watch_hits` | `3640` (plus any later posts) |
-| 4 | Qwen4 split: `select h.matched_in, count(*) from watch_hits h join watchlist w on w.id=h.watch_id where w.label='Qwen4' group by 1` | `body\|39`, `title\|41` |
-| 5 | `select count(*) from watch_hits where matched_in='body' and matched_text is null` | `0` |
-| 6 | Qwen4 alert after the migration and a sync: `select sighting_post_id, sighting_acked_at from watchlist where label='Qwen4'` | `NULL` / `2026-11-08T13:28:37+00:00` |
-| 7 | `uv run sparkwatch digest --since 2026-11-01 --no-advance --limit 6` | Qwen4: `9 new mention(s), 12 new replies in 1 thread`, then `thread Qwen4 — …/t/388002: 12 new replies`; GLM: `31 new replies in 3 threads (+1 more)`, listed under the thread, not the mentions |
-| 8 | `uv run sparkwatch digest --no-advance --json \| wc -c` (default cursor) | ~8.5 KB, still under the 10 KB budget |
-| 9 | `model_summary("GLM 5.3 Flash").top_topics[0].topic_id` | `381350` (158 body mentions), with `mentions` body-only (`~17 / 124 / 372` for 7/30/60 days) |
-| 10 | `model_summary("Qwen4").mentions` (body-only) and its `threads` | `{7d: 9, 30d: 14, 60d: 37}`; threads show 383964 (`body_posts 2` / `title_posts 29`) and 388002 (`2` / `12`) |
-| 11 | `list_watchlist` for GLM | `hits_7d 17`, `hits_30d 124`, `replies_7d 30`, `replies_30d 206` |
-| 12 | `get_topic_overview(383964)` watch hits for Qwen4 | `count 2` (body) beside `replies 29` (title) |
-| 13 | Migration atomicity (offline): `uv run pytest -q tests/test_db.py -k migration_five` | passes: a failure inside the backfill leaves `user_version = 4` and no `matched_in` column |
+| 36 | **P1.** The agent's "this is significant" records carry no links, which breaks CLAUDE.md's rule of a URL and date on every item. Flags (`list_flags` and the digest's open flags) return `target_type`/`target_id` and no `url`. `get_notes` returns no `source_post_ids`, so a conclusion can't be traced to its posts, although `save_note` accepts them. **Fix:** derive `url` for every flag target (topic, post or repo). Return `sources: [{post_id, url, date}]` on notes. Add the same to `model_summary.notes` and the digest's open flags. | `list_flags` keys: `id, target_type, target_id, label, reason, priority, created_at, resolved_at, resolution`. `get_notes` keys: no sources. |
+| 37 | **Feature (needs a SPEC section; Run A, no LLM).** `global_digest`: hot topics across both forums since the last run or a given date, and the basis for a newsletter or regular post. See the design sketch below. | User request, 2026-11-08 |
 
+### #37 design sketch: `global_digest` and a newsletter workflow
+- **Tool:** `global_digest(since="cursor"|ISO date, cursor="global", forum_id?, limit=10, advance=True)`. Its cursor is separate from the `digest` cursor, so newsletter runs don't eat the user's catch-up.
+  - **Window:** the same new/backfilled rules as the digest. Only posts *written* in the window count, and backfill is never "hot".
+- **Hotness per topic, deterministic and reproducible.** Each component is shown in the output so the agent can explain the ranking. The terms are:
+  - new posts in the window;
+  - distinct new posters;
+  - likes on the new posts (`posts.like_count`);
+  - a bonus for a topic created in the window;
+  - an accepted answer, or staff participation, in the window;
+  - an optional relevance weight (`relevance_score`), so a busy off-topic thread doesn't top the list.
+  - Caveat: likes are as of fetch time, so late likes on older posts aren't seen. Views can't be used, because `topics.views` is a snapshot. Deltas would need a `topic_stats` snapshot table; that's optional and can come later.
+- **For each hot topic:** forum, title, url, created_at, new_posts, posters, likes, and the score with its components. Also:
+  - the 2 most-liked new posts, each with url, date, author and a snippet;
+  - repos and HF models first linked in the window;
+  - the watch labels touching it, and open flags on it.
+- **Extra sections:**
+  - new topics with zero replies, as count plus top 3;
+  - repos and HF models first linked anywhere in the window;
+  - recipes, benchmarks and notes recorded in the window;
+  - watched-repo releases.
+- **Budget:** under 10 KB by default, with `next` to page further.
+- **Newsletter workflow** (`get_workflow('newsletter')` plus a prompt). The steps:
+  1. `sync_now`.
+  2. `global_digest(since=<last issue>)`.
+  3. `get_posts` on the top threads.
+  4. Write the issue in sections: hot threads, new recipes and benchmarks, model watch, repo updates. Every claim gets a forum link; quote briefly and attribute by username.
+  5. `save_newsletter(body, since, until, source_post_ids)`, or a note with subject `newsletter YYYY-MM-DD`, so the next issue starts where this one ended and can say "since last issue".
+  6. Advance the `global` cursor only when the issue is saved.
+- **Automation:** the tool needs no LLM. Writing the issue needs either an agent run headless on a timer (e.g. `claude -p "/newsletter"` with the MCP server) or, from Run B, the local LLM via a `sparkwatch newsletter --since … > issue.md` command.
+- **Publishing note:** if issues are posted publicly, summarise and link rather than republish post text. Check NVIDIA's forum terms before reposting content verbatim.
+| 38 | **Enhancement (after #37 is in use).** A newsletter: `save_newsletter`, a `'newsletter'` cursor and a `newsletter` workflow, built on `global_digest`. Split out from #37 at the user's request: `global_digest` is useful now, and the newsletter is an enhancement. | SPEC §5 "Newsletter (enhancement…)", build plan |
+| 39 | **P1.** Post likes are never stored. The forum runs the Discourse reactions plugin: posts have no `like_count`, and `reactions` is a **list**, but `sync.py:262` expects a dict, so every post stores `like_count = 0`. Topic-level likes are fine. A second bug compounds it: a re-fetch with unchanged content only writes `fetched_at` (`sync.py:~303`), so `like_count` and `accepted_answer` freeze at first fetch. **Fix** per SPEC §1 "Post likes": take `reaction_users_count`, then `actions_summary[id=2].count`, then the sum of `reactions[].count`, and update both fields on unchanged re-fetches without touching `changed_at`. Never re-fetch history automatically. | `select count(*), sum(like_count>0) from posts` → `9117\|0`. In fixture post 1882979: `like_count: null, reaction_users_count: 4, actions_summary [{id:2,count:4}], reactions [{"id":"heart","count":4}]`. |
+
+`global_digest` dry run on the live DB (default weights, since 2026-11-01; computed by hand from the SPEC formula): 85 active topics. The top 3 are the DeepSeek V4.1 EXL3 2×Spark thread (11.2), the GLM megathread (10.7) and "DGX Spark repeatedly rebooting after most recent update" (9.4, relevance factor 1.0). Sensible, with the likes term at 0 because of #39.
+
+**SPEC:** #36, #37, #38 and #39 are specified in the 2026-11-08 SPEC revision (§1 Post likes, §5 Hot topics, §5 Newsletter, §5 Knowledge flags and notes, config `[global_digest]`, build plan "Run A addendum", Verification).
