@@ -6,6 +6,7 @@ import sqlite3
 QUANT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bnv[\s_-]?fp4\b|\bnvfp4\b", re.I), "nvfp4"),
     (re.compile(r"\bmx[\s_-]?fp4\b|\bmxfp4\b", re.I), "mxfp4"),
+    (re.compile(r"\bfp4\b", re.I), "fp4"),
     (re.compile(r"\bfp8\b|fp8[_\-]?e4m3|fp8[_\-]?dynamic|w8a8", re.I), "fp8"),
     (re.compile(r"\bbf16\b|bfloat16", re.I), "bf16"),
     (re.compile(r"\bfp16\b|float16|half\b", re.I), "fp16"),
@@ -65,8 +66,8 @@ BENCHMARK_ALIASES: dict[str, str] = {
 TOPOLOGIES = ("single-spark", "dual-spark", "other", "unknown")
 
 _QUANT_SUFFIX_RE = re.compile(
-    r"[\s._-]*(bf16|fp16|fp8|nvfp4|mxfp4|int8|int4|awq|gptq|gguf|exl2|exl3|instruct|chat|it|base|"
-    r"q[2-8]_[k0-9]|gguf-q[2-8])\s*$",
+    r"[\s._-]*(bf16|fp16|fp8|nvfp4|mxfp4|fp4|int8|int4|awq|gptq|gguf|exl2|exl3|instruct|chat|it|"
+    r"base|q[2-8]_[k0-9]|gguf-q[2-8])\s*$",
     re.I,
 )
 

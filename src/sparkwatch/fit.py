@@ -11,6 +11,7 @@ BITS_PER_WEIGHT: dict[str, float] = {
     "int8": 8.5,
     "nvfp4": 4.5,
     "mxfp4": 4.5,
+    "fp4": 4.5,
     "int4-awq": 4.5,
     "int4-gptq": 4.5,
     "gguf-q8": 8.5,

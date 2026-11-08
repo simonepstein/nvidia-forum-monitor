@@ -1009,10 +1009,10 @@ def record_recipe(
     review = "accepted" if all_verified else "proposed"
     cursor = conn.execute(
         "INSERT INTO recipes (model_canonical, model_raw, quant_format, quant_raw, quant_repo, engine,"
-        " engine_version, container_image, topology, tensor_parallel, pipeline_parallel, context_len,"
-        " tok_s_decode, tok_s_prefill, concurrency, memory_gb, status, setup, gotchas, fit_estimate_gb,"
-        " fit_ok, reported_at, review, created_by, created_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'agent',?)",
+        " engine_raw, engine_version, container_image, topology, tensor_parallel, pipeline_parallel,"
+        " context_len, tok_s_decode, tok_s_prefill, concurrency, memory_gb, status, setup, gotchas,"
+        " fit_estimate_gb, fit_ok, reported_at, review, created_by, created_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'agent',?)",
         (
             canonical,
             model,
@@ -1020,6 +1020,7 @@ def record_recipe(
             quant,
             quant_repo,
             engine_name,
+            engine,
             engine_version,
             container_image,
             topology_name,
@@ -1062,7 +1063,7 @@ def record_recipe(
         "status": status,
         "review": review,
         "reported_at": newest_date or now,
-        "fit": {"estimate_gb": estimate, "fit_ok": fit_ok, "warning": warning},
+        "fit": _fit_payload(estimate, fit_ok, warning, params, quant_format),
         "evidence": verified,
         "similar_recipes": [dict(row) for row in similar],
     }
@@ -1070,6 +1071,25 @@ def record_recipe(
 
 def evidence_verify(conn: sqlite3.Connection, post_id: int, quote: str | None) -> bool:
     return evidence.verify_quote(conn, post_id, quote) if quote else False
+
+
+def _fit_payload(
+    estimate: float | None,
+    fit_ok: int | None,
+    warning: str | None,
+    params_total_b: float | None,
+    quant_format: str | None,
+) -> dict[str, Any]:
+    """The fit result, plus a hint when it cannot be computed."""
+    payload: dict[str, Any] = {"estimate_gb": estimate, "fit_ok": fit_ok, "warning": warning}
+    if params_total_b is None:
+        payload["hint"] = (
+            "fit unknown: params are not recorded for this model; set them with"
+            " upsert_model(canonical=..., params_total_b=...)"
+        )
+    elif quant_format is None:
+        payload["hint"] = "fit unknown: no quant recorded, so bits per weight are unknown"
+    return payload
 
 
 def evidence_record(
@@ -1170,8 +1190,8 @@ def list_recipes(
         clauses.append("model_canonical = ?")
         params.append(canonical)
     if engine:
-        clauses.append("engine = ?")
-        params.append(normalize.canonical_engine(engine))
+        clauses.append("(engine = ? OR engine_raw LIKE ? COLLATE NOCASE)")
+        params.extend([normalize.canonical_engine(engine), f"%{engine.strip()}%"])
     if topology:
         clauses.append("topology = ?")
         params.append(normalize.canonical_topology(topology))

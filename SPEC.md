@@ -442,7 +442,7 @@ These are deterministic helpers, used by the agent write tools and later by tria
 3. If there's still no match, use the cleaned string as written. The write tool's response reports it as a new canonical name, so the agent can add an alias if it's really a variant.
 
 ### Quant formats
-One of `bf16, fp16, fp8, nvfp4, mxfp4, int8, int4-awq, int4-gptq, gguf-q8, gguf-q6, gguf-q5, gguf-q4, gguf-q3, gguf-q2, exl, other`, matched with an ordered regex table. The quant is recorded on every recipe and benchmark.
+One of `bf16, fp16, fp8, nvfp4, mxfp4, fp4, int8, int4-awq, int4-gptq, gguf-q8, gguf-q6, gguf-q5, gguf-q4, gguf-q3, gguf-q2, exl, other`, matched with an ordered regex table. The quant is recorded on every recipe and benchmark. `fp4` is its own value: it is only mapped to `nvfp4` when the post actually says nvfp4/nv-fp4.
 
 ### Engines
 One of `vllm, sglang, trtllm, llamacpp, ollama, lmstudio, nim, exllama, transformers, other`.
@@ -453,7 +453,8 @@ One of `vllm, sglang, trtllm, llamacpp, ollama, lmstudio, nim, exllama, transfor
 - Quality is judged from benchmark evidence, which is partly subjective. The agent weighs it when answering, and v1 has no formula for it.
 
 ### `fit.py`
-- Bits per weight: `bf16/fp16 16`, `fp8/int8 8.5`, `nvfp4/mxfp4/int4-* 4.5`, `gguf-q8 8.5`, `q6 6.6`, `q5 5.7`, `q4 4.8`, `q3 3.9`, `q2 3.0`.
+- Bits per weight: `bf16/fp16 16`, `fp8/int8 8.5`, `nvfp4/mxfp4/fp4/int4-* 4.5`, `gguf-q8 8.5`, `q6 6.6`, `q5 5.7`, `q4 4.8`, `q3 3.9`, `q2 3.0`.
+- When the params are unknown, `record_recipe` returns `fit.hint = "fit unknown: set params with upsert_model"` so the agent can fill them in.
 - `fit_estimate_gb = params_total_b × bits / 8 × (1 + kv_overhead_frac)`.
 - `fit_ok` compares the estimate with the usable memory for the topology. It's NULL if the params or quant are unknown, and it's 1 when a stated `memory_gb` comes with `status = works`.
 - **The result is advisory:** the write tool returns a warning and doesn't reject the recipe.

@@ -118,6 +118,69 @@ def test_record_recipe_fit_warning_on_single_spark(settings, conn):
     assert "exceeds" in result["fit"]["warning"]
 
 
+def test_record_recipe_records_fp4_as_its_own_quant(settings, conn):
+    seed(conn)
+    m.upsert_model("glm-5.3-flash", family="glm", params_total_b=355)
+    result = m.record_recipe(
+        model="GLM 5.3 Flash",
+        topology="dual-spark",
+        status="works",
+        evidence=[],
+        quant="fp4",
+    )
+    assert result["quant"] == "fp4"
+    assert result["fit"]["estimate_gb"] is not None
+    row = conn.execute(
+        "SELECT quant_format FROM recipes WHERE id=?", (result["recipe_id"],)
+    ).fetchone()
+    assert row["quant_format"] == "fp4"
+
+
+def test_record_recipe_keeps_the_raw_engine_searchable(settings, conn):
+    seed(conn)
+    first = m.record_recipe(
+        model="GLM 5.3 Flash",
+        topology="dual-spark",
+        status="works",
+        evidence=[],
+        engine="vLLM nightly 2026-11-05",
+    )
+    m.record_recipe(
+        model="GLM 5.3 Flash",
+        topology="dual-spark",
+        status="works",
+        evidence=[],
+        engine="SGLang",
+    )
+    row = conn.execute(
+        "SELECT engine, engine_raw FROM recipes WHERE id=?", (first["recipe_id"],)
+    ).fetchone()
+    assert row["engine"] == "vllm"
+    assert row["engine_raw"] == "vLLM nightly 2026-11-05"
+
+    by_raw = m.list_recipes(engine="vLLM nightly")
+    assert [recipe["id"] for recipe in by_raw["recipes"]] == [first["recipe_id"]]
+    assert len(m.list_recipes(engine="vllm")["recipes"]) == 1
+    assert len(m.list_recipes(engine="sglang")["recipes"]) == 1
+    raw_only = m.list_recipes(engine="nightly 2026-11-05")
+    assert [recipe["id"] for recipe in raw_only["recipes"]] == [first["recipe_id"]]
+
+
+def test_record_recipe_hints_when_fit_is_unknown(settings, conn):
+    seed(conn)
+    result = m.record_recipe(
+        model="Brand New 900B",
+        topology="dual-spark",
+        status="works",
+        evidence=[],
+        quant="fp8",
+    )
+    assert result["fit"]["estimate_gb"] is None
+    assert result["fit"]["fit_ok"] is None
+    assert "fit unknown" in result["fit"]["hint"]
+    assert "upsert_model" in result["fit"]["hint"]
+
+
 def test_record_benchmark_verifies_quotes(settings, conn):
     seed(conn)
     ok = m.record_benchmark(
