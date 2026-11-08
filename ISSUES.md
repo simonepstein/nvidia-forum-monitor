@@ -57,7 +57,7 @@ Not a spec change. SPEC §5's `sync_now` already defines the behaviour.
 - **Fix:** a listing cut short by `max_pages` or the time budget mustn't advance the floor past the oldest `bumped_at` actually listed. It also mustn't advance the incremental cutoff in a way that skips the rest. The next sync carries on listing.
 - **Repairing existing state is part of the fix.** The live database already records the wrong floor for forum 723, so a fix that only prevents future mistakes will trust it and fetch nothing. Add a repair step, e.g. a migration that resets each forum's floor to the oldest non-pinned `bumped_at` actually stored, or an explicit `sync --repair-coverage`. Report what it changed.
 - **The gap has been left in the live database on purpose, as the acceptance test.** Once the fix and the repair pass on fixtures:
-  1. Run `uv run sparkwatch sync --repair-coverage --forum 723 --apply` (dry run without `--apply`), then `uv run sparkwatch sync --forum 723` once, **with no `--max-pages`**. Stop and report if it goes over about 400 requests.
+  1. Run `uv run sparkwatch sync --repair-coverage --forum 723`, then `uv run sparkwatch sync --forum 723` once, **with no `--max-pages`**. Stop and report if it goes over about 400 requests.
   2. **Forum 723 only.** Don't touch forum 721.
   3. Expect the topic count for 723 to rise from 30, with `bumped_at` reaching back towards 2026-09-09, the floor still at about 2026-09-09, and the run's `partial` set to false.
   4. A second immediate sync of 723 makes about 1–2 requests.
@@ -218,3 +218,27 @@ Side effects of this re-test:
 - `compare_cache` has a b4c93e→f651fa entry;
 - I made one 723 sync and one `sync_now`, both incremental.
 - A backup taken before the re-test is at `~/dev/sparkwatch-review/sparkwatch-postfix.db`.
+
+---
+
+## P1/P2 re-test (2026-11-08 16:30, `fix/run-a-issues` @ 9db2b11)
+Verified against the data:
+- **Migration 4,** replayed on a copy of the pre-migration backup: row counts unchanged apart from watch_hits, integrity ok, FTS 8,989/8,989. All 41 timestamp columns are in one format.
+- **Qwen4 hits** went from 94 to 80. All 14 removals were code-name or Qwen3.8 false positives, checked by hand. The sighting was re-armed.
+- **Tombstones:** all 94 are now `not_content`. That took one 721 sync of 64 requests at 1 per second.
+- **Repair coverage:** a dry run by default, with `--apply` and a gap warning.
+- **Search:** the `or` hint, phrase quoting, and `raw_fts` errors raised as tool errors.
+- **`model_summary`:** 5.7 KB, 10 of 223 repos, flags shown, and the alias resolves.
+- **Workflows:** reachable through tools, instructions and descriptions.
+- **`list_installs`:** 6 behind, 0 ahead.
+- **Tests:** 290 passed, 1 skipped. Ruff is clean.
+- **#25 renames:** checked on a scratch copy with the metadata check forced. It adopted `gilesco/…-tensorfold-zig`. The real DB will rename at the next daily metadata check.
+
+| # | Issue | Evidence |
+|---|---|---|
+| 34 | **P1.** A sighting re-raises on every reply in a topic whose *title* matches the release pattern. `_raise_sighting` checks `release_regex` against the topic title for every post, and an ack re-arms it, so in a topic titled e.g. "Qwen4 is out" each reply reopens the alert and the ack stops meaning anything. **Keep title matches as notification:** the user wants to hear when the Qwen4 topic gets replies. But those belong in watch *activity* ("Qwen4 is coming: N new replies"), and the agent judges them. **The sighting alert** should be raised by (a) a post body matching `release_regex`, or (b) the OP of a new topic whose title matches it. Re-arm only for a post created after the ack. Also, don't let re-fetching an edited old post raise a sighting. | `watch.py:73` `release.search(title) or release.search(raw)`. The rearm logic is at lines 76-78. |
+| 35 | **P2.** Title matches inflate hit counts and break match-centred snippets. 41 of the 80 Qwen4 hits are replies in "Qwen4 is coming" that never mention Qwen4, and most of GLM's 1,267 hits come from the 977-post GLM thread title. Record `matched_in` (`title`\|`body`) on `watch_hits`. Count *mentions* from body hits only. Report title-only hits per topic as thread activity (new-reply count, plus the latest replies with ordinary snippets, not match-centred ones). Keep both visible, because the user wants the thread updates. | `select … where raw does not match` → 41/80. `watch.py:35` checks the title first. |
+
+Notes:
+- A forced metadata check on a scratch copy found the watched repo's head moved 7 more commits (f651fa→2778ac). The install will show 13 behind after the next real check.
+- Testing quirk, not a bug: the MCP stdio client only passes a safe subset of env vars to the server, so `SPARKWATCH_GENERAL__DB_PATH=… mcpcall.py` still reads the real DB. Use the CLI for scratch-DB checks.
