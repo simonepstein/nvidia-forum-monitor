@@ -39,6 +39,12 @@ def days_ago(days: float, now: datetime | None = None) -> str:
     return to_iso(base - timedelta(days=days))
 
 
+def normalize_iso(value: str | None) -> str | None:
+    """Rewrite a timestamp into the one stored format; leave unparseable text alone."""
+    moment = parse_dt(value)
+    return to_iso(moment) if moment is not None else value
+
+
 def dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=False)
 

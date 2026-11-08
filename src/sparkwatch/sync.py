@@ -12,7 +12,7 @@ from . import filters, links, watch
 from .config import CategorySettings, Settings, get_settings
 from .db import open_db
 from .discourse import DiscourseClient, DiscourseError, ForbiddenError, NotFoundError
-from .util import dumps, parse_dt, to_iso, utcnow, utcnow_iso
+from .util import dumps, normalize_iso, parse_dt, to_iso, utcnow, utcnow_iso
 
 STORED_POST_TYPES = {1, 2}
 NOT_CONTENT = "not_content"
@@ -83,9 +83,9 @@ def _upsert_topic(
         "title": topic.get("title") or "",
         "tags": dumps(topic.get("tags") or []),
         "excerpt": topic.get("excerpt"),
-        "created_at": topic.get("created_at"),
-        "bumped_at": topic.get("bumped_at"),
-        "last_posted_at": topic.get("last_posted_at"),
+        "created_at": normalize_iso(topic.get("created_at")),
+        "bumped_at": normalize_iso(topic.get("bumped_at")),
+        "last_posted_at": normalize_iso(topic.get("last_posted_at")),
         "posts_count": topic.get("posts_count"),
         "highest_post_number": topic.get("highest_post_number"),
         "views": topic.get("views"),
@@ -254,8 +254,8 @@ def _upsert_post(
         post.get("username"),
         post.get("trust_level"),
         1 if post.get("staff") else 0,
-        post.get("created_at"),
-        post.get("updated_at"),
+        normalize_iso(post.get("created_at")),
+        normalize_iso(post.get("updated_at")),
         post.get("version"),
         post.get("reply_to_post_number"),
         like_count,
@@ -453,11 +453,13 @@ def _record_coverage(
         )
 
 
-def repair_coverage(conn: sqlite3.Connection, forum_id: int | None = None) -> dict[str, Any]:
+def repair_coverage(
+    conn: sqlite3.Connection, forum_id: int | None = None, apply: bool = False
+) -> dict[str, Any]:
     """Set a forum's listing_floor to the oldest non-pinned bumped_at actually stored.
 
-    Explicit and per forum only: run automatically, this would invent gaps on forums that
-    were fully synced.
+    Dry run unless `apply` is set, and explicit and per forum only: run automatically, this
+    would invent gaps on forums that were fully synced.
     """
     if forum_id is None:
         return {"error": "repair_coverage needs a forum id"}
@@ -469,14 +471,28 @@ def repair_coverage(conn: sqlite3.Connection, forum_id: int | None = None) -> di
         " WHERE forum_id=? AND pinned=0 AND bumped_at IS NOT NULL",
         (forum_id,),
     ).fetchone()
-    oldest = row["oldest"] if row is not None else None
-    conn.execute("UPDATE forums SET listing_floor=? WHERE id=?", (oldest, forum_id))
-    return {
+    oldest = normalize_iso(row["oldest"]) if row is not None else None
+    previous = normalize_iso(forum["listing_floor"])
+    previous_at = parse_dt(previous)
+    oldest_at = parse_dt(oldest)
+    changed = previous_at != oldest_at
+    would_create_gap = previous_at is not None and oldest_at is not None and oldest_at > previous_at
+    if apply and changed:
+        conn.execute("UPDATE forums SET listing_floor=? WHERE id=?", (oldest, forum_id))
+    payload: dict[str, Any] = {
         "forum_id": forum_id,
-        "old_listing_floor": forum["listing_floor"],
+        "old_listing_floor": previous,
         "new_listing_floor": oldest,
-        "changed": forum["listing_floor"] != oldest,
+        "changed": changed,
+        "applied": bool(apply and changed),
     }
+    if would_create_gap:
+        payload["would_create_gap"] = True
+        payload["warning"] = (
+            "the new listing_floor is later than the old one: if this forum was fully"
+            " covered, the next sync will re-page the listing to heal the gap it creates"
+        )
+    return payload
 
 
 def sync(
@@ -542,8 +558,8 @@ def sync(
 
     conn.execute(
         'INSERT INTO sync_runs (started_at, finished_at, "trigger", requests, new_topic_ids,'
-        " updated_topic_ids, posts_new, posts_changed, partial, errors)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " updated_topic_ids, posts_new, posts_changed, partial, errors, forum_ids)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             started_iso,
             utcnow_iso(),
@@ -555,6 +571,7 @@ def sync(
             result.posts_changed,
             1 if result.partial else 0,
             dumps(result.errors),
+            dumps([category.id for category in categories]),
         ),
     )
     return result

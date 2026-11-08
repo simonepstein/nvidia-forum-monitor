@@ -45,7 +45,10 @@ def sync(
     repair_coverage: bool = typer.Option(
         False,
         "--repair-coverage",
-        help="reset the named forum's listing_floor to the oldest stored topic, then stop",
+        help="reset the named forum's listing_floor to the oldest stored topic (dry run)",
+    ),
+    apply_repair: bool = typer.Option(
+        False, "--apply", help="with --repair-coverage, write the change instead of a dry run"
     ),
 ) -> None:
     """Mirror the forums into SQLite."""
@@ -60,7 +63,7 @@ def sync(
                     _print({"error": "--repair-coverage needs exactly one --forum ID"})
                     raise typer.Exit(code=1)
                 conn = open_db(settings)
-                _print(run_repair(conn, forum[0]))
+                _print(run_repair(conn, forum[0], apply=apply_repair))
                 return
             result = run_sync(
                 settings=settings,

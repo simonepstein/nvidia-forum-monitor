@@ -206,6 +206,7 @@ enabled = false                  # needs BRAVE_API_KEY
      - **Topics found while closing a gap** are queued by the normal rules in step 3: new or changed topics only. Closing a gap never re-queues topics that are already complete.
      - **The two floors:** `backfill_floor` means the window applied to *posts*, and changes only when `lookback_days` grows. `listing_floor` means the window the *listing* has covered.
    - **Repair is explicit.** `sparkwatch sync --repair-coverage --forum ID` sets that forum's `listing_floor` to the oldest non-pinned `bumped_at` stored for it, and reports the old and new values. It runs for the named forum only, never automatically. An automatic repair would invent gaps on fully synced forums: on 2026-11-08, forum 721's oldest stored topic was 75 minutes later than its true floor.
+     - It is a **dry run** unless `--apply` is given, and the response carries `applied`, `changed` and — when the new floor is later than the old one — `would_create_gap` with a warning that the next sync will re-page the gap it creates.
 3. **Queue topics:** a topic is queued if it is new, if `highest_post_number` went up, if `bumped_at` changed, if this is a backfill, or if `topics.posts_complete` is still 0.
    - `posts_complete` is set to 1 when a topic's fetch ran to its natural end (every target batch older than the floor was skipped), and left at 0 when the time budget interrupted it.
    - That is what makes a partial run resume: the topic is not re-queued once it is complete, and posts outside the window never force a re-fetch.
@@ -270,6 +271,7 @@ This is regex only.
 ## 2. SQLite schema (`db.py`, migration 1)
 Every write is an idempotent upsert keyed on natural or Discourse IDs.
 - **Connection settings:** `PRAGMA journal_mode=WAL; foreign_keys=ON; busy_timeout=5000`.
+- **Timestamps:** every timestamp column holds one format, `YYYY-MM-DDTHH:MM:SS+00:00` (UTC, whole seconds). New writes normalise through `parse_dt` → `to_iso`, and migration 4 rewrote the existing rows, so a plain string comparison (`created_at >= ?`, `ORDER BY bumped_at`) is correct and `sql_query` users need no date functions. Comparisons in code still go through `julianday()` / `parse_dt` as a safety net.
 
 ```sql
 -- Mirror
@@ -685,7 +687,12 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - rebuild `missing_posts` to add `'not_content'` to the CHECK, then reclassify existing rows whose post has `post_type` 3 or 4.
 
   The migration must not touch any coverage value other than initialising `listing_floor`, which keeps 721 out of any re-sync.
-- **Migration 4 (Run B):**
+- **Migration 4 (Run A fixes, 2026-11-08):**
+  - `sync_runs.forum_ids` (JSON list of the forums a run covered);
+  - `recipes.engine_raw` (the engine name as the agent wrote it, searchable via `list_recipes(engine=…)`);
+  - mark legacy `hidden` tombstones due for recheck (`last_checked_at` back-dated), so the next sync reclassifies the ones that are `post_type` 3 or 4 as `not_content`;
+  - rewrite **every** timestamp column to the one stored format `YYYY-MM-DDTHH:MM:SS+00:00` (see §2, Timestamps). Unparseable values, such as a hand-written `benchmark_results.measured_at`, are left alone.
+- **Migration 5 (Run B):**
   - `post_tags(post_id PK, content_hash, models JSON, has_perf INT, has_benchmark INT, has_recipe INT, is_question INT, is_solution INT, summary TEXT, triage_model, prompt_version, tagged_at)`
   - `triage_runs`
 - **`sparkwatch triage`:**

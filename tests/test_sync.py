@@ -169,6 +169,27 @@ def test_sync_run_row_is_written(settings, conn, router, forum):
     assert row["" if False else "trigger"] == "cli"
     assert "[111]" in row["new_topic_ids"]
     assert row["partial"] == 0
+    assert row["forum_ids"] == "[723]"
+
+
+def test_sync_normalises_timestamps_on_write(settings, conn, router, forum):
+    topic = make_topic(112, bumped_days_ago=2, posts_count=1)
+    posts = [make_post(1121, 112, 1, "post")]
+    posts[0]["created_at"] = "2026-11-06T20:16:02.859Z"
+    posts[0]["updated_at"] = "2026-11-06T20:16:02.859Z"
+    topic["bumped_at"] = "2026-11-06T20:16:02.859Z"
+    topic["created_at"] = "2026-11-01T09:00:00.500Z"
+    forum.add_page(723, listing([topic]))
+    forum.add_topic(topic_payload(topic, posts), posts)
+    forum.install(router)
+    sync(settings=settings, conn=conn, client=DiscourseClient(settings), forum_ids=[723])
+
+    stored_topic = conn.execute("SELECT created_at, bumped_at FROM topics WHERE id=112").fetchone()
+    stored_post = conn.execute("SELECT created_at, updated_at FROM posts WHERE id=1121").fetchone()
+    assert stored_topic["created_at"] == "2026-11-01T09:00:00+00:00"
+    assert stored_topic["bumped_at"] == "2026-11-06T20:16:02+00:00"
+    assert stored_post["created_at"] == "2026-11-06T20:16:02+00:00"
+    assert stored_post["updated_at"] == "2026-11-06T20:16:02+00:00"
 
 
 def _two_page_forum(forum) -> tuple[list[dict], list[dict]]:
@@ -240,11 +261,20 @@ def test_repair_coverage_moves_the_floor_to_the_oldest_stored_topic(settings, co
 
     payload = repair_coverage(conn, 723)
 
-    assert payload["changed"] is True
-    assert payload["old_listing_floor"] == GAP_FLOOR
-    assert parse_dt(payload["new_listing_floor"]) == parse_dt("2026-10-25T17:59:55.686Z")
+    assert payload["applied"] is False
+    assert payload["would_create_gap"] is True
+    assert "later than the old one" in payload["warning"]
     row = conn.execute("SELECT listing_floor FROM forums WHERE id=723").fetchone()
-    assert parse_dt(row["listing_floor"]) == parse_dt("2026-10-25T17:59:55.686Z")
+    assert row["listing_floor"] == GAP_FLOOR
+
+    payload = repair_coverage(conn, 723, apply=True)
+
+    assert payload["changed"] is True
+    assert payload["applied"] is True
+    assert payload["old_listing_floor"] == GAP_FLOOR
+    assert payload["new_listing_floor"] == "2026-10-25T17:59:55+00:00"
+    row = conn.execute("SELECT listing_floor FROM forums WHERE id=723").fetchone()
+    assert row["listing_floor"] == "2026-10-25T17:59:55+00:00"
     untouched = conn.execute("SELECT listing_floor FROM forums WHERE id=721").fetchone()
     assert untouched["listing_floor"] == GAP_FLOOR
 
@@ -285,7 +315,17 @@ def test_cli_repair_coverage_reports_old_and_new(settings, conn):
     assert result.exit_code == 0
     assert "old_listing_floor" in result.stdout
     assert "new_listing_floor" in result.stdout
-    assert "2026-10-25" in result.stdout
+    assert '"applied": false' in result.stdout
+    assert conn.execute("SELECT listing_floor FROM forums WHERE id=723").fetchone()[0] == GAP_FLOOR
+
+    applied = CliRunner().invoke(app, ["sync", "--repair-coverage", "--forum", "723", "--apply"])
+
+    assert applied.exit_code == 0
+    assert '"applied": true' in applied.stdout
+    assert (
+        conn.execute("SELECT listing_floor FROM forums WHERE id=723").fetchone()[0]
+        == "2026-10-25T17:59:55+00:00"
+    )
 
 
 def test_cli_repair_coverage_needs_exactly_one_forum(settings, conn):

@@ -362,6 +362,60 @@ UPDATE missing_posts SET reason='not_content'
 
 MIGRATIONS: tuple[str, ...] = (MIGRATION_1, MIGRATION_2, MIGRATION_3)
 
+# One stored timestamp format: YYYY-MM-DDTHH:MM:SS+00:00. COALESCE keeps values that
+# SQLite cannot parse (a hand-written `measured_at`, say) instead of nulling them.
+_TS = "COALESCE(strftime('%Y-%m-%dT%H:%M:%S+00:00', {column}), {column})"
+
+
+def _normalise_sql(table: str, columns: tuple[str, ...]) -> str:
+    assignments = ",\n  ".join(f"{column} = {_TS.format(column=column)}" for column in columns)
+    return f"UPDATE {table} SET\n  {assignments};"
+
+
+MIGRATION_4 = """
+ALTER TABLE sync_runs ADD COLUMN forum_ids TEXT;
+ALTER TABLE recipes ADD COLUMN engine_raw TEXT;
+
+-- Legacy tombstones were labelled 'hidden' before post_type 3/4 became 'not_content'.
+-- Mark them due for recheck so the next sync reclassifies them.
+UPDATE missing_posts SET last_checked_at='1970-01-01T00:00:00+00:00' WHERE reason='hidden';
+""" + "\n".join(
+    _normalise_sql(table, columns)
+    for table, columns in (
+        ("forums", ("last_synced_at", "backfill_floor", "listing_floor")),
+        ("topics", ("created_at", "bumped_at", "last_posted_at", "first_fetched_at", "fetched_at")),
+        (
+            "posts",
+            ("created_at", "updated_at", "first_fetched_at", "changed_at", "fetched_at"),
+        ),
+        ("missing_posts", ("first_seen_at", "last_checked_at")),
+        ("sync_runs", ("started_at", "finished_at")),
+        (
+            "watchlist",
+            ("first_seen_at", "sighting_at", "sighting_acked_at", "created_at"),
+        ),
+        ("watch_hits", ("created_at",)),
+        ("digest_cursors", ("last_seen_at",)),
+        (
+            "repos",
+            ("pushed_at", "head_seen_at", "first_seen_at", "watched_at", "last_checked_at"),
+        ),
+        ("repo_mentions", ("mentioned_at",)),
+        ("repo_installs", ("installed_at", "updated_at")),
+        ("repo_events", ("occurred_at", "detected_at")),
+        ("compare_cache", ("fetched_at",)),
+        ("hf_models", ("first_seen_at",)),
+        ("hf_mentions", ("mentioned_at",)),
+        ("models", ("released_at", "updated_at")),
+        ("recipes", ("reported_at", "created_at")),
+        ("benchmark_results", ("measured_at", "created_at")),
+        ("research_notes", ("as_of", "created_at")),
+        ("flags", ("created_at", "resolved_at")),
+    )
+)
+
+MIGRATIONS: tuple[str, ...] = (MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4)
+
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     path = Path(db_path)

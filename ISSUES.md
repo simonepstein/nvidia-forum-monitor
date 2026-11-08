@@ -57,7 +57,7 @@ Not a spec change. SPEC §5's `sync_now` already defines the behaviour.
 - **Fix:** a listing cut short by `max_pages` or the time budget mustn't advance the floor past the oldest `bumped_at` actually listed. It also mustn't advance the incremental cutoff in a way that skips the rest. The next sync carries on listing.
 - **Repairing existing state is part of the fix.** The live database already records the wrong floor for forum 723, so a fix that only prevents future mistakes will trust it and fetch nothing. Add a repair step, e.g. a migration that resets each forum's floor to the oldest non-pinned `bumped_at` actually stored, or an explicit `sync --repair-coverage`. Report what it changed.
 - **The gap has been left in the live database on purpose, as the acceptance test.** Once the fix and the repair pass on fixtures:
-  1. Run `uv run sparkwatch sync --repair-coverage --forum 723`, then `uv run sparkwatch sync --forum 723` once, **with no `--max-pages`**. Stop and report if it goes over about 400 requests.
+  1. Run `uv run sparkwatch sync --repair-coverage --forum 723 --apply` (dry run without `--apply`), then `uv run sparkwatch sync --forum 723` once, **with no `--max-pages`**. Stop and report if it goes over about 400 requests.
   2. **Forum 723 only.** Don't touch forum 721.
   3. Expect the topic count for 723 to rise from 30, with `bumped_at` reaching back towards 2026-09-09, the floor still at about 2026-09-09, and the run's `partial` set to false.
   4. A second immediate sync of 723 makes about 1–2 requests.

@@ -24,7 +24,15 @@ uv run sparkwatch digest               # what's new since the last digest
 uv run sparkwatch sync --forum 723 --max-pages 1     # a small, polite live run
 uv run sparkwatch backfill --days 120  # widen the window; never re-crawls from scratch
 uv run sparkwatch repos check          # watched repos: head moved? new release or tag?
+uv run sparkwatch sync --repair-coverage --forum 723            # dry run: show the floor change
+uv run sparkwatch sync --repair-coverage --forum 723 --apply    # write it, then re-sync
 ```
+
+`--repair-coverage` is explicit and per forum: it resets that forum's `listing_floor` to the
+oldest topic it actually stored, which is what heals a listing that stopped early (say, after
+`--max-pages`). It is a dry run unless you pass `--apply`, and it warns when the new floor is
+*later* than the old one — on a fully covered forum that creates a gap the next sync will
+re-page to close.
 
 Configuration lives in `config.toml`; any value can be overridden with `SPARKWATCH_*`
 environment variables using `__` for nesting, e.g.
