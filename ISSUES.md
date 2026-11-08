@@ -185,3 +185,36 @@ Not a spec change. SPEC's Testing approach already defines the behaviour.
 - `watch_repo` creating a baseline with no events;
 - flags and notes saving and reading back;
 - forum politeness (every sparkwatch forum request at 1 per second or slower).
+
+---
+
+## P0 re-test (2026-11-08 15:10, `fix/run-a-issues` @ 24a9aab)
+All nine P0 fixes held up when checked against the data:
+- `sync_now` returns results, not `busy` (2 requests).
+- `repo_status` says behind 6 / ahead 0, and the digest agrees.
+- `search_posts` handles `.`, `/` and `tok/s`.
+- The digest shows no history as new, plus a single backfilled line. A fresh cursor's first page is 8.7 KB and the second is 1.5 KB.
+- `whats_new_for` applies `since` everywhere.
+- The 723 gap is closed: 95 topics, and a re-sync makes 1 request.
+- rps values of 0 and 1000 are rejected with a one-line error and exit code 1.
+- Live tests: 3 passed in about 3 s. Offline: 241 passed, 1 skipped. Ruff is clean.
+- `sync_runs` shows that nothing re-listed 721. Runs 13 and 15 are incremental `sync_now` calls (8 and 6 requests).
+
+New findings, all P2:
+
+| # | Issue | Evidence |
+|---|---|---|
+| 26 | `--repair-coverage` on a fully covered forum moves `listing_floor` *forward*, to the oldest stored topic, and reports `changed: true`. That creates a phantom gap, which the next sync re-pages to heal. It's harmless but surprising, and the fix agent's own test plan says to run it now. **Fix options:** a `--dry-run` default, a warning when the new floor is later than the old one, or refusing unless `--force` is given. | On a scratch copy: 723 went 12:27→21:05 and 721 went 13:03→14:19. The next 723 sync made 4 requests and restored the floor. |
+| 27 | Mixed timestamp formats in comparable columns: Discourse `…T21:05:16.859Z` alongside sparkwatch `…T12:27:53+00:00` (e.g. `listing_floor` after a repair). String comparisons in SQL are only correct to the second, and `changed` compares strings. Normalise on write. | Repair output above |
+| 28 | `list_installs` only reads `compare_cache`. After the head moves, `behind_by`/`ahead_by` stay `null` until `repo_status` or the digest fetches the compare. **Fix options:** compute on a miss, or show `"unknown (run repo_status)"`. | Calling it alongside the first `repo_status` returned null; afterwards it returned 6/0. |
+| 29 | `search_posts("vllm or sglang")` silently ANDs `"or"` as a term, and no hint is shown. The checklist expected a hint. Detect bare `or`/`and`/`not`/`near` and give the hint. | `match: "vllm" AND "or" AND "sglang"`, with no `hint` key |
+| 30 | A quoted phrase in plain mode gets split into separate terms (`"tensor parallel"` → `"tensor" AND "parallel"`). Keep user-quoted phrases as FTS phrases. | s5 test |
+| 31 | `raw_fts=True` with a bad query returns a normal JSON result `{"error": …}`, not an MCP tool error (`isError`). The checklist said "expect a tool error". Pick one and make the checklist match. | s4 test |
+| 32 | The 94 legacy tombstones stay `hidden` until `missing_post_recheck_days` (30) has passed, so #16 isn't visibly fixed for a month. Have migration 3 mark the old `hidden` rows as due for recheck so the next sync reclassifies them, at a few requests per topic. | `select reason,count(*) from missing_posts` → `hidden\|94` |
+| 33 | `sync_runs` has no forum column, so you can't tell from the table which forum a run covered. | Schema |
+
+Side effects of this re-test:
+- a digest cursor named `claude-review` now exists in the DB;
+- `compare_cache` has a b4c93e→f651fa entry;
+- I made one 723 sync and one `sync_now`, both incremental.
+- A backup taken before the re-test is at `~/dev/sparkwatch-review/sparkwatch-postfix.db`.
