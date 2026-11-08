@@ -525,4 +525,5 @@ def test_detail_renders_each_topics_posts_under_that_topic(settings, conn):
     assert post_lines[1][0] < second_heading < post_lines[2][0]
 
     lean = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
-    assert "·" not in render_global_digest(lean)
+    lean_lines = render_global_digest(lean).splitlines()
+    assert not [line for line in lean_lines if line.startswith("    · ")]

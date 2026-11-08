@@ -926,7 +926,7 @@ def _capped_header(shown: int, total: int) -> str:
 
 
 def render_global_digest(payload: dict[str, Any]) -> str:
-    """Readable CLI rendering: one line per hot topic, then the extra sections."""
+    """Readable CLI rendering: a block per hot topic, then the extra sections."""
     lines = [
         f"sparkwatch global-digest — {payload['since']} → {payload['until']}"
         f" (cursor {payload['cursor']})"
