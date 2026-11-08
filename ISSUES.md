@@ -771,8 +771,9 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 
 ## #52 fix: tag events keyed on the names already seen (2026-11-08)
 - **`repos.py`:**
-  - `_save_seen_tags()` writes `repos.etags['seen_tags']`, the names listed by the last tags page, on every non-304 tags response. No migration; `_etags()` is now typed `dict[str, Any]` because the value is a list.
+  - `_update_etags()` is the one read-modify-write on `repos.etags` (a dict of patches, `None` removes a key); `_save_etag`, `_save_meta_checked` and `_save_github_id` now delegate to it, and the tags branch patches `tags` and `seen_tags` in a single call. `seen_tags` holds the names listed by the last tags page, written on every non-304 tags response. No migration; `_etags()` is now typed `dict[str, Any]` because the value is a list.
   - A `tag` event is emitted only for a name absent from `seen_tags`. `latest_tag` still records `tags[0]`.
+  - `_has_event()` skips a name that already has a `repo_events` row before the date request, so `changed` never lists a tag the `INSERT OR IGNORE` would drop (a name that leaves the page of 10 and returns), and no request is spent on it.
   - If `seen_tags` is missing — the `watch_repo` baseline, or a row watched before this fix — the check records the names and emits nothing. Repo 87 therefore does not re-emit its 9 tags on its next check.
   - `_tag_commit_date()` spends one `GET /repos/{o}/{n}/commits/{sha}` per genuinely new tag (the `commit.sha` from the tags payload, else the tag name) and returns `commit.committer.date`, then `commit.author.date`. A 404, any `GitHubError` (including `RateLimitStop`), or a payload without a date gives `null`; the event is still created. No tag is new → no extra request.
   - `repo_status` now filters and orders its `releases` by `COALESCE(occurred_at, detected_at)`, so a tag with an unknown commit date still shows since the install; its stored `occurred_at` stays `null`.
@@ -783,6 +784,8 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - A row with `latest_tag` but no `seen_tags` (the repo 87 shape) → 0 events, 10 names recorded.
   - The baseline test now also asserts `etags['seen_tags'] == ['v0.11.0']`.
   - `repo_status` lists a tag with `occurred_at` NULL when it was detected after the install date.
+  - A tag that returns to the page after dropping off (its event already exists) → no second event, `changed: []`, and no `/commits/` request.
+- **Review follow-up (code review of 14a0ba6):** the payload could claim a tag whose `INSERT OR IGNORE` was dropped, and the tags branch wrote `repos.etags` three times; `_has_event()` and `_update_etags()` fix both, and the returning-tag test pins the first. The last-page semantics stay as specified: a name that leaves the page and comes back is "new" again, but its single `repo_events` row means at most one event and no repeat in `changed`.
 - **Rehearsal (on `data/sparkwatch.db.backup-52`, a `sqlite3.backup()` copy; live DB untouched):**
   - `repos check --repo eugr/spark-vllm-docker` → 3 requests, `auth: token`, `changed: []`. The tags ETag matched, so nothing was written.
   - With the copy's tags ETag removed, the next check fetched all 10 names → `changed: []`, `seen_tags` = the 10 `staging-current-*` names, tag events still 9.

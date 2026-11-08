@@ -110,27 +110,24 @@ def _etags(repo: Any) -> dict[str, Any]:
     return loads(repo["etags"], {}) or {}
 
 
-def _save_etag(conn: sqlite3.Connection, repo_id: int, key: str, etag: str | None) -> None:
-    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
-    etags = loads(row["etags"], {}) or {}
-    if etag:
-        etags[key] = etag
-    else:
-        etags.pop(key, None)
-    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+def _update_etags(conn: sqlite3.Connection, repo_id: int, values: dict[str, Any]) -> None:
+    """Patch `repos.etags` in one read-modify-write; a None value removes the key.
 
-
-def _save_seen_tags(conn: sqlite3.Connection, repo_id: int, names: list[str]) -> None:
-    """Record the tag names listed by the last tags page, so the next check can diff.
-
-    ISSUES #52: `latest_tag` alone says nothing about the rest of the page, so any
-    non-304 tags response (an ETag change is enough) reported every listed tag as new.
-    The names live in `repos.etags['seen_tags']`, like `meta_checked_at`, so no migration.
+    A dict rather than keyword arguments, because keys such as `head:main` are not
+    identifiers.
     """
     row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
     etags = loads(row["etags"], {}) or {}
-    etags["seen_tags"] = list(names)
+    for key, value in values.items():
+        if value is None:
+            etags.pop(key, None)
+        else:
+            etags[key] = value
     conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+
+
+def _save_etag(conn: sqlite3.Connection, repo_id: int, key: str, etag: str | None) -> None:
+    _update_etags(conn, repo_id, {key: etag or None})
 
 
 def _tag_commit_date(client: GitHubClient, repo: Any, tag: dict[str, Any]) -> str | None:
@@ -170,10 +167,7 @@ def _save_meta_checked(conn: sqlite3.Connection, repo_id: int, when_iso: str) ->
     SPEC §4b step 3: metadata is fetched at most once a day, measured from the last metadata
     fetch, not from `last_checked_at` (which every check moves). A 304 counts as fetched.
     """
-    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
-    etags = loads(row["etags"], {}) or {}
-    etags["meta_checked_at"] = when_iso
-    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+    _update_etags(conn, repo_id, {"meta_checked_at": when_iso})
 
 
 GITHUB_ID_KEY = "github_id"
@@ -193,10 +187,7 @@ def _github_id(repo: Any) -> int | None:
 
 
 def _save_github_id(conn: sqlite3.Connection, repo_id: int, github_id: int) -> None:
-    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
-    etags = loads(row["etags"], {}) or {}
-    etags[GITHUB_ID_KEY] = int(github_id)
-    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+    _update_etags(conn, repo_id, {GITHUB_ID_KEY: int(github_id)})
 
 
 def _repo_row(conn: sqlite3.Connection, repo_id: int) -> Any:
@@ -360,6 +351,16 @@ def get_or_create_repo(conn: sqlite3.Connection, repo: str) -> Any:
         (owner, name, url, utcnow_iso()),
     )
     return conn.execute("SELECT * FROM repos WHERE url=?", (url,)).fetchone()
+
+
+def _has_event(conn: sqlite3.Connection, repo_id: int, kind: str, ref: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM repo_events WHERE repo_id=? AND kind=? AND ref=?",
+            (repo_id, kind, ref),
+        ).fetchone()
+        is not None
+    )
 
 
 def _event(
@@ -674,25 +675,23 @@ def check_repos(
                     entries = [item for item in response.json() if item.get("name")]
                     tags = [item["name"] for item in entries]
                     seen = _etags(row).get("seen_tags")
-                    _save_etag(conn, repo_id, "tags", new_etag)
-                    _save_seen_tags(conn, repo_id, tags)
+                    _update_etags(conn, repo_id, {"tags": new_etag or None, "seen_tags": tags})
                     if isinstance(seen, list) and not baseline:
                         for item in entries:
-                            if item["name"] in seen:
+                            name = item["name"]
+                            if name in seen or _has_event(conn, repo_id, "tag", name):
                                 continue
                             _event(
                                 conn,
                                 repo_id,
                                 "tag",
-                                item["name"],
+                                name,
                                 now_iso,
-                                title=item["name"],
-                                url=f"{row['url']}/releases/tag/{item['name']}",
+                                title=name,
+                                url=f"{row['url']}/releases/tag/{name}",
                                 occurred_at=_tag_commit_date(client, row, item),
                             )
-                            changed.append(
-                                {"repo": f"{row['owner']}/{row['name']}", "tag": item["name"]}
-                            )
+                            changed.append({"repo": f"{row['owner']}/{row['name']}", "tag": name})
                     if tags:
                         conn.execute("UPDATE repos SET latest_tag=? WHERE id=?", (tags[0], repo_id))
 

@@ -740,3 +740,28 @@ def test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline(settings, co
     assert payload["changed"] == []
     assert tag_events(conn) == []
     assert len(repo_etags(conn)["seen_tags"]) == 10
+
+
+def test_a_tag_returning_to_the_page_does_not_duplicate_its_event(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0", "v0.10.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    conn.execute(
+        "INSERT INTO repo_events (repo_id, kind, ref, detected_at)"
+        " SELECT id, 'tag', 'v0.9.0', ? FROM repos WHERE url=?",
+        (PAST, f"https://github.com/{REPO}"),
+    )
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        [{"name": "v0.9.0", "commit": {"sha": SHA2}}, {"name": "v0.11.0"}],
+        headers={"ETag": '"tags-returned"'},
+    )
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == []
+    assert [event["ref"] for event in tag_events(conn)] == ["v0.9.0"]
+    assert github.calls.count(f"{BASE}/commits/{SHA2}") == 0
+    assert repo_etags(conn)["seen_tags"] == ["v0.9.0", "v0.11.0"]
