@@ -643,8 +643,29 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - 3 topics, including a long one, with their `posts.json` batches;
   - GitHub responses for one repo: commit SHA, releases/latest, tags, metadata, a compare between two SHAs, and commits?until=.
 - An `edited_post.json` variant has its `raw` changed and `version` + 1.
-- Tests never touch the network. `respx` mocks Discourse and GitHub.
-- MCP tools are tested by calling the tool functions directly against a temporary database.
+- **Hand-made fixtures for edge cases** (`tests/fixtures/synthetic/`), built by editing recorded responses:
+  - a topic whose `stream` contains the ID of a deleted post, which `posts.json` leaves out;
+  - a post edited in the middle of a thread, not just the newest one;
+  - a deleted or private topic, returning 404 and 403;
+  - a 429 response with `Retry-After`, followed by a 200;
+  - a 5xx that still fails after `max_retries`;
+  - for GitHub: a 304 response, a 404 for a branch that's gone, and a compare with more than 250 commits.
+- Tests never touch the network by default. `respx` mocks Discourse and GitHub, and a `conftest.py` guard makes any request that hasn't been mocked fail the test.
+- Most MCP tools are tested by calling the tool functions directly against a temporary database. A small set of **protocol tests** also run the real server (see Verification).
+- **Opt-in live tests** (`tests/live/`, marked `@pytest.mark.live`) are skipped unless `SPARKWATCH_LIVE=1` is set.
+  - They make a handful of polite requests (one listing page, one topic, one GitHub head check).
+  - They check that the fields the code depends on still exist and have the expected types.
+  - When they fail, the API has drifted. Re-record the fixtures with `record_fixtures.py`.
+  - They are never run in CI.
+- **Scripted agent evals:** a frozen database snapshot in `tests/evals/`, built from fixtures, with a short list of questions and expected facts. Running them needs an agent and API access, so they're manual for the MVP. The harness is described under Verification.
+- **CI:** GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
+  1. `astral-sh/setup-uv`
+  2. `uv sync --locked`
+  3. `uv run ruff check`
+  4. `uv run ruff format --check`
+  5. `uv run pytest -m "not live"`
+
+  It uses a single Python 3.12 job, with no secrets and no network access beyond installing dependencies.
 
 ## Build plan
 **Run A (MVP, no LLM):**
@@ -657,6 +678,7 @@ MCP prompt templates encode the two main workflows. They're short and instructio
 4. `repos.py`: head checks, releases and tags, installs, compare with caching.
 5. `digest.py` and all MCP tools, resources and prompts in §5.
 6. `deploy/` systemd user units, and a README covering install, MCP registration and the timer.
+7. `.github/workflows/ci.yml`, the MCP protocol tests and the live test suite. The eval harness can come at the checkpoint.
 
 **Checkpoint:**
 1. Sync the default 60-day window live.
@@ -705,6 +727,22 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - a second call is served from `compare_cache`, with no compare request;
   - `since=<date>` resolves to the right base commit.
 - `sql_query` rejects `DELETE`, multiple statements and `PRAGMA`.
+- Discourse edge cases:
+  - a deleted post in `stream` is skipped without an error, and later syncs don't keep re-requesting it (record it in `sync_runs.errors` once, then remember it);
+  - a 404 or 403 topic is logged, skipped, and doesn't stop the sync;
+  - a 429 with `Retry-After` waits for the stated time, then succeeds;
+  - a 5xx that persists past `max_retries` fails that topic only;
+  - an edit in the middle of a thread is caught by the `refetch_recent_days` re-fetch when it's in the window. A test documents that edits older than the window are *not* caught.
+- GitHub edge cases: a 304 creates no events, a branch that's gone creates a `branch_gone` event, and a compare with more than 250 commits returns `ahead_by` with `truncated: true`.
+- Locking and concurrency:
+  - while one process holds the write lock, `sync_now`, `check_repos_now` and the CLI `sync` return or exit `busy` straight away;
+  - while a sync is writing (simulated with an open write transaction on a second connection), MCP read tools still return results, because WAL mode allows it, and `sql_query` doesn't block;
+  - a process that crashes mid-sync leaves no stale lock, because `fcntl` locks are released when the process exits.
+- MCP protocol (`tests/test_mcp_protocol.py`) starts `sparkwatch serve-mcp` over stdio with the `mcp` client SDK, against a temporary database:
+  - `list_tools` returns every tool in §5, and each input schema has the documented required and optional arguments. A snapshot file catches accidental renames.
+  - `list_prompts` and `list_resources` return the documented items.
+  - Calling `get_posts` with a small `max_chars` returns `truncated: true` and a `next` argument set. Passing `next` back returns the rest, with no overlap and no gaps.
+  - Errors (an unknown topic ID, a bad SQL statement) come back as MCP tool errors with a clear message, not as a crashed server.
 
 **Live smoke test:**
 1. `uv run sparkwatch sync --forum 723 --max-pages 1`.
@@ -715,3 +753,11 @@ MCP prompt templates encode the two main workflows. They're short and instructio
 1. `uv run mcp dev src/sparkwatch/mcp_server.py`: call `sync_now`, `digest`, `find_model_mentions("GLM 5.3 Flash")` and `model_summary`.
 2. In Claude Code, use the `catch_up` prompt, then ask: "What's the best way to serve GLM 5.3 Flash on two Sparks today?" Check that it records a recipe and a note with verified quotes.
 3. Ask the same question again: the second answer should start from the saved note and only read posts added since.
+
+**Scripted agent evals** (manual for the MVP, `uv run python tests/evals/run.py`):
+- A frozen database built from fixtures, plus a YAML file of cases. Each case has a prompt, such as `catch_up` or `serve_model("GLM 5.3 Flash")`, and the facts expected in the answer and in the database afterwards. For example:
+  - a recipe recorded for the model, with `topology='dual-spark'` and verified quotes;
+  - a note saved;
+  - the cited post URLs.
+- The runner drives Claude Code headless (`claude -p`) with only the sparkwatch MCP server enabled. It then checks the database and the answer text against the expected facts.
+- Use it after changing tool descriptions or prompts, to catch regressions in how the agent uses the tools. It isn't run in CI because it needs API access.
