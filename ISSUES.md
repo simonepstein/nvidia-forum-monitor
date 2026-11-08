@@ -859,3 +859,8 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 - **Observed:** the tag event above stored `2026-09-28T17:39:45Z`. The timestamp scanner flags `repo_events.occurred_at` as MIXED on the copy. The live DB is still clean, because no real tag or release has been stored since migration 4.
 - **Cause:** `_tag_commit_date` returns GitHub's `committer.date` verbatim, and the release path passes `release["published_at"]` verbatim (`repos.py`, `occurred_at=release.get("published_at")`). This breaks SPEC §2's single timestamp format (#27), and `repo_status` compares `COALESCE(occurred_at, detected_at)` as strings.
 - **Fix:** normalise both with `to_iso(parse_dt(...))` before `_event`. Add a test that a `…Z` release or tag date is stored as `+00:00`.
+
+## #54 fix (2026-11-08, review session, at the user's request)
+- **Change:** `repos._event` normalises `occurred_at` with `to_iso(parse_dt(...))` for every event kind, so release `published_at` and tag commit dates are stored as `YYYY-MM-DDTHH:MM:SS+00:00`. An unparseable value is stored as null, not verbatim.
+- **Test:** `test_github_z_dates_are_stored_in_the_canonical_format`, with a `…Z` release and a `…Z` tag commit date. It fails without the fix and passes with it. Full suite: 401 passed, 1 skipped. ruff is clean.
+- **No data repair needed:** the live `repo_events.occurred_at` has no `Z` values.

@@ -376,6 +376,10 @@ def _event(
     url: str | None = None,
     occurred_at: str | None = None,
 ) -> None:
+    # GitHub dates arrive as "...Z"; store the one canonical format (SPEC §2,
+    # ISSUES #54). An unparseable date is stored as null rather than verbatim.
+    moment = parse_dt(occurred_at)
+    occurred_at = to_iso(moment) if moment is not None else None
     conn.execute(
         "INSERT OR IGNORE INTO repo_events (repo_id, kind, ref, prev_ref, commits_ahead, title,"
         " body_excerpt, url, occurred_at, detected_at) VALUES (?,?,?,?,?,?,?,?,?,?)",

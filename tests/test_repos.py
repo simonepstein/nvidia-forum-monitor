@@ -897,3 +897,38 @@ def test_a_tag_returning_to_the_page_does_not_duplicate_its_event(settings, conn
     assert [event["ref"] for event in tag_events(conn)] == ["v0.9.0"]
     assert github.calls.count(f"{BASE}/commits/{SHA2}") == 0
     assert repo_etags(conn)["seen_tags"] == ["v0.9.0", "v0.11.0"]
+
+
+def test_github_z_dates_are_stored_in_the_canonical_format(settings, conn, router, github):
+    """ISSUES #54: GitHub's "...Z" dates are normalised to +00:00 for releases and tags."""
+    baseline(github, tags=("v0.11.0",))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(
+        f"{BASE}/releases/latest",
+        {
+            "tag_name": "v0.12.0",
+            "name": "v0.12.0",
+            "body": "notes",
+            "html_url": "u",
+            "published_at": "2026-03-04T05:06:07Z",
+        },
+    )
+    github.add(
+        f"{BASE}/tags",
+        [{"name": "v0.12.0", "commit": {"sha": SHA2}}, {"name": "v0.11.0"}],
+        headers={"ETag": '"tags-z"'},
+    )
+    github.add(
+        f"{BASE}/commits/{SHA2}",
+        {"commit": {"committer": {"date": "2026-02-02T03:04:05Z"}}},
+    )
+    check_repos(conn, settings, repo=REPO)
+
+    dates = dict(conn.execute("SELECT kind, occurred_at FROM repo_events").fetchall())
+    assert dates == {
+        "release": "2026-03-04T05:06:07+00:00",
+        "tag": "2026-02-02T03:04:05+00:00",
+    }
