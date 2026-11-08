@@ -1,0 +1,128 @@
+[
+  {
+    "sha": "c4d20c9725c9580a4ed06d52b42d2949486ac902",
+    "node_id": "C_kwDOVOh2itoAKGM0ZDIwYzk3MjVjOTU4MGE0ZWQwNmQ1MmI0MmQyOTQ5NDg2YWM5MDI",
+    "commit": {
+      "author": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T04:21:20Z"
+      },
+      "committer": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T04:21:20Z"
+      },
+      "message": "Round 138 (cont. 3): THE PROMOTION PREP — the loop scripts follow production to the promoted native stack: autonomous-window.sh stops/restores production via the production repo's own scripts (PROD_REPO in local.sh; PROD_TIP becomes the ARCHIVED baseline checkout — the duel's production-for-testing serve); autonomous-cron.sh guards glm53-native-tf and restarts via the production repo; autonomous-poke.sh health-checks glm53-native-tf via the production repo's config; run-qualification.sh's prod_running guard checks glm53-native-tf (the archived tip's glm53-flash-tf serves only as the duel baseline INSIDE windows and must not trip it); the newprodqual phase added (the promotion battery on the testing port: the §2 gates, hardmode's fifteenth 95, the vision 4/4, the bench); the bash ${VAR:?...} apostrophe lesson (a quote char inside the default word opens an unclosable context — the window script reworded)",
+      "tree": {
+        "sha": "33e76c2c5682e4f8200ac4823dddb8288e46ec2f",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/33e76c2c5682e4f8200ac4823dddb8288e46ec2f"
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+    "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+    "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "3e94d763a92cffb01e355e84f528e9506660e386",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+        "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/3e94d763a92cffb01e355e84f528e9506660e386"
+      }
+    ]
+  },
+  {
+    "sha": "3e94d763a92cffb01e355e84f528e9506660e386",
+    "node_id": "C_kwDOVOh2itoAKDNlOTRkNzYzYTkyY2ZmYjAxZTM1NWU4NGY1MjhlOTUwNjY2MGUzODY",
+    "commit": {
+      "author": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T04:17:56Z"
+      },
+      "committer": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T04:17:56Z"
+      },
+      "message": "Round 138 (cont. 2): THE ZSTEP DUEL RE-PAIRED — the same-window pair on the adopted 14-patch engine (campaign-20261108-035708): solo 68.3/68.1 vs 58.4/58.4 = 116.8% (a new high), c2 118.5 vs 86.9 at its floor = 136.4% there (its top ~110 = 107.7%), c4 169.2 = our best c4 (109.2% at production's floor 154.5), ITL 14.7 vs 17.1 ms/token = 116%, overhead 184 vs 184 ms = 100.0%, the cold d8192 3,809 ms = 450%; the anchors re-paired and the chart re-rendered; THE (USER) PROMOTION COMMISSIONED — the 14-patch native stack becomes production (a new repo on the head owns the lifecycle, the old tip recipe archives and remains the duel baseline on 8001, the testing repo remains the dev line), the night runs the standing loop",
+      "tree": {
+        "sha": "3ec3dd2aa73c43cc351bbae96d3b858c553b9b86",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/3ec3dd2aa73c43cc351bbae96d3b858c553b9b86"
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+    "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/3e94d763a92cffb01e355e84f528e9506660e386",
+    "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+        "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5"
+      }
+    ]
+  },
+  {
+    "sha": "b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "node_id": "C_kwDOVOh2itoAKGI0YzkzZTBiYjA0MzdhNDFiNGQzZGNmMTkyZGJmMTdhNWExMTFiZjU",
+    "commit": {
+      "author": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "committer": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "message": "Round 138: THE 0082 PORT QUALIFIED AND ADOPTED — the 0082qual A/B (campaign-20261108-024926, both arms the SAME 14-patch image, TF_EXL3_PDL=0 vs unset): the arms' greedy content IDENTICAL (the same 80cc3802… sha as every window — the fork's 108/108 exactness confirmed on the real model), the §2 gates ALL PASS, hardmode 95 (the FOURTEENTH consecutive), the vision 4/4, prefill flat (the bench pp d0 1,528, inside the band — the prefill row stands at the 0080qual crossing); the fork's measured chain gain did NOT transfer to our shape (c2 118.0 vs 119.1, c4 169.6 vs 170.4, ITL -0.3%, solo flat — the launch-COUNT class of 0030 transferred at concurrency, the launch-OVERLAP class doesn't; the second decode-side non-transfer); ADOPTED anyway: bit-safe, knobbed, neutral everywhere, register-neutral on our sm_121 build (rot_in 19, gateup_epilogue 40, the p kernels 79 = the s kernels — no record work), and the fork's 0083+ builds on this exact base; config.sh's PATCHES carries glm-zz-zstep.patch (the fourteenth; verified per the sourced-config skill — the 14-name probe, config_line RC=0); README/DELTAS/ledger/PERF_PLAN/ECOSYSTEM updated (the transfer pattern: prefill-side claims three for three, decode-side one for three); LAUNCHED the duel re-pair on the adopted 14-patch stack",
+      "tree": {
+        "sha": "c13f93d50e3d96825cba25e1faca8c4c0189b884",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/c13f93d50e3d96825cba25e1faca8c4c0189b884"
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/cceb744a496c3713c21be35dd2afdbae060ebaf5"
+      }
+    ]
+  }
+]

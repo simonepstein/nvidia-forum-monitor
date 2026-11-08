@@ -1,0 +1,63 @@
+[general]
+db_path = "data/sparkwatch.db"
+log_level = "INFO"
+
+[forum]
+base_url = "https://forums.developer.nvidia.com"
+user_agent = "sparkwatch/0.1"
+requests_per_second = 1.0
+max_retries = 5
+timeout_s = 30
+posts_batch_size = 50
+
+[[forum.categories]]
+id = 721
+path = "accelerated-computing/dgx-spark-gb10/dgx-spark-gb10"
+name = "DGX Spark / GB10"
+
+[[forum.categories]]
+id = 723
+path = "accelerated-computing/dgx-spark-gb10/dgx-spark-gb10-projects"
+name = "DGX Spark / GB10 Projects"
+
+[sync]
+lookback_days = 60
+refetch_recent_days = 7
+sync_now_time_budget_s = 90
+missing_post_recheck_days = 30
+
+[relevance]
+weights = { dual = 3.0, engine = 1.5, quant = 1.5, perf = 1.0, bench = 1.5, model_size = 1.0, family = 1.0, watch = 4.0 }
+families = ["qwen", "llama", "deepseek", "gpt-oss", "glm", "kimi", "mistral", "gemma", "phi", "nemotron", "minimax", "hunyuan", "granite"]
+
+[relevance.keywords]
+dual = ["dual spark", "two sparks", "2x spark", "2 sparks", "stacked", "cluster", "connectx", "qsfp", "roce", "nccl", "tensor parallel", "tp=2", "tp 2", "pipeline parallel", "multi-node", "ray"]
+engine = ["vllm", "sglang", "trt-llm", "tensorrt-llm", "llama.cpp", "llama-server", "ollama", "lm studio", "exllama", "nim"]
+quant = ["nvfp4", "fp4", "fp8", "mxfp4", "int4", "awq", "gptq", "gguf", "q4_k_m", "q8_0", "exl2", "exl3"]
+perf = ["tok/s", "tokens/s", "t/s", "tps", "prefill", "decode", "benchmark", "throughput", "latency"]
+bench = ["humaneval", "mbpp", "livecodebench", "swe-bench", "aider", "bfcl", "tau-bench", "tau2", "gpqa", "mmlu", "aime", "ifeval", "ruler"]
+
+[hardware]
+dual_spark_usable_gb = 240
+single_spark_usable_gb = 120
+kv_overhead_frac = 0.10
+
+[repos]
+max_compare_commits = 50
+max_compare_pages = 3
+
+[mcp]
+default_limit = 20
+max_limit = 200
+max_chars = 40000
+
+[llm]
+base_url = "http://localhost:8000/v1"
+model = "local-model"
+api_key = "none"
+structured_output = "json_schema"
+chunk_tokens = 10000
+prompt_version = 1
+
+[websearch]
+enabled = false

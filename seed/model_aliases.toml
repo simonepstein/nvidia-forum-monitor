@@ -1,0 +1,27 @@
+[[alias]]
+alias = "glm 5.3 flash"
+canonical = "glm-5.3-flash"
+
+[[alias]]
+alias = "glm-5.3-flash"
+canonical = "glm-5.3-flash"
+
+[[alias]]
+alias = "deepseek v4.1 flash"
+canonical = "deepseek-v4.1-flash"
+
+[[alias]]
+alias = "deepseek-v4.1-flash"
+canonical = "deepseek-v4.1-flash"
+
+[[alias]]
+alias = "qwen3.8 flash next"
+canonical = "qwen3.8-flash-next"
+
+[[alias]]
+alias = "qwen3.8-flash-next"
+canonical = "qwen3.8-flash-next"
+
+[[alias]]
+alias = "qwen4"
+canonical = "qwen4"

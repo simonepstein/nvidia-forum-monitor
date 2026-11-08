@@ -1,0 +1,36 @@
+# Scripted agent evals. Manual for the MVP: they need an agent and API access.
+#
+#   uv run python tests/evals/build_db.py
+#   uv run python tests/evals/run.py            # add --dry-run to only check the cases file
+#
+# Each case drives Claude Code headless (`claude -p`) with only the sparkwatch MCP server
+# enabled, then checks both the database afterwards and the facts expected in the answer.
+
+cases:
+  - name: catch_up_flags_work
+    prompt: "Use the catch_up prompt: catch me up on the DGX Spark forums and flag anything that matters."
+    expect:
+      database:
+        flags_min: 1
+      answer_contains:
+        - "GLM"
+    allow_sync: false
+
+  - name: serve_glm_records_recipe
+    prompt: "What is the best way to serve GLM 5.3 Flash on two Sparks today? Use the serve_model workflow."
+    expect:
+      database:
+        recipes_min: 1
+        recipe_topology: "dual-spark"
+        notes_min: 1
+        evidence_verified: true
+      answer_contains:
+        - "GLM"
+
+  - name: frontier_saves_note
+    prompt: "Use the frontier prompt: what are the strongest models people run on two Sparks right now?"
+    expect:
+      database:
+        notes_min: 1
+      answer_contains:
+        - "Spark"

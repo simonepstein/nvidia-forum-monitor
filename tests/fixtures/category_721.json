@@ -1,0 +1,3109 @@
+{
+  "users": [
+    {
+      "id": 1246178,
+      "username": "rjensen",
+      "name": "Robbie Jensen",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/rjensen/{size}/254127_2.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "moderator": true,
+      "trust_level": 2
+    },
+    {
+      "id": 194229,
+      "username": "TomNVIDIA",
+      "name": "TomNVIDIA",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/tomnvidia/{size}/14181_2.png",
+      "flair_name": "Administrator",
+      "flair_url": "https://global.discourse-cdn.com/nvidia/original/3X/7/8/786c2b0600281de14dd72c7e2d4b32c9acf7e1de.png",
+      "flair_group_id": 56,
+      "primary_group_name": "NsightGraphicsPro",
+      "admin": true,
+      "moderator": true,
+      "trust_level": 2
+    },
+    {
+      "id": 3567453,
+      "username": "aniculescu",
+      "name": "Aniculescu",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "moderator": true,
+      "trust_level": 2
+    },
+    {
+      "id": 3590790,
+      "username": "MackenzieNVIDIA",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/mackenzienvidia/{size}/382649_2.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "moderator": true,
+      "trust_level": 2
+    },
+    {
+      "id": 5331198,
+      "username": "arifsonnet.webid",
+      "name": "Arif Sonnet",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/arifsonnet.webid/{size}/549923_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5438650,
+      "username": "taylor.a.huston",
+      "name": "Taylor A Huston",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/taylor.a.huston/{size}/549647_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5180961,
+      "username": "2893f57acbe7739fc460e9bd7",
+      "name": "Rerollingingenshitimpactsucks",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4832308,
+      "username": "jrsphd",
+      "name": "john",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/jrsphd/{size}/459183_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5205504,
+      "username": "peter.h177",
+      "name": "Peter Hangya",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/peter.h177/{size}/525122_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5023644,
+      "username": "jeffd",
+      "name": "Jeff Davies",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5156752,
+      "username": "Ria33",
+      "name": "Ress333",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4983298,
+      "username": "say3",
+      "name": "Say",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 298871,
+      "username": "rle",
+      "name": null,
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5025732,
+      "username": "co-le",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/co-le/{size}/499622_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5066499,
+      "username": "0rand",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/0rand/{size}/512004_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5160073,
+      "username": "ajvazan",
+      "name": "Ml11fin",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/ajvazan/{size}/516544_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5348175,
+      "username": "george198",
+      "name": "George",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5192672,
+      "username": "hiroshiya",
+      "name": "2298812707",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/hiroshiya/{size}/528526_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4945266,
+      "username": "Digital_David",
+      "name": "Dg",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/digital_david/{size}/495104_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5314727,
+      "username": "enjihn",
+      "name": "Eric",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/enjihn/{size}/540524_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 573865,
+      "username": "helge",
+      "name": "Helge",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/helge/{size}/528653_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5406792,
+      "username": "Elevatormusic",
+      "name": "Shayanx45",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5127511,
+      "username": "tanbuikim7",
+      "name": "Tanbuikim7",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5076068,
+      "username": "louminati",
+      "name": "Joe",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/louminati/{size}/546986_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5420795,
+      "username": "haukebr",
+      "name": "Haukebr",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5259261,
+      "username": "lcasarin",
+      "name": "Lcasarin",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4907399,
+      "username": "paul448",
+      "name": "Paul",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/paul448/{size}/466528_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4812563,
+      "username": "christopher_owen",
+      "name": "Christopher Owen",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/christopher_owen/{size}/469895_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5156994,
+      "username": "stu.miller",
+      "name": "Stu Miller",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/stu.miller/{size}/515845_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5068431,
+      "username": "huxiaofengtiger",
+      "name": "Huxiaofengtiger",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4754459,
+      "username": "vedcsolution",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/vedcsolution/{size}/470501_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5369873,
+      "username": "rob01",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/rob01/{size}/542161_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5245867,
+      "username": "jameslacroix",
+      "name": "Jameslacroix",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5269226,
+      "username": "nick398",
+      "name": "Nick",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/nick398/{size}/534873_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4920382,
+      "username": "kevinpw",
+      "name": "Kevin PW",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/kevinpw/{size}/467855_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5047153,
+      "username": "mashie",
+      "name": "Mashie",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/mashie/{size}/503632_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5438895,
+      "username": "alex.zare99",
+      "name": "Alex Zare99",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/alex.zare99/{size}/549717_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 1695778,
+      "username": "user158576",
+      "name": "",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "trust_level": 2
+    },
+    {
+      "id": 5017508,
+      "username": "josephjn.ng",
+      "name": "Josephjn Ng",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4937155,
+      "username": "whpthomas",
+      "name": "Dr Henry Thomas",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/whpthomas/{size}/469595_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5047328,
+      "username": "JW2026",
+      "name": "JasonW",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/jw2026/{size}/523471_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 835395,
+      "username": "Dickson",
+      "name": "Dickson",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/dickson/{size}/470594_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4850404,
+      "username": "jcagle",
+      "name": "Jcagle",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4621449,
+      "username": "maiia",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/maiia/{size}/439026_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5301647,
+      "username": "lolhunter",
+      "name": "Alex",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5272748,
+      "username": "OllieO",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/ollieo/{size}/538893_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4837910,
+      "username": "roozich",
+      "name": "Roozich",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/roozich/{size}/548165_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 1821925,
+      "username": "axlwlczk",
+      "name": "Axlwlczk",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5104558,
+      "username": "beunjb",
+      "name": "Beunjb",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5411776,
+      "username": "Diego-Revolteo",
+      "name": "Diego-Revolteo",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/diego-revolteo/{size}/546464_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5339551,
+      "username": "julianvL",
+      "name": "Julianvlaiko",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/julianvl/{size}/545849_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5423738,
+      "username": "allenh1",
+      "name": "Hunter",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/allenh1/{size}/548012_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 620072,
+      "username": "lukea",
+      "name": "Lukea",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/lukea/{size}/34575_2.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "trust_level": 2
+    },
+    {
+      "id": 5340785,
+      "username": "Navi_4x4TEAM",
+      "name": "Navi | 4x4TEAM",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/navi_4x4team/{size}/537807_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 2188387,
+      "username": "festr2",
+      "name": "Festr2",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5121124,
+      "username": "corbett_korbett",
+      "name": "Fitbycmy",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5054319,
+      "username": "azampatti",
+      "name": "Azampatti",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/azampatti/{size}/503643_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5034828,
+      "username": "DColt",
+      "name": "",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5439322,
+      "username": "luis.rico",
+      "name": "Luis Rico",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/luis.rico/{size}/549726_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5374778,
+      "username": "wuwenzhou",
+      "name": "310066827",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/wuwenzhou/{size}/542057_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5254842,
+      "username": "bgertsberg",
+      "name": "Bgertsberg",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4742701,
+      "username": "DannyTup",
+      "name": "Danny",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/dannytup/{size}/450509_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5290316,
+      "username": "RubinSpark",
+      "name": "Rubin Spark",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4723345,
+      "username": "zneill",
+      "name": "Zeke Neill",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/zneill/{size}/502736_2.png",
+      "flair_name": "Employee",
+      "flair_group_id": 63,
+      "primary_group_name": "Employee",
+      "moderator": true,
+      "trust_level": 2
+    },
+    {
+      "id": 4850765,
+      "username": "AoE",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/aoe/{size}/489021_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4364509,
+      "username": "kenrb42",
+      "name": "Kenrb42",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5395768,
+      "username": "JankenStein",
+      "name": "",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/jankenstein/{size}/544407_2.png",
+      "trust_level": 0
+    },
+    {
+      "id": 5207581,
+      "username": "ai.sling.42",
+      "name": "ai.sling.42",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 3282956,
+      "username": "tinn.caal",
+      "name": "Catalin",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/tinn.caal/{size}/314212_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4825164,
+      "username": "jv14",
+      "name": "Jv",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 702572,
+      "username": "hoesing",
+      "name": "Hoesing",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5264266,
+      "username": "jetspark",
+      "name": "Jet",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/jetspark/{size}/542210_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 649683,
+      "username": "evehour",
+      "name": "Evehour",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5288181,
+      "username": "sson",
+      "name": "Sson",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/sson/{size}/540803_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 5155533,
+      "username": "x1917x",
+      "name": "X1917x",
+      "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4417571,
+      "username": "trithemius",
+      "name": "trithemius",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/trithemius/{size}/468078_2.png",
+      "trust_level": 1
+    },
+    {
+      "id": 4661029,
+      "username": "giles8",
+      "name": "Giles",
+      "avatar_template": "/user_avatar/forums.developer.nvidia.com/giles8/{size}/545335_2.png",
+      "trust_level": 1
+    }
+  ],
+  "primary_groups": [
+    {
+      "id": 63,
+      "name": "Employee"
+    },
+    {
+      "id": 113,
+      "name": "NsightGraphicsPro"
+    }
+  ],
+  "flair_groups": [
+    {
+      "id": 63,
+      "name": "Employee",
+      "flair_url": null,
+      "flair_bg_color": "",
+      "flair_color": ""
+    },
+    {
+      "id": 56,
+      "name": "Administrator",
+      "flair_url": "https://global.discourse-cdn.com/nvidia/original/3X/7/8/786c2b0600281de14dd72c7e2d4b32c9acf7e1de.png",
+      "flair_bg_color": "",
+      "flair_color": ""
+    }
+  ],
+  "topic_list": {
+    "can_create_topic": false,
+    "filter": "latest",
+    "more_topics_url": "/c/accelerated-computing/dgx-spark-gb10/dgx-spark-gb10/721?order=activity&page=1",
+    "per_page": 30,
+    "top_tags": [
+      {
+        "id": 1214,
+        "name": "dgx-spark-issue",
+        "slug": "dgx-spark-issue"
+      },
+      {
+        "id": 1043,
+        "name": "llama",
+        "slug": "llama"
+      },
+      {
+        "id": 1158,
+        "name": "deepseek",
+        "slug": "deepseek"
+      },
+      {
+        "id": 1166,
+        "name": "nemotron",
+        "slug": "nemotron"
+      },
+      {
+        "id": 31,
+        "name": "cuda",
+        "slug": "cuda"
+      },
+      {
+        "id": 563,
+        "name": "spark",
+        "slug": "spark"
+      },
+      {
+        "id": 1079,
+        "name": "agentic-ai",
+        "slug": "agentic-ai"
+      },
+      {
+        "id": 24,
+        "name": "boot",
+        "slug": "boot"
+      },
+      {
+        "id": 33,
+        "name": "kernel",
+        "slug": "kernel"
+      },
+      {
+        "id": 947,
+        "name": "nim",
+        "slug": "nim"
+      },
+      {
+        "id": 1182,
+        "name": "dgx",
+        "slug": "dgx"
+      },
+      {
+        "id": 84,
+        "name": "ota",
+        "slug": "ota"
+      },
+      {
+        "id": 587,
+        "name": "jetson",
+        "slug": "jetson"
+      },
+      {
+        "id": 949,
+        "name": "llm",
+        "slug": "llm"
+      },
+      {
+        "id": 57,
+        "name": "performance",
+        "slug": "performance"
+      },
+      {
+        "id": 590,
+        "name": "gaming",
+        "slug": "gaming"
+      },
+      {
+        "id": 320,
+        "name": "networking",
+        "slug": "networking"
+      },
+      {
+        "id": 64,
+        "name": "docker",
+        "slug": "docker"
+      },
+      {
+        "id": 1196,
+        "name": "nemoclaw",
+        "slug": "nemoclaw"
+      },
+      {
+        "id": 44,
+        "name": "power",
+        "slug": "power"
+      },
+      {
+        "id": 97,
+        "name": "cudnn",
+        "slug": "cudnn"
+      },
+      {
+        "id": 1197,
+        "name": "openclaw",
+        "slug": "openclaw"
+      },
+      {
+        "id": 473,
+        "name": "benchmarks",
+        "slug": "benchmarks"
+      },
+      {
+        "id": 437,
+        "name": "clustering",
+        "slug": "clustering"
+      },
+      {
+        "id": 67,
+        "name": "rma",
+        "slug": "rma"
+      },
+      {
+        "id": 386,
+        "name": "cublas",
+        "slug": "cublas"
+      },
+      {
+        "id": 376,
+        "name": "driver",
+        "slug": "driver"
+      },
+      {
+        "id": 638,
+        "name": "firmware-tools",
+        "slug": "firmware-tools"
+      },
+      {
+        "id": 13,
+        "name": "wifi",
+        "slug": "wifi"
+      },
+      {
+        "id": 14,
+        "name": "camera",
+        "slug": "camera"
+      },
+      {
+        "id": 287,
+        "name": "installation",
+        "slug": "installation"
+      }
+    ],
+    "topics": [
+      {
+        "fancy_title": "Introducing NVIDIA NemoClaw",
+        "id": 363819,
+        "title": "Introducing NVIDIA NemoClaw",
+        "slug": "introducing-nvidia-nemoclaw",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2026-03-17T14:15:51.211Z",
+        "last_posted_at": "2026-03-17T14:15:51.340Z",
+        "bumped": true,
+        "bumped_at": "2026-03-17T14:15:51.340Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "NVIDIA NemoClaw is an open source stack that simplifies running OpenClaw always-on assistants more safely, with a single command. It installs the NVIDIA OpenShell runtime, part of the NVIDIA Agent Toolkit, a secure envir&hellip;",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 1166,
+            "name": "nemotron",
+            "slug": "nemotron"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 5012,
+        "like_count": 4,
+        "has_summary": false,
+        "last_poster_username": "rjensen",
+        "category_id": 721,
+        "op_like_count": 4,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 1246178,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 194229,
+            "primary_group_id": 113,
+            "flair_group_id": 56
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark Performance FAQ",
+        "id": 359456,
+        "title": "DGX Spark Performance FAQ",
+        "slug": "dgx-spark-performance-faq",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2026-02-02T18:44:53.465Z",
+        "last_posted_at": "2026-02-02T18:44:53.529Z",
+        "bumped": true,
+        "bumped_at": "2026-02-02T18:44:53.529Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "DGX Spark Performance FAQ\nPerformance Blog\nCheck out our blog post on How NVIDIA DGX Spark’s Performance Enables Intensive AI Tasks which details benchmarks using common AI tools. \nBenchmarking Guide\nWe have released a g&hellip;",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 5518,
+        "like_count": 3,
+        "has_summary": false,
+        "last_poster_username": "aniculescu",
+        "category_id": 721,
+        "op_like_count": 3,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 3567453,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "How NVIDIA DGX Spark’s Performance Enables Intensive AI Tasks",
+        "id": 349770,
+        "title": "How NVIDIA DGX Spark’s Performance Enables Intensive AI Tasks",
+        "slug": "how-nvidia-dgx-spark-s-performance-enables-intensive-ai-tasks",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2025-11-01T00:40:37.709Z",
+        "last_posted_at": "2025-11-01T00:40:37.778Z",
+        "bumped": true,
+        "bumped_at": "2025-11-01T00:40:37.778Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "Check out our latest tech blog: How NVIDIA DGX Spark’s Performance Enables AI Intensive Tasks",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 3274,
+        "like_count": 2,
+        "has_summary": false,
+        "last_poster_username": "MackenzieNVIDIA",
+        "category_id": 721,
+        "op_like_count": 2,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 3590790,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 3567453,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark Power Clarification",
+        "id": 349668,
+        "title": "DGX Spark Power Clarification",
+        "slug": "dgx-spark-power-clarification",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2025-10-31T00:12:45.721Z",
+        "last_posted_at": "2025-10-31T00:12:45.784Z",
+        "bumped": true,
+        "bumped_at": "2025-10-31T00:12:45.784Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "DGX Spark’s peak total system power is 240W. The TDP of the GB10 SOC which includes the GPU and the CPU is 140W. The rest of the system which includes the ConnectX-7, SSD and provisions for USB-C devices is 100W. We have&hellip;",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 6147,
+        "like_count": 8,
+        "has_summary": false,
+        "last_poster_username": "MackenzieNVIDIA",
+        "category_id": 721,
+        "op_like_count": 8,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 3590790,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "Welcome! Please Read before Posting",
+        "id": 349335,
+        "title": "Welcome! Please Read before Posting",
+        "slug": "welcome-please-read-before-posting",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2025-10-28T18:19:56.729Z",
+        "last_posted_at": "2025-10-28T18:19:56.785Z",
+        "bumped": true,
+        "bumped_at": "2025-10-28T18:19:56.785Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "Before posting a new topic, please follow the instructions below\n\nCheck out our FAQ to see if your questions is answered there: DGX Spark / GB10 FAQ - #7\nSearch through the other topic and see if someone else has posted &hellip;",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 1282,
+        "like_count": 4,
+        "has_summary": false,
+        "last_poster_username": "aniculescu",
+        "category_id": 721,
+        "op_like_count": 4,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 3567453,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark / GB10 FAQ",
+        "id": 347344,
+        "title": "DGX Spark / GB10 FAQ",
+        "slug": "dgx-spark-gb10-faq",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2025-10-10T23:03:58.512Z",
+        "last_posted_at": "2025-10-10T23:03:58.609Z",
+        "bumped": true,
+        "bumped_at": "2025-10-10T23:03:58.609Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": true,
+        "unpinned": null,
+        "excerpt": "Initial Setup\nQ: I am trying to set up my DGX Spark in appliance mode. I am able to connect to the DGX Spark SSID, but it can’t open the webpage it tries to redirect me to (http://spark-xxxx.local).\nTo connect to http://&hellip;",
+        "visible": true,
+        "closed": true,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "visibility_reason_id": 4,
+        "tags": [
+          {
+            "id": 947,
+            "name": "nim",
+            "slug": "nim"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 18195,
+        "like_count": 3,
+        "has_summary": false,
+        "last_poster_username": "MackenzieNVIDIA",
+        "category_id": 721,
+        "op_like_count": 3,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 3590790,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark: NVMe controller drop (CSTS=0x3) recurs with PCIe ASPM disabled, MZALC4T0HBL1 / NXHB202Q, SMART clean",
+        "id": 388371,
+        "title": "DGX Spark: NVMe controller drop (CSTS=0x3) recurs with PCIe ASPM disabled, MZALC4T0HBL1 / NXHB202Q, SMART clean",
+        "slug": "dgx-spark-nvme-controller-drop-csts-0x3-recurs-with-pcie-aspm-disabled-mzalc4t0hbl1-nxhb202q-smart-clean",
+        "posts_count": 2,
+        "reply_count": 0,
+        "highest_post_number": 2,
+        "image_url": null,
+        "created_at": "2026-11-08T11:35:49.483Z",
+        "last_posted_at": "2026-11-08T12:04:31.266Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T12:04:31.266Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 8,
+        "like_count": 0,
+        "has_summary": false,
+        "last_poster_username": "arifsonnet.webid",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 5331198,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "How to get better summarization results from local models?",
+        "id": 388187,
+        "title": "How to get better summarization results from local models?",
+        "slug": "how-to-get-better-summarization-results-from-local-models",
+        "posts_count": 15,
+        "reply_count": 5,
+        "highest_post_number": 15,
+        "image_url": null,
+        "created_at": "2026-11-06T14:59:15.314Z",
+        "last_posted_at": "2026-11-08T11:57:07.989Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T11:57:07.989Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 1166,
+            "name": "nemotron",
+            "slug": "nemotron"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 263,
+        "like_count": 5,
+        "has_summary": false,
+        "last_poster_username": "jeffd",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5438650,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5180961,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4832308,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5205504,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5023644,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Unlocking Spark&rsquo;s headroom with eGPU: Qwen3.8-Flash-Next INT4 at 185tg/s (code) 67tg/s (prose)",
+        "id": 388355,
+        "title": "Unlocking Spark's headroom with eGPU: Qwen3.8-Flash-Next INT4 at 185tg/s (code) 67tg/s (prose)",
+        "slug": "unlocking-sparks-headroom-with-egpu-qwen3-8-flash-next-int4-at-185tg-s-code-67tg-s-prose",
+        "posts_count": 4,
+        "reply_count": 1,
+        "highest_post_number": 4,
+        "image_url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_825x1024.png",
+        "created_at": "2026-11-08T04:49:29.433Z",
+        "last_posted_at": "2026-11-08T11:24:33.609Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T11:24:33.609Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 1000,
+            "height": 1240,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f.png"
+          },
+          {
+            "max_width": 1024,
+            "max_height": 1024,
+            "width": 825,
+            "height": 1024,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_825x1024.png"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 645,
+            "height": 800,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_645x800.png"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 483,
+            "height": 600,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_483x600.png"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 322,
+            "height": 400,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_322x400.png"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 241,
+            "height": 300,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_241x300.png"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 161,
+            "height": 200,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/4/4/4/4445e16f87c8743cf19f3cff5ee34292ea9ee78f_2_161x200.png"
+          }
+        ],
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 152,
+        "like_count": 2,
+        "has_summary": false,
+        "last_poster_username": "rle",
+        "category_id": 721,
+        "op_like_count": 2,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5156752,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4983298,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 298871,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "GLM-5.3-Flash: 320B total parameters / 18B active",
+        "id": 381350,
+        "title": "GLM-5.3-Flash: 320B total parameters / 18B active",
+        "slug": "glm-5-3-flash-320b-total-parameters-18b-active",
+        "posts_count": 956,
+        "reply_count": 744,
+        "highest_post_number": 973,
+        "image_url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_1024x552.jpeg",
+        "created_at": "2026-08-26T14:53:25.080Z",
+        "last_posted_at": "2026-11-08T08:25:15.572Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T08:25:15.572Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 1200,
+            "height": 648,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c.jpeg"
+          },
+          {
+            "max_width": 1024,
+            "max_height": 1024,
+            "width": 1024,
+            "height": 552,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_1024x552.jpeg"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 800,
+            "height": 432,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_800x432.jpeg"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 600,
+            "height": 324,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_600x324.jpeg"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 400,
+            "height": 216,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_400x216.jpeg"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 300,
+            "height": 162,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_300x162.jpeg"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 200,
+            "height": 108,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/a/a/d/aadcbd37af2c223c03b7dd8a24a43c3b99499c8c_2_200x108.jpeg"
+          }
+        ],
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 48492,
+        "like_count": 736,
+        "has_summary": true,
+        "last_poster_username": "2893f57acbe7739fc460e9bd7",
+        "category_id": 721,
+        "op_like_count": 11,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5025732,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5066499,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5160073,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5348175,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5180961,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "R620 Driver and CUDA 13.5",
+        "id": 388164,
+        "title": "R620 Driver and CUDA 13.5",
+        "slug": "r620-driver-and-cuda-13-5",
+        "posts_count": 8,
+        "reply_count": 4,
+        "highest_post_number": 8,
+        "image_url": null,
+        "created_at": "2026-11-06T07:31:56.658Z",
+        "last_posted_at": "2026-11-08T07:18:11.626Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T07:18:11.626Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 413,
+        "like_count": 7,
+        "has_summary": false,
+        "last_poster_username": "hiroshiya",
+        "category_id": 721,
+        "op_like_count": 1,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 5192672,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4945266,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5314727,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 573865,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "DeepSeek-V4.1-Flash-1017 (EXL3 2.9bpw) on 2x DGX Spark with TensorFold: 57 tok/s text, 92 tok/s code, 2.1-2.3x the vLLM kit",
+        "id": 386125,
+        "title": "DeepSeek-V4.1-Flash-1017 (EXL3 2.9bpw) on 2x DGX Spark with TensorFold: 57 tok/s text, 92 tok/s code, 2.1-2.3x the vLLM kit",
+        "slug": "deepseek-v4-1-flash-1017-exl3-2-9bpw-on-2x-dgx-spark-with-tensorfold-57-tok-s-text-92-tok-s-code-2-1-2-3x-the-vllm-kit",
+        "posts_count": 367,
+        "reply_count": 287,
+        "highest_post_number": 376,
+        "image_url": null,
+        "created_at": "2026-10-18T00:57:19.116Z",
+        "last_posted_at": "2026-11-08T07:06:44.758Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T07:06:44.758Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 14910,
+        "like_count": 213,
+        "has_summary": true,
+        "last_poster_username": "louminati",
+        "category_id": 721,
+        "op_like_count": 5,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5406792,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5160073,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5127511,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5066499,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5076068,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "GIGABYTE AI TOP ATOM: stopped fan, severe heat and loss of access after updates",
+        "id": 387012,
+        "title": "GIGABYTE AI TOP ATOM: stopped fan, severe heat and loss of access after updates",
+        "slug": "gigabyte-ai-top-atom-stopped-fan-severe-heat-and-loss-of-access-after-updates",
+        "posts_count": 6,
+        "reply_count": 2,
+        "highest_post_number": 6,
+        "image_url": null,
+        "created_at": "2026-10-26T21:38:32.662Z",
+        "last_posted_at": "2026-11-08T05:40:28.438Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T05:40:28.438Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 404,
+        "like_count": 1,
+        "has_summary": false,
+        "last_poster_username": "louminati",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5420795,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 3567453,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5259261,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4907399,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5076068,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "New Deepseek 4.1 flash recipe",
+        "id": 384438,
+        "title": "New Deepseek 4.1 flash recipe",
+        "slug": "new-deepseek-4-1-flash-recipe",
+        "posts_count": 138,
+        "reply_count": 96,
+        "highest_post_number": 139,
+        "image_url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_1024x537.png",
+        "created_at": "2026-09-26T17:19:34.835Z",
+        "last_posted_at": "2026-11-08T04:48:28.650Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T04:48:28.650Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 1200,
+            "height": 630,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348.png"
+          },
+          {
+            "max_width": 1024,
+            "max_height": 1024,
+            "width": 1024,
+            "height": 537,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_1024x537.png"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 800,
+            "height": 420,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_800x420.png"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 600,
+            "height": 315,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_600x315.png"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 400,
+            "height": 210,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_400x210.png"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 300,
+            "height": 157,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_300x157.png"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 200,
+            "height": 105,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/d/d/6/dd62cc0779e8f46baca8e096917d832cb664b348_2_200x105.png"
+          }
+        ],
+        "tags": [
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 10316,
+        "like_count": 149,
+        "has_summary": true,
+        "last_poster_username": "rob01",
+        "category_id": 721,
+        "op_like_count": 5,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4812563,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5156994,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5068431,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4754459,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5369873,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "DeepSeek V4.1 Flash on 8× DGX Spark: TP8/EP8 concurrency results",
+        "id": 387537,
+        "title": "DeepSeek V4.1 Flash on 8× DGX Spark: TP8/EP8 concurrency results",
+        "slug": "deepseek-v4-1-flash-on-8x-dgx-spark-tp8-ep8-concurrency-results",
+        "posts_count": 12,
+        "reply_count": 4,
+        "highest_post_number": 14,
+        "image_url": null,
+        "created_at": "2026-10-31T14:52:57.016Z",
+        "last_posted_at": "2026-11-08T03:27:25.656Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T03:27:25.656Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 687,
+        "like_count": 14,
+        "has_summary": false,
+        "last_poster_username": "jameslacroix",
+        "category_id": 721,
+        "op_like_count": 3,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 5245867,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5269226,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4920382,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4812563,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5047153,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark: kernel 7.0.0-1025-nvidia memory corruption and system freezes",
+        "id": 388215,
+        "title": "DGX Spark: kernel 7.0.0-1025-nvidia memory corruption and system freezes",
+        "slug": "dgx-spark-kernel-7-0-0-1025-nvidia-memory-corruption-and-system-freezes",
+        "posts_count": 6,
+        "reply_count": 4,
+        "highest_post_number": 6,
+        "image_url": null,
+        "created_at": "2026-11-06T17:53:46.608Z",
+        "last_posted_at": "2026-11-08T02:12:15.488Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T02:12:15.488Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 33,
+            "name": "kernel",
+            "slug": "kernel"
+          },
+          {
+            "id": 1214,
+            "name": "dgx-spark-issue",
+            "slug": "dgx-spark-issue"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 348,
+        "like_count": 0,
+        "has_summary": false,
+        "last_poster_username": "user158576",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5438895,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 3567453,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 1695778,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          }
+        ]
+      },
+      {
+        "fancy_title": "Dual Spark Ducted Cooling Cage",
+        "id": 365302,
+        "title": "Dual Spark Ducted Cooling Cage",
+        "slug": "dual-spark-ducted-cooling-cage",
+        "posts_count": 345,
+        "reply_count": 248,
+        "highest_post_number": 360,
+        "image_url": "https://global.discourse-cdn.com/nvidia/original/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd.png",
+        "created_at": "2026-04-01T03:58:34.723Z",
+        "last_posted_at": "2026-11-08T01:39:13.754Z",
+        "bumped": true,
+        "bumped_at": "2026-11-08T01:39:13.754Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 858,
+            "height": 882,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd.png"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 778,
+            "height": 800,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd_2_778x800.png"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 583,
+            "height": 600,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd_2_583x600.png"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 389,
+            "height": 400,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd_2_389x400.png"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 291,
+            "height": 300,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd_2_291x300.png"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 194,
+            "height": 200,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/8/b/98ba89abb7f0c4be57ba966b59dcf8ebd985f4cd_2_194x200.png"
+          }
+        ],
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 26920,
+        "like_count": 486,
+        "has_summary": true,
+        "last_poster_username": "Ria33",
+        "category_id": 721,
+        "op_like_count": 12,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5017508,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4937155,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5047328,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 835395,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5156752,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "GIGABYTE AI TOP ATOM (64GB DGX Spark) now available",
+        "id": 388156,
+        "title": "GIGABYTE AI TOP ATOM (64GB DGX Spark) now available",
+        "slug": "gigabyte-ai-top-atom-64gb-dgx-spark-now-available",
+        "posts_count": 26,
+        "reply_count": 10,
+        "highest_post_number": 26,
+        "image_url": null,
+        "created_at": "2026-11-06T04:56:44.282Z",
+        "last_posted_at": "2026-11-07T21:19:45.462Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T21:19:45.462Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 675,
+        "like_count": 12,
+        "has_summary": false,
+        "last_poster_username": "OllieO",
+        "category_id": 721,
+        "op_like_count": 2,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4850404,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4621449,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5301647,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5269226,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5272748,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "NVIDIA/Qwen3.8-Flash-Next-NVFP4 + DFlash2 on a Single DGX Spark ( ~57 tok/s )",
+        "id": 387384,
+        "title": "NVIDIA/Qwen3.8-Flash-Next-NVFP4 + DFlash2 on a Single DGX Spark ( ~57 tok/s )",
+        "slug": "nvidia-qwen3-8-flash-next-nvfp4-dflash2-on-a-single-dgx-spark-57-tok-s",
+        "posts_count": 10,
+        "reply_count": 5,
+        "highest_post_number": 10,
+        "image_url": null,
+        "created_at": "2026-10-30T03:00:10.727Z",
+        "last_posted_at": "2026-11-07T20:17:29.685Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T20:17:29.685Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 990,
+        "like_count": 6,
+        "has_summary": false,
+        "last_poster_username": "JW2026",
+        "category_id": 721,
+        "op_like_count": 3,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4837910,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 1821925,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5104558,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5411776,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5047328,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Qwen 3.8 Next Flash performance and limits",
+        "id": 388318,
+        "title": "Qwen 3.8 Next Flash performance and limits",
+        "slug": "qwen-3-8-next-flash-performance-and-limits",
+        "posts_count": 1,
+        "reply_count": 0,
+        "highest_post_number": 1,
+        "image_url": null,
+        "created_at": "2026-11-07T19:16:22.117Z",
+        "last_posted_at": "2026-11-07T19:16:22.220Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T19:16:22.220Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 159,
+        "like_count": 0,
+        "has_summary": false,
+        "last_poster_username": "JW2026",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": "latest single",
+            "description": "Original Poster, Most Recent Poster",
+            "user_id": 5047328,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "DGX Spark 4-8 Cluster Switch Options post MikroTik CRS-804 \\ MikroTik CRS-812 Market wipe out",
+        "id": 384594,
+        "title": "DGX Spark 4-8 Cluster Switch Options post MikroTik CRS-804 \\ MikroTik CRS-812 Market wipe out",
+        "slug": "dgx-spark-4-8-cluster-switch-options-post-mikrotik-crs-804-mikrotik-crs-812-market-wipe-out",
+        "posts_count": 69,
+        "reply_count": 45,
+        "highest_post_number": 70,
+        "image_url": null,
+        "created_at": "2026-09-28T16:52:42.610Z",
+        "last_posted_at": "2026-11-07T18:45:14.378Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T18:45:14.378Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 609,
+            "name": "switches",
+            "slug": "switches"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 2912,
+        "like_count": 31,
+        "has_summary": true,
+        "last_poster_username": "mashie",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": true,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster, Accepted Answer",
+            "user_id": 4621449,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5369873,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4812563,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5339551,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5047153,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Native Rust + CUDA engine for DeepSeek-V4.1-Flash on 4x Sparks (132 tok/s, 25s boot, 1M context)",
+        "id": 387281,
+        "title": "Native Rust + CUDA engine for DeepSeek-V4.1-Flash on 4x Sparks (132 tok/s, 25s boot, 1M context)",
+        "slug": "native-rust-cuda-engine-for-deepseek-v4-1-flash-on-4x-sparks-132-tok-s-25s-boot-1m-context",
+        "posts_count": 14,
+        "reply_count": 9,
+        "highest_post_number": 15,
+        "image_url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_1024x811.png",
+        "created_at": "2026-10-29T02:20:53.392Z",
+        "last_posted_at": "2026-11-07T18:21:46.085Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T18:21:46.085Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 1275,
+            "height": 1010,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967.png"
+          },
+          {
+            "max_width": 1024,
+            "max_height": 1024,
+            "width": 1024,
+            "height": 811,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_1024x811.png"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 800,
+            "height": 633,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_800x633.png"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 600,
+            "height": 475,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_600x475.png"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 400,
+            "height": 316,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_400x316.png"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 300,
+            "height": 237,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_300x237.png"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 200,
+            "height": 158,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/f/7/6/f7657124ea98e7d9b762efb6dbe344847235e967_2_200x158.png"
+          }
+        ],
+        "tags": [
+          {
+            "id": 31,
+            "name": "cuda",
+            "slug": "cuda"
+          },
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 1116,
+        "like_count": 25,
+        "has_summary": false,
+        "last_poster_username": "festr2",
+        "category_id": 721,
+        "op_like_count": 4,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5423738,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 620072,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5340785,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5269226,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 2188387,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Qwen4",
+        "id": 388002,
+        "title": "Qwen4",
+        "slug": "qwen4",
+        "posts_count": 14,
+        "reply_count": 9,
+        "highest_post_number": 14,
+        "image_url": null,
+        "created_at": "2026-11-04T16:53:22.202Z",
+        "last_posted_at": "2026-11-07T12:39:04.302Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T12:39:04.302Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 4874,
+        "like_count": 54,
+        "has_summary": false,
+        "last_poster_username": "JW2026",
+        "category_id": 721,
+        "op_like_count": 5,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4945266,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5066499,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5156994,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5121124,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5047328,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Up to 70tok/s Qwen3.8-Flash-Next-Int4-AutoRound",
+        "id": 382733,
+        "title": "Up to 70tok/s Qwen3.8-Flash-Next-Int4-AutoRound",
+        "slug": "up-to-70tok-s-qwen3-8-flash-next-int4-autoround",
+        "posts_count": 333,
+        "reply_count": 234,
+        "highest_post_number": 335,
+        "image_url": "https://global.discourse-cdn.com/nvidia/original/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3.png",
+        "created_at": "2026-09-08T19:34:58.338Z",
+        "last_posted_at": "2026-11-07T10:05:01.853Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T10:05:01.853Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 986,
+            "height": 115,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3.png"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 800,
+            "height": 93,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3_2_800x93.png"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 600,
+            "height": 69,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3_2_600x69.png"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 400,
+            "height": 46,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3_2_400x46.png"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 300,
+            "height": 34,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3_2_300x34.png"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 200,
+            "height": 23,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/9/d/3/9d3467f40583ecd4ddad10cd53411948d82f3da3_2_200x23.png"
+          }
+        ],
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 23029,
+        "like_count": 536,
+        "has_summary": true,
+        "last_poster_username": "luis.rico",
+        "category_id": 721,
+        "op_like_count": 16,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5054319,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5066499,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 4945266,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5034828,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5439322,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Live experiment on spark : Self-learning restoration of a 1-bit quantized DeepSeek V4.1 Flash (510 GB → ~113 GB) — currently ~85.8% top-1 agreement",
+        "id": 388039,
+        "title": "Live experiment on spark : Self-learning restoration of a 1-bit quantized DeepSeek V4.1 Flash (510 GB → ~113 GB) — currently ~85.8% top-1 agreement",
+        "slug": "live-experiment-on-spark-self-learning-restoration-of-a-1-bit-quantized-deepseek-v4-1-flash-510-gb-113-gb-currently-85-8-top-1-agreement",
+        "posts_count": 5,
+        "reply_count": 1,
+        "highest_post_number": 5,
+        "image_url": null,
+        "created_at": "2026-11-05T01:22:31.050Z",
+        "last_posted_at": "2026-11-07T10:03:33.433Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T10:03:33.433Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 31,
+            "name": "cuda",
+            "slug": "cuda"
+          },
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 404,
+        "like_count": 7,
+        "has_summary": false,
+        "last_poster_username": "0rand",
+        "category_id": 721,
+        "op_like_count": 4,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5374778,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5054319,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5254842,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5066499,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "`sudo reboot now` and Spark doesn&rsquo;t come back.. started after installing updates today",
+        "id": 386495,
+        "title": "`sudo reboot now` and Spark doesn't come back.. started after installing updates today",
+        "slug": "sudo-reboot-now-and-spark-doesnt-come-back-started-after-installing-updates-today",
+        "posts_count": 14,
+        "reply_count": 3,
+        "highest_post_number": 14,
+        "image_url": null,
+        "created_at": "2026-10-21T15:58:55.338Z",
+        "last_posted_at": "2026-11-07T09:55:02.972Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T09:55:02.972Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 980,
+        "like_count": 0,
+        "has_summary": false,
+        "last_poster_username": "AoE",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4742701,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5290316,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4723345,
+            "primary_group_id": 63,
+            "flair_group_id": 63
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 4850765,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "M.2 2242 to 2280 adapter?",
+        "id": 384912,
+        "title": "M.2 2242 to 2280 adapter?",
+        "slug": "m-2-2242-to-2280-adapter",
+        "posts_count": 15,
+        "reply_count": 9,
+        "highest_post_number": 17,
+        "image_url": null,
+        "created_at": "2026-10-02T21:24:53.840Z",
+        "last_posted_at": "2026-11-07T09:44:54.787Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T09:44:54.787Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 909,
+        "like_count": 10,
+        "has_summary": false,
+        "last_poster_username": "tinn.caal",
+        "category_id": 721,
+        "op_like_count": 2,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4364509,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5314727,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 5395768,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5207581,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 3282956,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "CVE-2026-98432",
+        "id": 388090,
+        "title": "CVE-2026-98432",
+        "slug": "cve-2026-98432",
+        "posts_count": 7,
+        "reply_count": 2,
+        "highest_post_number": 7,
+        "image_url": null,
+        "created_at": "2026-11-05T11:27:36.018Z",
+        "last_posted_at": "2026-11-07T06:42:56.357Z",
+        "bumped": true,
+        "bumped_at": "2026-11-07T06:42:56.357Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [
+          {
+            "id": 33,
+            "name": "kernel",
+            "slug": "kernel"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 607,
+        "like_count": 0,
+        "has_summary": false,
+        "last_poster_username": "jcagle",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": true,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4825164,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster, Accepted Answer",
+            "user_id": 702572,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 4850404,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Let&rsquo;s optimize &hellip; DGX Spark",
+        "id": 387929,
+        "title": "Let's optimize ... DGX Spark",
+        "slug": "lets-optimize-dgx-spark",
+        "posts_count": 15,
+        "reply_count": 6,
+        "highest_post_number": 16,
+        "image_url": "https://global.discourse-cdn.com/nvidia/original/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097.jpeg",
+        "created_at": "2026-11-03T20:14:01.915Z",
+        "last_posted_at": "2026-11-06T23:03:00.361Z",
+        "bumped": true,
+        "bumped_at": "2026-11-06T23:03:00.361Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": [
+          {
+            "max_width": null,
+            "max_height": null,
+            "width": 1006,
+            "height": 709,
+            "url": "https://global.discourse-cdn.com/nvidia/original/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097.jpeg"
+          },
+          {
+            "max_width": 800,
+            "max_height": 800,
+            "width": 800,
+            "height": 563,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097_2_800x563.jpeg"
+          },
+          {
+            "max_width": 600,
+            "max_height": 600,
+            "width": 600,
+            "height": 422,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097_2_600x422.jpeg"
+          },
+          {
+            "max_width": 400,
+            "max_height": 400,
+            "width": 400,
+            "height": 281,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097_2_400x281.jpeg"
+          },
+          {
+            "max_width": 300,
+            "max_height": 300,
+            "width": 300,
+            "height": 211,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097_2_300x211.jpeg"
+          },
+          {
+            "max_width": 200,
+            "max_height": 200,
+            "width": 200,
+            "height": 140,
+            "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/7/5/7/757163863f7cdfe6f8ff7afeff4962317c0ee097_2_200x140.jpeg"
+          }
+        ],
+        "tags": [
+          {
+            "id": 587,
+            "name": "jetson",
+            "slug": "jetson"
+          },
+          {
+            "id": 1079,
+            "name": "agentic-ai",
+            "slug": "agentic-ai"
+          },
+          {
+            "id": 1158,
+            "name": "deepseek",
+            "slug": "deepseek"
+          },
+          {
+            "id": 84,
+            "name": "ota",
+            "slug": "ota"
+          }
+        ],
+        "tags_descriptions": {},
+        "views": 1159,
+        "like_count": 39,
+        "has_summary": false,
+        "last_poster_username": "x1917x",
+        "category_id": 721,
+        "op_like_count": 26,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 5264266,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 835395,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Frequent Poster",
+            "user_id": 649683,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 5288181,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 5155533,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      },
+      {
+        "fancy_title": "Booting DGX from external drive",
+        "id": 388231,
+        "title": "Booting DGX from external drive",
+        "slug": "booting-dgx-from-external-drive",
+        "posts_count": 3,
+        "reply_count": 0,
+        "highest_post_number": 3,
+        "image_url": null,
+        "created_at": "2026-11-06T20:26:13.759Z",
+        "last_posted_at": "2026-11-06T20:47:17.031Z",
+        "bumped": true,
+        "bumped_at": "2026-11-06T20:47:17.031Z",
+        "archetype": "regular",
+        "unseen": false,
+        "pinned": false,
+        "unpinned": null,
+        "visible": true,
+        "closed": false,
+        "archived": false,
+        "bookmarked": null,
+        "liked": null,
+        "thumbnails": null,
+        "tags": [],
+        "tags_descriptions": {},
+        "views": 106,
+        "like_count": 3,
+        "has_summary": false,
+        "last_poster_username": "jcagle",
+        "category_id": 721,
+        "op_like_count": 0,
+        "pinned_globally": false,
+        "featured_link": null,
+        "has_accepted_answer": false,
+        "can_vote": false,
+        "posters": [
+          {
+            "extras": null,
+            "description": "Original Poster",
+            "user_id": 4417571,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": null,
+            "description": "Recent Poster",
+            "user_id": 4661029,
+            "primary_group_id": null,
+            "flair_group_id": null
+          },
+          {
+            "extras": "latest",
+            "description": "Most Recent Poster",
+            "user_id": 4850404,
+            "primary_group_id": null,
+            "flair_group_id": null
+          }
+        ]
+      }
+    ]
+  }
+}

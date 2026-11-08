@@ -1,0 +1,89 @@
+{
+  "id": 1877765,
+  "name": "Giles",
+  "username": "giles8",
+  "avatar_template": "/user_avatar/forums.developer.nvidia.com/giles8/{size}/545335_2.png",
+  "created_at": "2026-10-24T16:45:04.237Z",
+  "cooked": "<p>My Tensorfold v1.1.x repo is starting to become competitive with the v0.6.6 (python based) repo.</p>\n<p>Initial Load time is still very slow, and prefill is lacking. Decode is superior at c1, c2, but has been lacking at c4.</p>\n<p>Currently GLM 5.3 Flash is re-quantizing the model, which is going to take some hours.</p>\n<p>NB GLM 5.3 Flash is making all the decisions here, and is continuing to fold in commits from upstream.</p>\n<aside class=\"onebox githubrepo\" data-onebox-src=\"https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\">\n  <header class=\"source\">\n\n      <a href=\"https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\" target=\"_blank\" rel=\"noopener nofollow ugc\">github.com</a>\n  </header>\n\n  <article class=\"onebox-body\">\n    <div class=\"github-row\" data-github-private-repo=\"false\">\n  <a width=\"690\" height=\"344\" class=\"blocked-hotlinked-placeholder\" data-blocked-hotlinked-src=\"https://opengraph.githubassets.com/c18e5a42e4337e5e6a592de372975b35/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\" href=\"https://opengraph.githubassets.com/c18e5a42e4337e5e6a592de372975b35/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\" title=\"Image hosted on another site. Click to open in a new tab.\" rel=\"noopener nofollow ugc\"><svg class=\"fa d-icon d-icon-link svg-icon\" aria-hidden=\"true\"><use href=\"#link\"></use></svg><span class=\"notice\">External Image</span></a>\n\n  <h3><a href=\"https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\" target=\"_blank\" rel=\"noopener nofollow ugc\">GitHub - gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing: TESTING: GLM-5.3-Flash EXL3 + DFlash2 on 2x GB10...</a></h3>\n\n    <p><span class=\"github-repo-description\">TESTING: GLM-5.3-Flash EXL3 + DFlash2 on 2x GB10 (DGX Spark) via TensorFold's native engine, v1.1.0+ — unpatched upstream; successor to the NVFP4 v1 testing line (EXL3 pivot 2026-10-18)</span></p>\n</div>\n\n  </article>\n\n  <div class=\"onebox-metadata\">\n    \n    \n  </div>\n\n  <div style=\"clear: both\"></div>\n</aside>\n",
+  "post_number": 922,
+  "post_type": 1,
+  "posts_count": 956,
+  "updated_at": "2026-10-24T16:45:04.237Z",
+  "reply_count": 2,
+  "reply_to_post_number": 921,
+  "quote_count": 0,
+  "incoming_link_count": 5,
+  "reads": 159,
+  "readers_count": 158,
+  "score": 110.8,
+  "yours": false,
+  "topic_id": 381350,
+  "topic_slug": "glm-5-3-flash-320b-total-parameters-18b-active",
+  "display_username": "Giles",
+  "primary_group_name": null,
+  "flair_name": null,
+  "flair_url": null,
+  "flair_bg_color": null,
+  "flair_color": null,
+  "flair_group_id": null,
+  "badges_granted": [],
+  "version": 2,
+  "can_edit": false,
+  "can_delete": false,
+  "can_recover": false,
+  "can_see_hidden_post": false,
+  "can_wiki": false,
+  "link_counts": [
+    {
+      "url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing",
+      "internal": false,
+      "reflection": false,
+      "title": "GitHub - gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing: TESTING: GLM-5.3-Flash EXL3 + DFlash2 on 2x GB10 (DGX Spark) via TensorFold's native engine, v1.1.0+ — unpatched upstream; successor to the NVFP4 v1 testing line (EXL3 pivot 2026-10-18) ",
+      "clicks": 22
+    }
+  ],
+  "read": true,
+  "user_title": null,
+  "reply_to_user": {
+    "id": 3735447,
+    "username": "technobuddha",
+    "name": "",
+    "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png"
+  },
+  "bookmarked": false,
+  "raw": "My Tensorfold v1.1.x repo is starting to become competitive with the v0.6.6 (python based) repo.\n\nInitial Load time is still very slow, and prefill is lacking. Decode is superior at c1, c2, but has been lacking at c4.\n\nCurrently GLM 5.3 Flash is re-quantizing the model, which is going to take some hours.\n\nNB GLM 5.3 Flash is making all the decisions here, and is continuing to fold in commits from upstream.\n\nhttps://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-v1.1-testing\n\nedited: fp8 works, nvfp4 OOMs at 128k context.",
+  "actions_summary": [
+    {
+      "id": 2,
+      "count": 3
+    }
+  ],
+  "moderator": false,
+  "admin": false,
+  "staff": false,
+  "user_id": 4661029,
+  "hidden": false,
+  "trust_level": 1,
+  "deleted_at": null,
+  "user_deleted": false,
+  "edit_reason": null,
+  "can_view_edit_history": false,
+  "wiki": false,
+  "post_url": "/t/glm-5-3-flash-320b-total-parameters-18b-active/381350/922",
+  "event": null,
+  "reactions": [
+    {
+      "id": "heart",
+      "type": "emoji",
+      "count": 3
+    }
+  ],
+  "current_user_reaction": null,
+  "reaction_users_count": 3,
+  "current_user_used_main_reaction": false,
+  "can_accept_answer": false,
+  "can_unaccept_answer": false,
+  "accepted_answer": false,
+  "topic_accepted_answer": null,
+  "can_translate": false
+}

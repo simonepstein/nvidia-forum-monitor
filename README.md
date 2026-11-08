@@ -1,6 +1,6 @@
 # sparkwatch
 
-**Status: spec only; implementation hasn't started yet.** See [SPEC.md](SPEC.md).
+**Status: Run A (the MVP) is implemented.** See [SPEC.md](SPEC.md) for the design and the Run B/C plan.
 
 sparkwatch keeps an AI agent up to date with the NVIDIA DGX Spark / GB10 developer forums. It helps answer questions like "what's the best way to serve GLM 5.3 Flash on two Sparks today?" or "pull the latest posts and flag anything interesting".
 
@@ -13,18 +13,53 @@ It is a local data layer behind an MCP server:
 
 The MVP needs no local LLM. Local-LLM triage, to cut agent token use, is planned as phase 2.
 
-## Planned usage
+## Install
+
+Python 3.12+ and [uv](https://docs.astral.sh/uv/):
 
 ```sh
 uv sync
-uv run sparkwatch sync                 # mirror the last 60 days (configurable)
-uv run sparkwatch digest               # what's new
-claude mcp add sparkwatch -- uv run --directory "$PWD" sparkwatch serve-mcp
+uv run sparkwatch sync                 # mirror the last 60 days (configurable in config.toml)
+uv run sparkwatch digest               # what's new since the last digest
+uv run sparkwatch sync --forum 723 --max-pages 1     # a small, polite live run
+uv run sparkwatch backfill --days 120  # widen the window; never re-crawls from scratch
+uv run sparkwatch repos check          # watched repos: head moved? new release or tag?
 ```
 
-Then, in Claude Code: *"catch me up"*, *"what's the best way to serve DeepSeek V4.1 Flash on two Sparks?"* or *"should I update vLLM?"*
+Configuration lives in `config.toml`; any value can be overridden with `SPARKWATCH_*`
+environment variables using `__` for nesting, e.g.
+`SPARKWATCH_GENERAL__DB_PATH=/tmp/sw.db` or `SPARKWATCH_FORUM__REQUESTS_PER_SECOND=0.5`.
+`GITHUB_TOKEN` is optional (a handful of watched repos fits in the anonymous rate limit).
+
+## Register the MCP server
+
+```sh
+claude mcp add sparkwatch -- uv run --directory /home/simon/dev/nvidia-forum-monitor sparkwatch serve-mcp
+```
+
+Then, in Claude Code: *"catch me up"*, *"what's the best way to serve DeepSeek V4.1 Flash on two Sparks?"* or *"should I update vLLM?"* — or use the `catch_up`, `serve_model`, `should_i_update` and `frontier` prompts.
+
+To poke at the tools interactively: `uv run mcp dev src/sparkwatch/mcp_server.py`.
+
+## Run it in the background
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp deploy/sparkwatch-sync.service deploy/sparkwatch-sync.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now sparkwatch-sync.timer
+```
+
+The timer runs `sparkwatch sync && sparkwatch repos check` every 2 hours. Long write jobs take
+a lock, so an overlapping `sync_now` returns `{"busy": true, ...}` instead of blocking.
 
 ## Development
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/). Run the tests with `uv run pytest` and lint with `uv run ruff check`.
-- Contributor and agent guidance is in [CLAUDE.md](CLAUDE.md).
+- `uv run pytest` — the full suite (no network; `respx` fixtures under `tests/fixtures/`).
+- `uv run pytest -m "not live"` — what CI runs.
+- `SPARKWATCH_LIVE=1 uv run pytest -m live` — opt-in drift checks against the real forum and GitHub.
+- `uv run ruff check` and `uv run ruff format`.
+- `uv run python scripts/record_fixtures.py` — re-record the live sample (run once; not part of the suite).
+- `uv run python tests/evals/build_db.py` then `uv run python tests/evals/run.py` — manual, agent-driven evals.
+
+Contributor and agent guidance is in [CLAUDE.md](CLAUDE.md).

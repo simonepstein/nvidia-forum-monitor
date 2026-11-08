@@ -1,0 +1,267 @@
+{
+  "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/compare/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5...c4d20c9725c9580a4ed06d52b42d2949486ac902",
+  "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/compare/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5...c4d20c9725c9580a4ed06d52b42d2949486ac902",
+  "permalink_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/compare/gilesco:b4c93e0...gilesco:c4d20c9",
+  "diff_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/compare/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5...c4d20c9725c9580a4ed06d52b42d2949486ac902.diff",
+  "patch_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/compare/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5...c4d20c9725c9580a4ed06d52b42d2949486ac902.patch",
+  "base_commit": {
+    "sha": "b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "node_id": "C_kwDOVOh2itoAKGI0YzkzZTBiYjA0MzdhNDFiNGQzZGNmMTkyZGJmMTdhNWExMTFiZjU",
+    "commit": {
+      "author": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "committer": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "message": "Round 138: THE 0082 PORT QUALIFIED AND ADOPTED — the 0082qual A/B (campaign-20261108-024926, both arms the SAME 14-patch image, TF_EXL3_PDL=0 vs unset): the arms' greedy content IDENTICAL (the same 80cc3802… sha as every window — the fork's 108/108 exactness confirmed on the real model), the §2 gates ALL PASS, hardmode 95 (the FOURTEENTH consecutive), the vision 4/4, prefill flat (the bench pp d0 1,528, inside the band — the prefill row stands at the 0080qual crossing); the fork's measured chain gain did NOT transfer to our shape (c2 118.0 vs 119.1, c4 169.6 vs 170.4, ITL -0.3%, solo flat — the launch-COUNT class of 0030 transferred at concurrency, the launch-OVERLAP class doesn't; the second decode-side non-transfer); ADOPTED anyway: bit-safe, knobbed, neutral everywhere, register-neutral on our sm_121 build (rot_in 19, gateup_epilogue 40, the p kernels 79 = the s kernels — no record work), and the fork's 0083+ builds on this exact base; config.sh's PATCHES carries glm-zz-zstep.patch (the fourteenth; verified per the sourced-config skill — the 14-name probe, config_line RC=0); README/DELTAS/ledger/PERF_PLAN/ECOSYSTEM updated (the transfer pattern: prefill-side claims three for three, decode-side one for three); LAUNCHED the duel re-pair on the adopted 14-patch stack",
+      "tree": {
+        "sha": "c13f93d50e3d96825cba25e1faca8c4c0189b884",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/c13f93d50e3d96825cba25e1faca8c4c0189b884"
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/cceb744a496c3713c21be35dd2afdbae060ebaf5"
+      }
+    ]
+  },
+  "merge_base_commit": {
+    "sha": "b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "node_id": "C_kwDOVOh2itoAKGI0YzkzZTBiYjA0MzdhNDFiNGQzZGNmMTkyZGJmMTdhNWExMTFiZjU",
+    "commit": {
+      "author": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "committer": {
+        "name": "giles",
+        "email": "giles@deep.local",
+        "date": "2026-11-08T03:56:27Z"
+      },
+      "message": "Round 138: THE 0082 PORT QUALIFIED AND ADOPTED — the 0082qual A/B (campaign-20261108-024926, both arms the SAME 14-patch image, TF_EXL3_PDL=0 vs unset): the arms' greedy content IDENTICAL (the same 80cc3802… sha as every window — the fork's 108/108 exactness confirmed on the real model), the §2 gates ALL PASS, hardmode 95 (the FOURTEENTH consecutive), the vision 4/4, prefill flat (the bench pp d0 1,528, inside the band — the prefill row stands at the 0080qual crossing); the fork's measured chain gain did NOT transfer to our shape (c2 118.0 vs 119.1, c4 169.6 vs 170.4, ITL -0.3%, solo flat — the launch-COUNT class of 0030 transferred at concurrency, the launch-OVERLAP class doesn't; the second decode-side non-transfer); ADOPTED anyway: bit-safe, knobbed, neutral everywhere, register-neutral on our sm_121 build (rot_in 19, gateup_epilogue 40, the p kernels 79 = the s kernels — no record work), and the fork's 0083+ builds on this exact base; config.sh's PATCHES carries glm-zz-zstep.patch (the fourteenth; verified per the sourced-config skill — the 14-name probe, config_line RC=0); README/DELTAS/ledger/PERF_PLAN/ECOSYSTEM updated (the transfer pattern: prefill-side claims three for three, decode-side one for three); LAUNCHED the duel re-pair on the adopted 14-patch stack",
+      "tree": {
+        "sha": "c13f93d50e3d96825cba25e1faca8c4c0189b884",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/c13f93d50e3d96825cba25e1faca8c4c0189b884"
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null,
+        "verified_at": null
+      }
+    },
+    "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+    "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/cceb744a496c3713c21be35dd2afdbae060ebaf5",
+        "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/cceb744a496c3713c21be35dd2afdbae060ebaf5"
+      }
+    ]
+  },
+  "status": "ahead",
+  "ahead_by": 2,
+  "behind_by": 0,
+  "total_commits": 2,
+  "commits": [
+    {
+      "sha": "3e94d763a92cffb01e355e84f528e9506660e386",
+      "node_id": "C_kwDOVOh2itoAKDNlOTRkNzYzYTkyY2ZmYjAxZTM1NWU4NGY1MjhlOTUwNjY2MGUzODY",
+      "commit": {
+        "author": {
+          "name": "giles",
+          "email": "giles@deep.local",
+          "date": "2026-11-08T04:17:56Z"
+        },
+        "committer": {
+          "name": "giles",
+          "email": "giles@deep.local",
+          "date": "2026-11-08T04:17:56Z"
+        },
+        "message": "Round 138 (cont. 2): THE ZSTEP DUEL RE-PAIRED — the same-window pair on the adopted 14-patch engine (campaign-20261108-035708): solo 68.3/68.1 vs 58.4/58.4 = 116.8% (a new high), c2 118.5 vs 86.9 at its floor = 136.4% there (its top ~110 = 107.7%), c4 169.2 = our best c4 (109.2% at production's floor 154.5), ITL 14.7 vs 17.1 ms/token = 116%, overhead 184 vs 184 ms = 100.0%, the cold d8192 3,809 ms = 450%; the anchors re-paired and the chart re-rendered; THE (USER) PROMOTION COMMISSIONED — the 14-patch native stack becomes production (a new repo on the head owns the lifecycle, the old tip recipe archives and remains the duel baseline on 8001, the testing repo remains the dev line), the night runs the standing loop",
+        "tree": {
+          "sha": "3ec3dd2aa73c43cc351bbae96d3b858c553b9b86",
+          "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/3ec3dd2aa73c43cc351bbae96d3b858c553b9b86"
+        },
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+      "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/3e94d763a92cffb01e355e84f528e9506660e386",
+      "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386/comments",
+      "author": null,
+      "committer": null,
+      "parents": [
+        {
+          "sha": "b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+          "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5",
+          "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/b4c93e0bb0437a41b4d3dcf192dbf17a5a111bf5"
+        }
+      ]
+    },
+    {
+      "sha": "c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "node_id": "C_kwDOVOh2itoAKGM0ZDIwYzk3MjVjOTU4MGE0ZWQwNmQ1MmI0MmQyOTQ5NDg2YWM5MDI",
+      "commit": {
+        "author": {
+          "name": "giles",
+          "email": "giles@deep.local",
+          "date": "2026-11-08T04:21:20Z"
+        },
+        "committer": {
+          "name": "giles",
+          "email": "giles@deep.local",
+          "date": "2026-11-08T04:21:20Z"
+        },
+        "message": "Round 138 (cont. 3): THE PROMOTION PREP — the loop scripts follow production to the promoted native stack: autonomous-window.sh stops/restores production via the production repo's own scripts (PROD_REPO in local.sh; PROD_TIP becomes the ARCHIVED baseline checkout — the duel's production-for-testing serve); autonomous-cron.sh guards glm53-native-tf and restarts via the production repo; autonomous-poke.sh health-checks glm53-native-tf via the production repo's config; run-qualification.sh's prod_running guard checks glm53-native-tf (the archived tip's glm53-flash-tf serves only as the duel baseline INSIDE windows and must not trip it); the newprodqual phase added (the promotion battery on the testing port: the §2 gates, hardmode's fifteenth 95, the vision 4/4, the bench); the bash ${VAR:?...} apostrophe lesson (a quote char inside the default word opens an unclosable context — the window script reworded)",
+        "tree": {
+          "sha": "33e76c2c5682e4f8200ac4823dddb8288e46ec2f",
+          "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/trees/33e76c2c5682e4f8200ac4823dddb8288e46ec2f"
+        },
+        "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/git/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null,
+          "verified_at": null
+        }
+      },
+      "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "comments_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/c4d20c9725c9580a4ed06d52b42d2949486ac902/comments",
+      "author": null,
+      "committer": null,
+      "parents": [
+        {
+          "sha": "3e94d763a92cffb01e355e84f528e9506660e386",
+          "url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commits/3e94d763a92cffb01e355e84f528e9506660e386",
+          "html_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/commit/3e94d763a92cffb01e355e84f528e9506660e386"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "sha": "aecbffb7fab32112688056c19d886939fe9ba9d0",
+      "filename": "docs/LAUNCH.md",
+      "status": "modified",
+      "additions": 23,
+      "deletions": 0,
+      "changes": 23,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2FLAUNCH.md",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2FLAUNCH.md",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/docs%2FLAUNCH.md?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -8603,3 +8603,26 @@ TF_EXL3_PDL=0 vs unset):\n **LAUNCHED: duel + summary** — the v1.2.4+zstep duel re-pair\n (production-for-testing on 8001 vs ours on the adopted 14-patch\n stack): every speed row re-paired same-window. THEN DARK.\n+\n+## (round 138, cont. 2) THE ZSTEP DUEL RE-PAIRED — solo 116.8% (a new high), c2 136.4% of the floor, c4 169.2 (our best), overhead 100.0%, cold 450% (campaign-20261108-035708); THE (USER) PROMOTION COMMISSIONED (2026-11-08)\n+\n+**The same-window pair** (production-for-testing on 8001 vs ours on\n+the adopted 14-patch engine): **solo 68.3/68.1 vs 58.4/58.4 — 116.8%,\n+a new high**; **c2 118.5 vs 86.9 at its floor — 136.4% there** (its\n+top ~110 — 107.7%); **c4 169.2 — our best c4** (vs production's floor\n+154.5 — 109.2%); **ITL 14.7 vs 17.1 — 116%**; **overhead 184 vs 184 —\n+100.0%**; the cold d8192 **3,809 ms — 450%**. The prefill row stands\n+(100.1%). The anchors re-paired and the chart re-rendered; the docs\n+updated.\n+\n+**THE (USER) PROMOTION (2026-11-08)**: \"This completes our job. The\n+current development becomes the production. Create a new repo for\n+production on the head. Transfer the move to production to that repo.\n+Archive the old production. Then start the new work from there. Work\n+autonomously through the night, catch up with you in the morning.\"\n+— the 14-patch native stack is PROMOTED to production (it serves\n+opencode on 8000, the intent-keyed port); a new production repo owns\n+the lifecycle; the old tip recipe archives (it remains the duel\n+baseline on 8001, production-for-testing); the testing repo remains\n+the dev line; the night runs the standing loop (the promotion-qual\n+window first, then the fork's 0083+ scope)."
+    },
+    {
+      "sha": "f077ed3dca9d43aee2beeeb3b01c2966f04a636d",
+      "filename": "docs/perf-anchors.tsv",
+      "status": "modified",
+      "additions": 11,
+      "deletions": 6,
+      "changes": 17,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2Fperf-anchors.tsv",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2Fperf-anchors.tsv",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/docs%2Fperf-anchors.tsv?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -80,11 +80,16 @@\n # receipts=perf leader.\n # Columns: label|direction(lower|higher)|production|ours|raw label (receipt numbers as displayed)\n loading (warm restart wall)|lower|93.7|83|83 vs 93.7 s — **112.9%, CROSSED**: the v1.2.4 wall on the direct reads (glm-zz-loaddirect on the resharded 55-shard pack — the timed walls 83/83 s, the first load after prepare 88 s, campaign-20261107-150250; the OFF arm's 138 s carries the one-time digest-cache rebuild on the model swap — not a clean instrument this run; the v1.2.3-era wall was 103 s = 91%, campaign-20261103-221555 — the direct reads took 20 s off); production's 93.7 stands\n-decode solo (2048-token, measured)|higher|58.6|67.7|67.7 vs 58.6 t/s — the SHFL duel re-pair (campaign-20261108-010714, both engines the same window: ours 67.2/67.7 on the adopted 13-patch engine, production 58.6/58.5; **115.2%** — every row holds within noise on the SHFL engine, the adoption was decode-neutral as the A/B read; the chain: the P2 duel pair 68.0/68.1 (116.2%, campaign-20261107-225124), the exl3p duel pair 68.2/68.3 (116.4%), the zmoe-fuse duel pair 67.6/67.5 (115.4%), the v1.2.4 rebase pair 67.3/66.8 (114.2%), the MOESIDE pair 65.9/66.2 (112.3%), the ATTN8 pair 64.6 (109.4%), the exl3prompt pair 63.8 avg (108.9%))\n-decode c2 aggregate (measured)|higher|110.1|118.0|118.0 vs 110.1 t/s — the SHFL duel re-pair (**107.2% — above production even at its top-of-range volley** this run; its c2 range: the floor 86.4 — 136.6% there; ours 110.3 -> 111.2 -> 113.1 -> 116.3 -> 117.1 -> 117.3 -> 118.1 -> 118.6 -> 118.0 across the last nine windows — the record 118.6 stands)\n-decode c4 aggregate (measured)|higher|154.5|168.0|168.0 vs 154.5 t/s — the SHFL duel re-pair (production AT ITS FLOOR this run — **108.7%**; its c4 range 155-241 with cache state; ours 153.7 -> 157.4 -> 158.6 -> 160.2 -> 166.1 -> 168.8 -> 168.9 -> 168.0 across the windows — the record 168.9 stands, held at 168+ four windows)\n-request overhead (TTFT, 1-token, solo)|lower|184|183|183 vs 184 ms — the SHFL duel re-pair (99.5%; production 181-188 across windows — the overhead is stable)\n-TTFT at depth, COLD (1-token, d8192, novel fill)|lower|17129|3812|3,812 vs 17,129 ms — **429%, CROSSED** (the MOESIDE duel re-pair, campaign-20261107-092913: d8192 3,990 ms, slope 0.464 — the row's window-to-window drift ±2-3% with the fills' cache state; **the v1.2.4 duel re-paired it at 3,957 ms, slope 0.460 — 433%** (campaign-20261107-163011); **the zmoe-fuse adoption re-paired it at 3,946 ms, slope 0.459 — 434%** (campaign-20261107-172250; the fused/unfused arms read 3,946/3,923 — flat across the knob); **the zmoe-fuse duel re-paired it at 3,961 ms, slope 0.460 — 433%** (campaign-20261107-183530); **the exl3p duel re-paired it at 3,845 ms, slope 0.447 — 445%** (campaign-20261107-211404); **the P2 duel re-paired it at 3,803 ms, slope 0.442 — 450%** (campaign-20261107-225124); **the SHFL duel re-pairs it at 3,812 ms, slope 0.443 — 449%** (campaign-20261108-010714); the ATTN8 duel re-paired it at 3,942 ms, slope 0.458 — **434%** — compounding the exl3prompt pair's 4,134, the s2 pair's 5,034 and the paged pair's 5,215) (the round-131 prodcold receipt, campaign-20261101-051733: production's true cold — novel fills its persistent cache cannot hit — costs 17.1 s at d8192 and 8.8 s at d4096, slope 2.026 ms/tok vs our 0.656; its cold prefill SLOWS with depth (0.66 at d0 from its bench rate, ours stays flat); the round-130 '42%' compared our COLD against its cache-warm 2,363 — the persistent-cache artifact; **re-verified on the TR3 duel** (campaign-20261102-210117: ours d8192 5,587 ms, slope 0.657); the deep fills extend it — linear to 204k tokens, 0.785-0.790 ms/tok on v1.2.2 vs 0.811-0.819 on v1.2.1 (the #1577 deep delta −2.6 to −3.5%, the deepdelta receipt campaign-20261104-182759 — while production's cold slope SLOWS with depth); on the ADOPTED stack (+ABSORB_MMA, round 133 cont. 16) the deep curve drops further to 0.727-0.738 ms/tok (−6.8/−7.0/−6.9%, the receipt campaign-20261104-213422); the ABSORB-only duel re-paired the 8k row at 5,122 ms, slope 0.602 (campaign-20261105-000521 — **334%**); the PAGED duel re-pairs it at 5,215 ms, slope 0.612 (campaign-20261106-052114 — **328%**; the pages' overhead +1.8% vs the ABSORB-only pair — the current cell's number is the data value))\n+decode solo (2048-token, measured)|higher|58.4|68.2|68.2 vs 58.4 t/s — the zstep duel re-pair (campaign-20261108-035708, both engines the same window: ours 68.3/68.1 on the adopted 14-patch engine, production 58.4/58.4; **116.8% — a new high**; the chain: the SHFL duel pair 67.2/67.7 (115.2%, campaign-20261108-010714), the P2 duel pair 68.0/68.1 (116.2%), the exl3p duel pair 68.2/68.3 (116.4%), the zmoe-fuse duel pair 67.6/67.5 (115.4%), the v1.2.4 rebase pair 67.3/66.8 (114.2%), the MOESIDE pair 65.9/66.2 (112.3%), the ATTN8 pair 64.6 (109.4%), the exl3prompt pair 63.8 avg (108.9%))\n+decode c2 aggregate (measured)|higher|86.9|118.5|118.5 vs 86.9 t/s — the zstep duel re-pair (production AT ITS FLOOR this run — **136.4% of the floor**; its c2 range: the top-of-range volley ~110 — 107.7% there; ours 110.3 -> 111.2 -> 113.1 -> 116.3 -> 117.1 -> 117.3 -> 118.1 -> 118.6 -> 118.0 -> 118.5 across the last ten windows)\n+decode c4 aggregate (measured)|higher|192.2|169.2|169.2 vs 192.2 t/s — the zstep duel re-pair (production at a warm-cache high this run; its c4 range 155-241 with cache state — **vs its floor 154.5 the pair is 109.2%**; ours 153.7 -> 157.4 -> 158.6 -> 160.2 -> 166.1 -> 168.8 -> 168.9 -> 168.0 -> **169.2** across the windows — **our best c4**)\n+request overhead (TTFT, 1-token, solo)|lower|184|184|184 vs 184 ms — the zstep duel re-pair (100.0%; production 181-188 across windows — the overhead is stable)\n+TTFT at depth, COLD (1-token, d8192, novel fill)|lower|17129|3809|3,809 vs 17,129 ms — **429%, CROSSED** (the MOESIDE duel re-pair, campaign-20261107-092913: d8192 3,990 ms, slope 0.464 — the row's window-to-window drift ±2-3% with the fills' cache state; **the v1.2.4 duel re-paired it at 3,957 ms, slope 0.460 — 433%** (campaign-20261107-163011); **the zmoe-fuse adoption re-paired it at 3,946 ms, slope 0.459 — 434%** (campaign-20261107-172250; the fused/unfused arms read 3,946/3,923 — flat across the knob); **the zmoe-fuse duel re-paired it at 3,961 ms, slope 0.460 — 433%** (campaign-20261107-183530); **the exl3p duel re-paired it at 3,845 ms, slope 0.447 — 445%** (campaign-20261107-211404); **the P2 duel re-paired it at 3,803 ms, slope 0.442 — 450%** (campaign-20261107-225124); **the SHFL duel re-paired it at 3,812 ms, slope 0.443 — 449%** (campaign-20261108-010714); **the zstep duel re-pairs it at 3,809 ms, slope 0.442 — 450%** (campaign-20261108-035708); the ATTN8 duel re-paired it at 3,942 ms, slope 0.458 — **434%** — compounding the exl3prompt pair's 4,134, the s2 pair's 5,034 and the paged pair's 5,215) (the round-131 prodcold receipt, campaign-20261101-051733: production's true cold — novel fills its persistent cache cannot hit — costs 17.1 s at d8192 and 8.8 s at d4096, slope 2.026 ms/tok vs our 0.656; its cold prefill SLOWS with depth (0.66 at d0 from its bench rate, ours stays flat); the round-130 '42%' compared our COLD against its cache-warm 2,363 — the persistent-cache artifact; **re-verified on the TR3 duel** (campaign-20261102-210117: ours d8192 5,587 ms, slope 0.657); the deep fills extend it — linear to 204k tokens, 0.785-0.790 ms/tok on v1.2.2 vs 0.811-0.819 on v1.2.1 (the #1577 deep delta −2.6 to −3.5%, the deepdelta receipt campaign-20261104-182759 — while production's cold slope SLOWS with depth); on the ADOPTED stack (+ABSORB_MMA, round 133 cont. 16) the deep curve drops further to 0.727-0.738 ms/tok (−6.8/−7.0/−6.9%, the receipt campaign-20261104-213422); the ABSORB-only duel re-paired the 8k row at 5,122 ms, slope 0.602 (campaign-20261105-000521 — **334%**); the PAGED duel re-pairs it at 5,215 ms, slope 0.612 (campaign-20261106-052114 — **328%**; the pages' overhead +1.8% vs the ABSORB-only pair — the current cell's number is the data value))\n TTFT at depth, WARM (1-token, d8192, cache hit)|lower|212|302|302 vs ~212 ms — 70% (RE-MEASURED cont. 25 on v1.2.1, the same instrument definition — the same-session immediate repeat at max_tokens=1, d8.4k: campaign-20261102-233025, cold 7.22 s → warm 0.302 s; the round-131 receipt was 1,422 ms on the v1.2.0-era stack — the #1868 page-cache fix the likely mover; production's full-hit skip 0.21 s at d8192, 0.086 s at d4096; the cross-restart resume is COLD (7.25 s — the store does not survive a restart; the 003946 receipt), so the open pieces narrow to the concurrent resume's 4× serialization)\n prefill (benchy pp2048 @ d0)|higher|1518|1519|1,519 vs 1,518 tok/s — **100.1%, CROSSED — the last uncrossed (user)-bar front falls** — ours: the 0080 adoption bench (the ON arm, campaign-20261107-214342; the chain: the zmoe-fuse windows 1,458-1,468 → the exl3p prompt loop 1,495 (+1.8-2.5%, the TTFT slope −2.4% agreeing) → the P2 packed-prompt loads 1,519 (+1.6%, the TTFT slope 0.448 → 0.441 = −1.6% agreeing); production: the round-129 same-day pair (campaign-20261031-171731) — the duel re-pair that follows re-pairs this row same-window; the bench is the prefill row's instrument — production's duel-side TTFT slope 0.269 vs ours 0.447 at depth is the remaining prefill-depth gap)\n-streaming latency per token (ITL)|lower|17.1|14.8|14.8 vs 17.1 ms/token — the SHFL duel re-pair (116% — ours' chunked rhythm 58.2 ms over 520 chunks for the 2,048-token probe = 58.2 x 520/2048 = 14.8 per token; the P2 duel read 14.7 vs 17.1 = 116%; production's single-token chunks 17.1-17.4 across windows; the chain: the v1.2.4 duel 15.1, the MOESIDE pair 15.4, the ATTN8 pair 15.6)\n+streaming latency per token (ITL)|lower|17.1|14.7|14.7 vs 17.1 ms/token — the zstep duel re-pair (116% — ours' chunked rhythm 57.2 ms over 520 chunks for the 2,048-token probe = 57.2 x 520/2048 = 14.7 per token; the SHFL duel read 14.8 vs 17.1 = 116%; production's single-token chunks 17.1-17.4 across windows; the chain: the v1.2.4 duel 15.1, the MOESIDE pair 15.4, the ATTN8 pair 15.6)\n+# receipts=THE ZSTEP DUEL RE-PAIRED (campaign-20261108-035708, both arms the same window, the adopted\n+# receipts=14-patch engine): solo 68.3/68.1 vs 58.4/58.4 — 116.8%, a new high; c2 118.5 vs 86.9 at its\n+# receipts=floor — 136.4%; c4 169.2 — our best; ITL 14.7 vs 17.1 — 116%; overhead 184 vs 184 — 100.0%;\n+# receipts=the cold d8192 3,809 ms — 450%. The promotion duel: the 14-patch engine holds or improves\n+# receipts=every row."
+    },
+    {
+      "sha": "fab48582c5a6c815a97482c359949e2c5dc48e34",
+      "filename": "docs/perf-vs-production.svg",
+      "status": "modified",
+      "additions": 20,
+      "deletions": 20,
+      "changes": 40,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2Fperf-vs-production.svg",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/docs%2Fperf-vs-production.svg",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/docs%2Fperf-vs-production.svg?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -1,7 +1,7 @@\n <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1000 430\" width=\"1000\" height=\"430\" font-family=\"ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif\">\n \n   <text x=\"12\" y=\"18\" font-size=\"14.5\" font-weight=\"700\" fill=\"#e6edf3\">The fronts — this line vs production 0.6.6 (same harness</text>\n-  <text x=\"413\" y=\"18\" font-size=\"10.5\" fill=\"#8b949e\" text-anchor=\"middle\">production = 100%</text>\n+  <text x=\"412\" y=\"18\" font-size=\"10.5\" fill=\"#8b949e\" text-anchor=\"middle\">production = 100%</text>\n \n   <!-- rows: label | bar | % + raw values; higher is always better (time metrics inverted) -->\n   <g>\n@@ -10,41 +10,41 @@\n     <text x=\"439\" y=\"51.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">113%</text>\n     <text x=\"480\" y=\"51.5\" font-size=\"10\" fill=\"#8b949e\">83 vs 93.7 s</text>\n     <text x=\"12\" y=\"91.5\" font-size=\"12.5\" fill=\"#9fb1c9\">decode solo (2048-token, measured)</text>\n-    <rect x=\"270\" y=\"74\" width=\"165\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"443\" y=\"91.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">116%</text>\n-    <text x=\"484\" y=\"91.5\" font-size=\"10\" fill=\"#8b949e\">67.7 vs 58.6 t/s</text>\n+    <rect x=\"270\" y=\"74\" width=\"166\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n+    <text x=\"444\" y=\"91.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">117%</text>\n+    <text x=\"485\" y=\"91.5\" font-size=\"10\" fill=\"#8b949e\">68.2 vs 58.4 t/s</text>\n     <text x=\"12\" y=\"131.5\" font-size=\"12.5\" fill=\"#9fb1c9\">decode c2 aggregate (measured)</text>\n-    <rect x=\"270\" y=\"114\" width=\"153\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"431\" y=\"131.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">107%</text>\n-    <text x=\"472\" y=\"131.5\" font-size=\"10\" fill=\"#8b949e\">118.0 vs 110.1 t/s</text>\n+    <rect x=\"270\" y=\"114\" width=\"193\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n+    <text x=\"471\" y=\"131.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">136%</text>\n+    <text x=\"512\" y=\"131.5\" font-size=\"10\" fill=\"#8b949e\">118.5 vs 86.9 t/s</text>\n     <text x=\"12\" y=\"171.5\" font-size=\"12.5\" fill=\"#9fb1c9\">decode c4 aggregate (measured)</text>\n-    <rect x=\"270\" y=\"154\" width=\"155\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"433\" y=\"171.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">109%</text>\n-    <text x=\"474\" y=\"171.5\" font-size=\"10\" fill=\"#8b949e\">168.0 vs 154.5 t/s</text>\n+    <rect x=\"270\" y=\"154\" width=\"125\" height=\"26\" rx=\"4\" fill=\"#d29922\"/>\n+    <text x=\"403\" y=\"171.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#d29922\">88%</text>\n+    <text x=\"435\" y=\"171.5\" font-size=\"10\" fill=\"#8b949e\">169.2 vs 192.2 t/s</text>\n     <text x=\"12\" y=\"211.5\" font-size=\"12.5\" fill=\"#9fb1c9\">request overhead (TTFT, 1-token, solo)</text>\n-    <rect x=\"270\" y=\"194\" width=\"144\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"422\" y=\"211.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">101%</text>\n-    <text x=\"463\" y=\"211.5\" font-size=\"10\" fill=\"#8b949e\">183 vs 184 ms</text>\n+    <rect x=\"270\" y=\"194\" width=\"142\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n+    <text x=\"420\" y=\"211.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">100%</text>\n+    <text x=\"461\" y=\"211.5\" font-size=\"10\" fill=\"#8b949e\">184 vs 184 ms</text>\n     <text x=\"12\" y=\"251.5\" font-size=\"12.5\" fill=\"#9fb1c9\">TTFT at depth, COLD (1-token, d8192, novel fill)</text>\n     <rect x=\"270\" y=\"234\" width=\"640\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"900\" y=\"251.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#1a1f24\" text-anchor=\"end\">449%</text>\n-    <text x=\"849\" y=\"251.5\" font-size=\"10\" fill=\"#1a1f24\" text-anchor=\"end\">3,812 vs 17,129 ms</text>\n+    <text x=\"900\" y=\"251.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#1a1f24\" text-anchor=\"end\">450%</text>\n+    <text x=\"849\" y=\"251.5\" font-size=\"10\" fill=\"#1a1f24\" text-anchor=\"end\">3,809 vs 17,129 ms</text>\n     <text x=\"12\" y=\"291.5\" font-size=\"12.5\" fill=\"#9fb1c9\">TTFT at depth, WARM (1-token, d8192, cache hit)</text>\n     <rect x=\"270\" y=\"274\" width=\"100\" height=\"26\" rx=\"4\" fill=\"#d29922\"/>\n     <text x=\"378\" y=\"291.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#d29922\">70%</text>\n     <text x=\"410\" y=\"291.5\" font-size=\"10\" fill=\"#8b949e\">302 vs ~212 ms</text>\n     <text x=\"12\" y=\"331.5\" font-size=\"12.5\" fill=\"#9fb1c9\">prefill (benchy pp2048 @ d0)</text>\n-    <rect x=\"270\" y=\"314\" width=\"143\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n-    <text x=\"421\" y=\"331.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">100%</text>\n-    <text x=\"462\" y=\"331.5\" font-size=\"10\" fill=\"#8b949e\">1,519 vs 1,518 tok/s</text>\n+    <rect x=\"270\" y=\"314\" width=\"142\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n+    <text x=\"420\" y=\"331.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">100%</text>\n+    <text x=\"461\" y=\"331.5\" font-size=\"10\" fill=\"#8b949e\">1,519 vs 1,518 tok/s</text>\n     <text x=\"12\" y=\"371.5\" font-size=\"12.5\" fill=\"#9fb1c9\">streaming latency per token (ITL)</text>\n     <rect x=\"270\" y=\"354\" width=\"165\" height=\"26\" rx=\"4\" fill=\"#3fb950\"/>\n     <text x=\"443\" y=\"371.5\" font-size=\"13.5\" font-weight=\"700\" fill=\"#3fb950\">116%</text>\n-    <text x=\"484\" y=\"371.5\" font-size=\"10\" fill=\"#8b949e\">14.8 vs 17.1 ms/token</text>\n+    <text x=\"484\" y=\"371.5\" font-size=\"10\" fill=\"#8b949e\">14.7 vs 17.1 ms/token</text>\n   </g>\n \n   <!-- the 100% line -->\n-  <line x1=\"413\" y1=\"26\" x2=\"413\" y2=\"388\" stroke=\"#8b949e\" stroke-opacity=\"0.55\" stroke-dasharray=\"4 4\"/>\n+  <line x1=\"412\" y1=\"26\" x2=\"412\" y2=\"388\" stroke=\"#8b949e\" stroke-opacity=\"0.55\" stroke-dasharray=\"4 4\"/>\n \n   <text x=\"12\" y=\"410\" font-size=\"10\" fill=\"#8b949e\">Yellow = open fronts; green = won. Higher is always better (time metrics inverted). Receipts (2026-11-07): the served default is the TR3-4bpw checkpoint (reshared locally 120 -> 55 shards, byte-identical,</text>\n "
+    },
+    {
+      "sha": "58b1c7a8e14b39773e2fbc21c80a3b1809a1fef1",
+      "filename": "scripts/autonomous-cron.sh",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 5,
+      "changes": 10,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-cron.sh",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-cron.sh",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/scripts%2Fautonomous-cron.sh?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -10,14 +10,14 @@ cd \"$(dirname \"$0\")/..\"\n exec 9>/tmp/autonomous-cron.lock\n flock -n 9 || exit 0\n [ -f scripts/local.sh ] && source scripts/local.sh\n-: \"${PROD_TIP:?set PROD_TIP (the production checkout dir name) in scripts/local.sh}\"\n+: \"${PROD_REPO:?set PROD_REPO (the production repo dir name) in scripts/local.sh}\"\n STATE=/tmp/autonomous-testing.flag\n LOG=\"$HOME/autonomous-cron.log\"\n-TIP=\"$HOME/$PROD_TIP\"\n-if ! docker ps --format \"{{.Names}}\" | grep -qx glm53-flash-tf; then\n+PROD=\"$HOME/$PROD_REPO\"\n+if ! docker ps --format \"{{.Names}}\" | grep -qx glm53-native-tf; then\n   if [ ! -f \"$STATE\" ]; then\n-    echo \"[$(date '+%F %T')] production down with no active window — restarting via the tip's start.sh\" >> \"$LOG\"\n-    \"$TIP/start.sh\" >> \"$LOG\" 2>&1 || echo \"[$(date '+%F %T')] start.sh rc=$? — will retry next tick\" >> \"$LOG\"\n+    echo \"[$(date '+%F %T')] production down with no active window — restarting via the production repo's start.sh\" >> \"$LOG\"\n+    \"$PROD/scripts/start.sh\" >> \"$LOG\" 2>&1 || echo \"[$(date '+%F %T')] start.sh rc=$? — will retry next tick\" >> \"$LOG\"\n   else\n     echo \"[$(date '+%F %T')] production down, window in flight — hands off\" >> \"$LOG\"\n   fi"
+    },
+    {
+      "sha": "1415473f1690463d4746b51f7470a5c303cf234e",
+      "filename": "scripts/autonomous-poke.sh",
+      "status": "modified",
+      "additions": 2,
+      "deletions": 2,
+      "changes": 4,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-poke.sh",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-poke.sh",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/scripts%2Fautonomous-poke.sh?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -13,7 +13,7 @@ set -uo pipefail\n cd \"$(dirname \"$0\")/..\"\n [ -f scripts/local.sh ] && source scripts/local.sh\n : \"${SSH_TARGET:?set SSH_TARGET (user@head) in scripts/local.sh}\"\n-: \"${PROD_TIP:?set PROD_TIP (the production checkout dir name) in scripts/local.sh}\"\n+: \"${PROD_REPO:?set PROD_REPO (the production repo dir name) in scripts/local.sh}\"\n : \"${OPENCODE_API:?set OPENCODE_API (the opencode server API base URL) in scripts/local.sh}\"\n : \"${OPENCODE_UNIT:?set OPENCODE_UNIT (the opencode server systemd unit path) in scripts/local.sh}\"\n PROJ=\"GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing\"   # this repo's dir name, same on both hosts (renamed round 127 — the old name broke the poke silently)\n@@ -25,7 +25,7 @@ API=\"$OPENCODE_API\"\n AUTH=\"opencode:$PW\"\n # 1. production fully up on the head? (container AND its health endpoint)\n if ! ssh -o BatchMode=yes -o ConnectTimeout=10 \"$SSH_TARGET\" \\\n-     \"docker ps --format '{{.Names}}' | grep -qx glm53-flash-tf && cd ~/$PROD_TIP 2>/dev/null && source ./scripts/config.sh >/dev/null 2>&1; curl -s -m 5 -o /dev/null \\\"http://127.0.0.1:\\$PORT/health\\\"\" 2>/dev/null; then\n+     \"docker ps --format '{{.Names}}' | grep -qx glm53-native-tf && cd ~/$PROD_REPO 2>/dev/null && source ./scripts/config.sh >/dev/null 2>&1; curl -s -m 5 -o /dev/null \\\"http://127.0.0.1:\\$PORT/health\\\"\" 2>/dev/null; then\n   exit 0   # down: a window in flight or a crash — the head's cron crash-net handles it\n fi\n # a window in flight (even with production crash-net-restored mid-window) — hands off"
+    },
+    {
+      "sha": "ec67b0476069939100095acbbe433e3729f3982d",
+      "filename": "scripts/autonomous-window.sh",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 4,
+      "changes": 10,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-window.sh",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Fautonomous-window.sh",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/scripts%2Fautonomous-window.sh?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -17,19 +17,21 @@\n set -uo pipefail\n cd \"$(dirname \"$0\")/..\"\n [ -f scripts/local.sh ] && source scripts/local.sh\n-: \"${PROD_TIP:?set PROD_TIP (the production checkout dir name) in scripts/local.sh}\"\n+: \"${PROD_REPO:?set PROD_REPO (the production repo dir name) in scripts/local.sh}\"\n+: \"${PROD_TIP:?set PROD_TIP (the ARCHIVED baseline checkout dir name) in scripts/local.sh — the duel baseline production-for-testing serve}\"\n PHASES=\"${1:-preflight summary}\"\n CONSOLE=\"${2:-/tmp/autonomous.console}\"\n STATE=/tmp/autonomous-testing.flag\n+PROD=\"$HOME/$PROD_REPO\"\n TIP=\"$HOME/$PROD_TIP\"\n WID=\"$$\"\n note() { echo \"[$(date '+%F %T')] [w$WID] $*\" >> \"$CONSOLE\"; }\n STARTED=0\n restore() {\n   # a refused double-launch never touched production — restore only what we stopped\n   [ \"$STARTED\" = 1 ] || return 0\n-  note \"production restore: the tip's start.sh (both ranks, waits for the API)\"\n-  if ! \"$TIP/start.sh\" >>\"$CONSOLE\" 2>&1; then\n+  note \"production restore: the production repo's start.sh (both ranks, waits for the API)\"\n+  if ! \"$PROD/scripts/start.sh\" >>\"$CONSOLE\" 2>&1; then\n     note \"START.SH FAILED — production may be DOWN; the cron crash-net retries every 5 min\"\n   fi\n   rm -f \"$STATE\"\n@@ -41,7 +43,7 @@ touch \"$STATE\"\n STARTED=1\n sleep 30   # let the launching ssh detach and the agent's closing message flush\n note \"autonomous window starting: $PHASES\"\n-\"$TIP/stop.sh\" >>\"$CONSOLE\" 2>&1\n+\"$PROD/scripts/stop.sh\" >>\"$CONSOLE\" 2>&1\n note \"production stopped (both ranks) — the window runs\"\n PHASES=\"$PHASES\" FORCE=1 scripts/run-window-block.sh </dev/null >>\"$CONSOLE\" 2>&1\n rc=$?"
+    },
+    {
+      "sha": "82d17f7143e1882a2d269c9701a51828fcc258be",
+      "filename": "scripts/run-qualification.sh",
+      "status": "modified",
+      "additions": 51,
+      "deletions": 5,
+      "changes": 56,
+      "blob_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/blob/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Frun-qualification.sh",
+      "raw_url": "https://github.com/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/raw/c4d20c9725c9580a4ed06d52b42d2949486ac902/scripts%2Frun-qualification.sh",
+      "contents_url": "https://api.github.com/repos/gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG-testing/contents/scripts%2Frun-qualification.sh?ref=c4d20c9725c9580a4ed06d52b42d2949486ac902",
+      "patch": "@@ -44,7 +44,7 @@\n #   rung       the 524288x1 ladder rung: admission line + a depth probe\n #   summary    CAMPAIGN.md: verdict per gate + the way-forward recommendations\n #\n-# Safety: this script never touches production (glm53-flash-tf). If production is\n+# Safety: this script never touches production (glm53-native-tf, the promoted stack — round 138). If production is\n # running it captures the reference probe and then STOPS and asks you to stop\n # production yourself; with PROMPT=0 it refuses and exits instead.\n set -euo pipefail\n@@ -77,16 +77,16 @@ done\n # ---------------------------------------------------------------------------\n # shared helpers\n # ---------------------------------------------------------------------------\n-prod_running() {   # production containers up here and on the worker?\n-  docker ps --format '{{.Names}}' | grep -qx 'glm53-flash-tf' && return 0\n+prod_running() {   # production containers up here and on the worker? (the promoted native stack — round 138; the archived tip's glm53-flash-tf serves only as the duel baseline INSIDE windows and must not trip this)\n+  docker ps --format '{{.Names}}' | grep -qx 'glm53-native-tf' && return 0\n   ssh -o BatchMode=yes -o ConnectTimeout=5 \"$WORKER\" \\\n-    'docker ps --format \"{{.Names}}\" | grep -qx glm53-flash-tf' 2>/dev/null && return 0\n+    'docker ps --format \"{{.Names}}\" | grep -qx glm53-native-tf' 2>/dev/null && return 0\n   return 1\n }\n \n restart() {        # restart the testing stack with env pairs: restart K=V ...\n   local kv rc=0\n-  if prod_running; then die \"production (glm53-flash-tf) is running — stop it first; this script never touches it\"; fi\n+  if prod_running; then die \"production (glm53-native-tf) is running — stop it first; this script never touches it\"; fi\n   log \"restarting the testing stack (${*:-defaults})\"\n   local ST0=$(date +%s)\n   ./scripts/stop.sh < /dev/null >/dev/null 2>&1 || true\n@@ -4384,6 +4384,52 @@ except Exception: print(\"\")' 2>/dev/null) || model=\"\"\n   touch \"$OUT/.0082qual.done\"\n fi\n \n+# ---------------------------------------------------------------------------\n+# phase: newprodqual (SESSION-SPECIFIC; the promotion-qual — (user), round\n+# 138: the 14-patch native stack is PROMOTED to production (the new repo on\n+# the head serves opencode on 8000); this battery qualifies the promoted\n+# config end to end on the testing port: the §2 content gates, hardmode\n+# (the fifteenth 95), the vision 4/4, the bench pass, the steady-state\n+# decode. The production serve itself is exercised by the cron's own\n+# health checks and opencode's live traffic.\n+# ---------------------------------------------------------------------------\n+if want newprodqual && ! phase_done newprodqual; then\n+  log \"=== newprodqual (the promotion battery on the promoted config)\"\n+  P=\"$OUT/05-newprodqual.md\"; : > \"$P\"\n+  echo \"# newprodqual (the promoted 14-patch config: dense4fp8 @ 512K x4 on the testing port)\" >> \"$P\"\n+  restart DENSE_BITS=4 HEAD_BITS=4 KV_CACHE=fp8 CONTEXT=524288 PARALLEL=4\n+  req_file \"$OUT/np-greedy.json\" \"$REF_PROMPT\" '{\"max_tokens\": 1024}'\n+  chat \"$OUT/np-greedy.json\" > \"$OUT/np-greedy-resp.json\" || true\n+  echo \"- the greedy content sha: $(content_sha \"$OUT/np-greedy-resp.json\")\" >> \"$P\"\n+  echo \"## the §2 content gates\" >> \"$P\"\n+  run_gates np DENSE_BITS=4 HEAD_BITS=4 KV_CACHE=fp8 CONTEXT=524288 || true\n+  echo \"## the bench pass\" >> \"$P\"\n+  bench_perf np \"$OUT/np-bench\" 4 >> \"$P\" 2>&1 || true\n+  echo \"## hardmode (the 95 must hold — the fifteenth consecutive)\" >> \"$P\"\n+  mkdir -p \"$OUT/nphm\"\n+  model=$(curl -s -m 10 \"http://127.0.0.1:$PORT/v1/models\" | python3 -c '\n+import json, sys\n+try: print(json.load(sys.stdin)[\"data\"][0][\"id\"])\n+except Exception: print(\"\")' 2>/dev/null) || model=\"\"\n+  PYTHONUNBUFFERED=1 \"$BENCH\" run --base-url \"http://127.0.0.1:$PORT\" \\\n+    --model \"$model\" --format openai --tokenizer \"$MODEL_ID\" \\\n+    --hardmode --label \"newprodqual\" --output-dir \"$OUT/nphm\" \\\n+    --json-file \"$OUT/nphm/hm.json\" > \"$OUT/nphm/hm.log\" 2>&1 || true\n+  grep -o '\"final_score\": [0-9]*' \"$OUT/nphm/hm.json\" >> \"$P\" 2>/dev/null || true\n+  grep -o '\"scenario_id\": \"TC-51\", \"status\": \"[a-z]*\"' \"$OUT/nphm/hm.log\" >> \"$P\" 2>/dev/null || true\n+  grep -o '\"scenario_id\": \"TC-92\", \"status\": \"[a-z]*\"' \"$OUT/nphm/hm.log\" >> \"$P\" 2>/dev/null || true\n+  echo \"## the vision suite (4/4 must hold)\" >> \"$P\"\n+  mkdir -p \"$OUT/npvision\"\n+  if [ -f scripts/vision-suite-probe.py ]; then\n+    python3 scripts/vision-suite-probe.py \"http://127.0.0.1:$PORT\" \"$OUT/npvision/vision.json\" > \"$OUT/npvision/vision.log\" 2>&1 || true\n+    tail -6 \"$OUT/npvision/vision.log\" >> \"$P\" 2>/dev/null || true\n+  else\n+    echo \"- the vision-suite runner is MISSING at scripts/vision-suite-probe.py\" >> \"$P\"\n+  fi\n+  echo \"- VERDICT: the gates PASS + hardmode holds + the vision 4/4 = the promoted config qualifies as production\" >> \"$P\"\n+  touch \"$OUT/.newprodqual.done\"\n+fi\n+\n # ---------------------------------------------------------------------------\n \n if want summary; then"
+    }
+  ]
+}

@@ -107,8 +107,8 @@ deploy/sparkwatch-sync.service, deploy/sparkwatch-sync.timer
 data/                        # gitignored
 tests/
 ```
-- **Dependencies:** `httpx`, `tenacity`, `pydantic`, `pydantic-settings`, `typer`, `rich`, `mcp`, `selectolax`.
-- **Dev dependencies:** `pytest`, `respx`, `ruff`.
+- **Dependencies:** `httpx`, `tenacity`, `pydantic`, `pydantic-settings`, `typer`, `rich`, `mcp<2` (FastMCP is `mcp.server.fastmcp` in 1.x; 2.x renamed it to `MCPServer`), `selectolax` (`selectolax.lexbor`).
+- **Dev dependencies:** `pytest`, `respx`, `ruff`, `pyyaml` (eval cases only).
 - `openai` is added in Run B only.
 - **One code path:** every MCP tool and CLI command calls the same function in the library modules.
 
@@ -142,13 +142,15 @@ refetch_recent_days = 7          # re-fetch posts from the last N days in bumped
 sync_now_time_budget_s = 90      # sync_now stops cleanly at this budget; the next call resumes (idempotent)
 
 [relevance]
-keywords = { dual = ["dual spark", "two sparks", "2x spark", "2 sparks", "stacked", "cluster", "connectx", "qsfp", "roce", "nccl", "tensor parallel", "tp=2", "tp 2", "pipeline parallel", "multi-node", "ray"],
-             engine = ["vllm", "sglang", "trt-llm", "tensorrt-llm", "llama.cpp", "llama-server", "ollama", "lm studio", "exllama", "nim"],
-             quant = ["nvfp4", "fp4", "fp8", "mxfp4", "int4", "awq", "gptq", "gguf", "q4_k_m", "q8_0", "exl2", "exl3"],
-             perf = ["tok/s", "tokens/s", "t/s", "tps", "prefill", "decode", "benchmark", "throughput", "latency"],
-             bench = ["humaneval", "mbpp", "livecodebench", "swe-bench", "aider", "bfcl", "tau-bench", "tau2", "gpqa", "mmlu", "aime", "ifeval", "ruler"] }
 weights = { dual = 3.0, engine = 1.5, quant = 1.5, perf = 1.0, bench = 1.5, model_size = 1.0, family = 1.0, watch = 4.0 }
 families = ["qwen", "llama", "deepseek", "gpt-oss", "glm", "kimi", "mistral", "gemma", "phi", "nemotron", "minimax", "hunyuan", "granite"]
+
+[relevance.keywords]
+dual = ["dual spark", "two sparks", "2x spark", "2 sparks", "stacked", "cluster", "connectx", "qsfp", "roce", "nccl", "tensor parallel", "tp=2", "tp 2", "pipeline parallel", "multi-node", "ray"]
+engine = ["vllm", "sglang", "trt-llm", "tensorrt-llm", "llama.cpp", "llama-server", "ollama", "lm studio", "exllama", "nim"]
+quant = ["nvfp4", "fp4", "fp8", "mxfp4", "int4", "awq", "gptq", "gguf", "q4_k_m", "q8_0", "exl2", "exl3"]
+perf = ["tok/s", "tokens/s", "t/s", "tps", "prefill", "decode", "benchmark", "throughput", "latency"]
+bench = ["humaneval", "mbpp", "livecodebench", "swe-bench", "aider", "bfcl", "tau-bench", "tau2", "gpqa", "mmlu", "aime", "ifeval", "ruler"]
 
 [hardware]
 dual_spark_usable_gb = 240
@@ -377,7 +379,7 @@ CREATE TABLE flags (
 CREATE TABLE web_cache (query TEXT PRIMARY KEY, response TEXT NOT NULL, fetched_at TEXT NOT NULL);
 ```
 
-**Seeding:** `seed/*.toml` is loaded on every run, using upserts. Rows the agent wrote are never overwritten. `watchlist.first_seen_*` and `sighting_acked_at` are never reset.
+**Seeding:** `seed/*.toml` is loaded on every run. The loader reads before it writes and only writes when a seed row is missing or its seeded fields differ, so a steady-state open issues no writes at all — that is what keeps MCP read tools responsive while a sync writes. Rows the agent wrote are never overwritten. `watchlist.first_seen_*` and `sighting_acked_at` are never reset. The same read-before-write rule applies to `forums`.
 
 Initial `seed/watchlist.toml`:
 ```toml
@@ -671,7 +673,7 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - They check that the fields the code depends on still exist and have the expected types.
   - When they fail, the API has drifted. Re-record the fixtures with `record_fixtures.py`.
   - They are never run in CI.
-- **Scripted agent evals:** a frozen database snapshot in `tests/evals/`, built from fixtures, with a short list of questions and expected facts. Running them needs an agent and API access, so they're manual for the MVP. The harness is described under Verification.
+- **Scripted agent evals:** a frozen database snapshot in `tests/evals/`, built from fixtures by `tests/evals/build_db.py`, with `tests/evals/cases.yaml` and `tests/evals/run.py`. Running them needs an agent and API access, so they're manual for the MVP. The harness is described under Verification.
 - **CI:** GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
   1. `astral-sh/setup-uv`
   2. `uv sync --locked`
@@ -766,11 +768,11 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - while one process holds the write lock, `sync_now`, `check_repos_now` and the CLI `sync` return or exit `busy` straight away;
   - while a sync is writing (simulated with an open write transaction on a second connection), MCP read tools still return results, because WAL mode allows it, and `sql_query` doesn't block;
   - a process that crashes mid-sync leaves no stale lock, because `fcntl` locks are released when the process exits.
-- MCP protocol (`tests/test_mcp_protocol.py`) starts `sparkwatch serve-mcp` over stdio with the `mcp` client SDK, against a temporary database:
+- MCP protocol (`tests/test_mcp_protocol.py`) starts `sparkwatch serve-mcp` over stdio with the `mcp` client SDK, against a temporary database. The committed snapshot is `tests/snapshots/tools.json`; regenerate it with `SPARKWATCH_WRITE_SNAPSHOT=1 uv run pytest tests/test_mcp_protocol.py`.
   - `list_tools` returns every tool in §5, and each input schema has the documented required and optional arguments. A snapshot file catches accidental renames.
   - `list_prompts` and `list_resources` return the documented items.
   - Calling `get_posts` with a small `max_chars` returns `truncated: true` and a `next` argument set. Passing `next` back returns the rest, with no overlap and no gaps.
-  - Errors (an unknown topic ID, a bad SQL statement) come back as MCP tool errors with a clear message, not as a crashed server.
+  - Errors (an unknown topic ID, a bad SQL statement) come back as MCP tool errors (`isError: true`) with a clear message, not as a crashed server: `get_posts` and `sql_query` raise, and the SDK turns that into a tool error.
 
 **Live smoke test:**
 1. `uv run sparkwatch sync --forum 723 --max-pages 1`.

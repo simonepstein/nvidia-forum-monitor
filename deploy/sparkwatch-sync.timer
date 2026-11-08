@@ -1,0 +1,11 @@
+[Unit]
+Description=Run sparkwatch sync and repo check every 2 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=2h
+Persistent=true
+Unit=sparkwatch-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[[model]]
+canonical = "glm-5.3-flash"
+family = "glm"
+note = "Tracked model; canonical name confirmed against real posts at the Run A checkpoint."
+
+[[model]]
+canonical = "deepseek-v4.1-flash"
+family = "deepseek"
+note = "Tracked model; canonical name confirmed against real posts at the Run A checkpoint."
+
+[[model]]
+canonical = "qwen3.8-flash-next"
+family = "qwen"
+note = "Tracked model; canonical name confirmed against real posts at the Run A checkpoint."
+
+[[model]]
+canonical = "qwen4"
+family = "qwen"
+note = "Anticipated model; watchlist entry alerts on first sighting."

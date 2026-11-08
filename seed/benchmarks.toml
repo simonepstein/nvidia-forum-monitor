@@ -1,0 +1,2 @@
+# Canonical benchmark definitions are added as usage shows they are needed.
+# The alias table in sparkwatch.normalize.BENCHMARK_ALIASES covers the names in SPEC.md §3.

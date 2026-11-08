@@ -1,0 +1,19 @@
+[[watch]]
+label = "GLM 5.3 Flash"
+kind = "tracking"
+match_regex = 'glm[\s._-]*5\.3[\s._-]*flash'
+
+[[watch]]
+label = "DeepSeek V4.1 Flash"
+kind = "tracking"
+match_regex = 'deepseek[\s._-]*v?4\.1[\s._-]*flash'
+
+[[watch]]
+label = "Qwen3.8 Flash Next"
+kind = "tracking"
+match_regex = 'qwen[\s._-]*3\.8[\s._-]*(flash|next)'
+
+[[watch]]
+label = "Qwen4"
+kind = "anticipated"
+match_regex = 'qwen[\s._-]*4(?![\d.])'

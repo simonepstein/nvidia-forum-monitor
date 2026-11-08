@@ -1,0 +1,1093 @@
+{
+  "post_stream": {
+    "posts": [
+      {
+        "id": 1883366,
+        "name": "Arif Sonnet",
+        "username": "arifsonnet.webid",
+        "avatar_template": "/user_avatar/forums.developer.nvidia.com/arifsonnet.webid/{size}/549923_2.png",
+        "created_at": "2026-11-08T11:35:49.610Z",
+        "cooked": "<p>Hello,</p>\n<p>My DGX Spark’s internal SSD has dropped three times: “controller is down; will reset: CSTS=0x3”. The second and third drops happened with both workarounds I could find already in place, and the third happened during the Field Diagnostic, which still printed PASS. Should I go straight to an RMA, or is there a fix to try first?</p>\n<p><strong>System</strong></p>\n<ul>\n<li>DGX Spark Founders Edition, board P4242.</li>\n<li>BIOS 5.36_0ACUM027. <code>fwupdmgr get-updates</code> shows nothing newer.</li>\n<li>DGX OS 7.6.0, kernel 7.0.0-1019-nvidia.</li>\n<li>SSD: Samsung MZALC4T0HBL1-00B07, firmware NXHB202Q, at <code>nvme 0004:01:00.0</code>, root port <code>0004:00:00.0</code> (10de:22ce). Link 32 GT/s x4.</li>\n</ul>\n<p><strong>Events</strong></p>\n<ol>\n<li>\n<p><strong>7 Oct 2026, 07:05:</strong> <code>nvme nvme0: controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10</code>. Three READ commands failed with <code>I/O Error (sct 0x3 / sc 0x71)</code>, then the host hung for 2 h 38 min until I power-cycled it. A correctable AER storm on the same link (RxErr, BadTLP, BadDLLP, Rollover, Timeout) reached about 196 errors per second at light load.</p>\n</li>\n<li>\n<p><strong>The same day, I applied two workarounds:</strong></p>\n<ul>\n<li>PCIe ASPM policy <code>performance</code>, persisted at boot.</li>\n<li>NVMe APST capped with <code>pm_qos_latency_tolerance_us=5500</code>. <code>set-feature 0x0c</code> is rejected with Invalid Field.</li>\n</ul>\n<p>The storm stopped within about 90 s.</p>\n</li>\n<li>\n<p><strong>8 Oct to 31 Oct:</strong> small correctable bursts on 7 days, 4 to 97 errors per day, with ASPM still off.</p>\n</li>\n<li>\n<p><strong>7 Nov 2026, 22:18:15, with ASPM off and the APST cap active:</strong> the same <code>controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10</code>. Three READ I/O errors (<code>sct 0x3 / sc 0x71</code>). The controller recovered and the host did not hang. There were correctable bursts of 37 and 83 per 6 minutes, both during heavy reads. Counters now: RxErr 1043, BadTLP 170, BadDLLP 16, Rollover 2, Timeout 167.</p>\n</li>\n<li>\n<p><strong>8 Nov 2026, 13:34:48, during Field Diagnostic 1.0.9-1, with ASPM off and the APST cap active:</strong> the same <code>controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10</code>. It recovered with no I/O error logged. Link errors ran from 13:34:18 to 13:37:35: RxErr 57,614, BadTLP 7,971, BadDLLP 337, Timeout 6,774 (counter resets at boot; 0 for the two hours before). <code>FioSSD</code> had finished cleanly at 13:33:40 (80 GiB read in 9.5 s, err=0), and the drop came during <code>MemStress</code>, 38 s later. No errors in the next 3 h 48 min at idle.</p>\n</li>\n</ol>\n<p><strong>Field Diagnostic:</strong> PASS, all 8 tests OK with error code 000000000000. I ran 1.0.9-1 because 2.0.4-1 requires DOCA packages (ofed-scripts, mft, opensm, infiniband-diags) that are not installed on this unit. Since FioSSD ended before the fault and no later test checks the SSD, I do not think this PASS clears the drive.</p>\n<p><strong>SSD health:</strong></p>\n<ul>\n<li>critical_warning 0, media_errors 0, percentage_used 0%, 42 °C.</li>\n<li>num_err_log_entries 93; unsafe_shutdowns 8, which are local power cuts.</li>\n<li>No ext4 errors.</li>\n</ul>\n<p><strong>Firmware:</strong> the DGX Dashboard offers the “October 2026” update: EC 0x03000508 to 0x03000d07, UEFI device firmware 0x02009b0b to 0x02009e0f and 0x00000516 to 0x00000519, plus about 220 packages. I have not applied it: both controller drops happened on the current versions, and I would like your advice before flashing firmware on a unit with an unstable SSD link.</p>\n<p><strong>Questions</strong></p>\n<ol>\n<li>Is this a known issue with a BIOS, EC or SSD firmware fix? The newest release notes list no NVMe fix, and I found no SSD firmware newer than NXHB202Q.</li>\n<li>The Field Diagnostic passed although the controller dropped during the run. Does the kernel evidence qualify for RMA, or do you need 2.0.4 with DOCA as well? A forum report says those prerequisites replaced the inbox mlx5 driver and left the ConnectX-7 ports unusable.</li>\n<li>Is a Gen4 link-speed cap supported on this slot, as a test?</li>\n<li>Given that it recurs with ASPM off, should I request an RMA through my reseller?</li>\n</ol>\n<p>Similar threads: <a href=\"https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark/383478\">383478</a> (same SSD and firmware, RMA advised) and <a href=\"https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark-founders-edition/365094\">365094</a>.</p>\n<p>I can attach <code>nvidia-bug-report</code>, <code>nvme smart-log</code> / <code>error-log</code>, <code>lspci -vv</code> for 0004:01:00.0, and kernel journals.</p>\n<p>Thank you.</p>",
+        "post_number": 1,
+        "post_type": 1,
+        "posts_count": 2,
+        "updated_at": "2026-11-08T11:35:49.610Z",
+        "reply_count": 0,
+        "reply_to_post_number": null,
+        "quote_count": 0,
+        "incoming_link_count": 1,
+        "reads": 4,
+        "readers_count": 3,
+        "score": 5.8,
+        "yours": false,
+        "topic_id": 388371,
+        "topic_slug": "dgx-spark-nvme-controller-drop-csts-0x3-recurs-with-pcie-aspm-disabled-mzalc4t0hbl1-nxhb202q-smart-clean",
+        "display_username": "Arif Sonnet",
+        "primary_group_name": null,
+        "flair_name": null,
+        "flair_url": null,
+        "flair_bg_color": null,
+        "flair_color": null,
+        "flair_group_id": null,
+        "badges_granted": [],
+        "version": 1,
+        "can_edit": false,
+        "can_delete": false,
+        "can_recover": false,
+        "can_see_hidden_post": false,
+        "can_wiki": false,
+        "link_counts": [
+          {
+            "url": "https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark/383478",
+            "internal": true,
+            "reflection": false,
+            "title": "NVMe write failures on DGX Spark",
+            "clicks": 0
+          },
+          {
+            "url": "https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark-founders-edition/365094",
+            "internal": true,
+            "reflection": false,
+            "title": "NVMe Write Failures on DGX Spark Founders Edition",
+            "clicks": 0
+          }
+        ],
+        "read": true,
+        "user_title": "",
+        "bookmarked": false,
+        "raw": "Hello,\n\nMy DGX Spark's internal SSD has dropped three times: \"controller is down; will reset: CSTS=0x3\". The second and third drops happened with both workarounds I could find already in place, and the third happened during the Field Diagnostic, which still printed PASS. Should I go straight to an RMA, or is there a fix to try first?\n\n**System**\n\n* DGX Spark Founders Edition, board P4242.\n* BIOS 5.36_0ACUM027. `fwupdmgr get-updates` shows nothing newer.\n* DGX OS 7.6.0, kernel 7.0.0-1019-nvidia.\n* SSD: Samsung MZALC4T0HBL1-00B07, firmware NXHB202Q, at `nvme 0004:01:00.0`, root port `0004:00:00.0` (10de:22ce). Link 32 GT/s x4.\n\n**Events**\n\n1. **7 Oct 2026, 07:05:** `nvme nvme0: controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10`. Three READ commands failed with `I/O Error (sct 0x3 / sc 0x71)`, then the host hung for 2 h 38 min until I power-cycled it. A correctable AER storm on the same link (RxErr, BadTLP, BadDLLP, Rollover, Timeout) reached about 196 errors per second at light load.\n\n2. **The same day, I applied two workarounds:**\n\n   * PCIe ASPM policy `performance`, persisted at boot.\n   * NVMe APST capped with `pm_qos_latency_tolerance_us=5500`. `set-feature 0x0c` is rejected with Invalid Field.\n\n   The storm stopped within about 90 s.\n\n3. **8 Oct to 31 Oct:** small correctable bursts on 7 days, 4 to 97 errors per day, with ASPM still off.\n\n4. **7 Nov 2026, 22:18:15, with ASPM off and the APST cap active:** the same `controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10`. Three READ I/O errors (`sct 0x3 / sc 0x71`). The controller recovered and the host did not hang. There were correctable bursts of 37 and 83 per 6 minutes, both during heavy reads. Counters now: RxErr 1043, BadTLP 170, BadDLLP 16, Rollover 2, Timeout 167.\n\n5. **8 Nov 2026, 13:34:48, during Field Diagnostic 1.0.9-1, with ASPM off and the APST cap active:** the same `controller is down; will reset: CSTS=0x3, PCI_STATUS=0x10`. It recovered with no I/O error logged. Link errors ran from 13:34:18 to 13:37:35: RxErr 57,614, BadTLP 7,971, BadDLLP 337, Timeout 6,774 (counter resets at boot; 0 for the two hours before). `FioSSD` had finished cleanly at 13:33:40 (80 GiB read in 9.5 s, err=0), and the drop came during `MemStress`, 38 s later. No errors in the next 3 h 48 min at idle.\n\n**Field Diagnostic:** PASS, all 8 tests OK with error code 000000000000. I ran 1.0.9-1 because 2.0.4-1 requires DOCA packages (ofed-scripts, mft, opensm, infiniband-diags) that are not installed on this unit. Since FioSSD ended before the fault and no later test checks the SSD, I do not think this PASS clears the drive.\n\n**SSD health:**\n\n* critical_warning 0, media_errors 0, percentage_used 0%, 42 °C.\n* num_err_log_entries 93; unsafe_shutdowns 8, which are local power cuts.\n* No ext4 errors.\n\n**Firmware:** the DGX Dashboard offers the \"October 2026\" update: EC 0x03000508 to 0x03000d07, UEFI device firmware 0x02009b0b to 0x02009e0f and 0x00000516 to 0x00000519, plus about 220 packages. I have not applied it: both controller drops happened on the current versions, and I would like your advice before flashing firmware on a unit with an unstable SSD link.\n\n**Questions**\n\n1. Is this a known issue with a BIOS, EC or SSD firmware fix? The newest release notes list no NVMe fix, and I found no SSD firmware newer than NXHB202Q.\n2. The Field Diagnostic passed although the controller dropped during the run. Does the kernel evidence qualify for RMA, or do you need 2.0.4 with DOCA as well? A forum report says those prerequisites replaced the inbox mlx5 driver and left the ConnectX-7 ports unusable.\n3. Is a Gen4 link-speed cap supported on this slot, as a test?\n4. Given that it recurs with ASPM off, should I request an RMA through my reseller?\n\nSimilar threads: [383478](https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark/383478) (same SSD and firmware, RMA advised) and [365094](https://forums.developer.nvidia.com/t/nvme-write-failures-on-dgx-spark-founders-edition/365094).\n\nI can attach `nvidia-bug-report`, `nvme smart-log` / `error-log`, `lspci -vv` for 0004:01:00.0, and kernel journals.\n\nThank you.",
+        "actions_summary": [],
+        "moderator": false,
+        "admin": false,
+        "staff": false,
+        "user_id": 5331198,
+        "hidden": false,
+        "trust_level": 0,
+        "deleted_at": null,
+        "user_deleted": false,
+        "edit_reason": null,
+        "can_view_edit_history": false,
+        "wiki": false,
+        "post_url": "/t/dgx-spark-nvme-controller-drop-csts-0x3-recurs-with-pcie-aspm-disabled-mzalc4t0hbl1-nxhb202q-smart-clean/388371/1",
+        "event": null,
+        "calendar_details": [],
+        "reactions": [],
+        "current_user_reaction": null,
+        "reaction_users_count": 0,
+        "current_user_used_main_reaction": false,
+        "can_accept_answer": false,
+        "can_unaccept_answer": false,
+        "accepted_answer": false,
+        "topic_accepted_answer": null,
+        "can_vote": false,
+        "can_translate": false
+      },
+      {
+        "id": 1883374,
+        "name": "Arif Sonnet",
+        "username": "arifsonnet.webid",
+        "avatar_template": "/user_avatar/forums.developer.nvidia.com/arifsonnet.webid/{size}/549923_2.png",
+        "created_at": "2026-11-08T12:04:31.266Z",
+        "cooked": "<p>Corrections to my post: the DGX Dashboard does offer the October 2026 firmware update (not applied, pending advice). The October correctable bursts were on 6 days, not 7. The 7 Nov counters were values at that time. On 8 Nov the Field Diagnostic printed PASS, but a third controller drop occurred during the run, at 13:34:48 Dhaka time, during MemStress with ASPM off and the APST cap active.</p>",
+        "post_number": 2,
+        "post_type": 1,
+        "posts_count": 2,
+        "updated_at": "2026-11-08T12:04:31.266Z",
+        "reply_count": 0,
+        "reply_to_post_number": null,
+        "quote_count": 0,
+        "incoming_link_count": 0,
+        "reads": 1,
+        "readers_count": 0,
+        "score": 0,
+        "yours": false,
+        "topic_id": 388371,
+        "topic_slug": "dgx-spark-nvme-controller-drop-csts-0x3-recurs-with-pcie-aspm-disabled-mzalc4t0hbl1-nxhb202q-smart-clean",
+        "display_username": "Arif Sonnet",
+        "primary_group_name": null,
+        "flair_name": null,
+        "flair_url": null,
+        "flair_bg_color": null,
+        "flair_color": null,
+        "flair_group_id": null,
+        "badges_granted": [],
+        "version": 2,
+        "can_edit": false,
+        "can_delete": false,
+        "can_recover": false,
+        "can_see_hidden_post": false,
+        "can_wiki": false,
+        "read": true,
+        "user_title": "",
+        "bookmarked": false,
+        "raw": "Corrections to my post: the DGX Dashboard does offer the October 2026 firmware update (not applied, pending advice). The October correctable bursts were on 6 days, not 7. The 7 Nov counters were values at that time. On 8 Nov the Field Diagnostic printed PASS, but a third controller drop occurred during the run, at 13:34:48 Dhaka time, during MemStress with ASPM off and the APST cap active.\n\nedit: switched from exl3 to fp8 on the second Spark.",
+        "actions_summary": [],
+        "moderator": false,
+        "admin": false,
+        "staff": false,
+        "user_id": 5331198,
+        "hidden": false,
+        "trust_level": 0,
+        "deleted_at": null,
+        "user_deleted": false,
+        "edit_reason": null,
+        "can_view_edit_history": false,
+        "wiki": false,
+        "post_url": "/t/dgx-spark-nvme-controller-drop-csts-0x3-recurs-with-pcie-aspm-disabled-mzalc4t0hbl1-nxhb202q-smart-clean/388371/2",
+        "event": null,
+        "reactions": [],
+        "current_user_reaction": null,
+        "reaction_users_count": 0,
+        "current_user_used_main_reaction": false,
+        "can_accept_answer": false,
+        "can_unaccept_answer": false,
+        "accepted_answer": false,
+        "topic_accepted_answer": null,
+        "can_translate": false
+      }
+    ]
+  },
+  "id": 388371,
+  "related_topics": [
+    {
+      "fancy_title": "NVMe write failures on DGX Spark",
+      "id": 383478,
+      "title": "NVMe write failures on DGX Spark",
+      "slug": "nvme-write-failures-on-dgx-spark",
+      "posts_count": 5,
+      "reply_count": 2,
+      "highest_post_number": 5,
+      "image_url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_1024x768.jpeg",
+      "created_at": "2026-09-16T23:18:04.512Z",
+      "last_posted_at": "2026-09-17T22:04:42.012Z",
+      "bumped": true,
+      "bumped_at": "2026-09-17T22:04:42.012Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": [
+        {
+          "max_width": null,
+          "max_height": null,
+          "width": 1920,
+          "height": 1440,
+          "url": "https://global.discourse-cdn.com/nvidia/original/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba.jpeg"
+        },
+        {
+          "max_width": 1024,
+          "max_height": 1024,
+          "width": 1024,
+          "height": 768,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_1024x768.jpeg"
+        },
+        {
+          "max_width": 800,
+          "max_height": 800,
+          "width": 800,
+          "height": 600,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_800x600.jpeg"
+        },
+        {
+          "max_width": 600,
+          "max_height": 600,
+          "width": 600,
+          "height": 450,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_600x450.jpeg"
+        },
+        {
+          "max_width": 400,
+          "max_height": 400,
+          "width": 400,
+          "height": 300,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_400x300.jpeg"
+        },
+        {
+          "max_width": 300,
+          "max_height": 300,
+          "width": 300,
+          "height": 225,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_300x225.jpeg"
+        },
+        {
+          "max_width": 200,
+          "max_height": 200,
+          "width": 200,
+          "height": 150,
+          "url": "https://global.discourse-cdn.com/nvidia/optimized/4X/0/2/2/022e391fa9e84f9d0bd3dcdbbcbad59b6d0e15ba_2_200x150.jpeg"
+        }
+      ],
+      "tags": [
+        {
+          "id": 1214,
+          "name": "dgx-spark-issue",
+          "slug": "dgx-spark-issue"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 321,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": "latest",
+          "description": "Original Poster, Most Recent Poster",
+          "user": {
+            "id": 4707591,
+            "username": "swesty",
+            "name": "Swesty",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster, Accepted Answer",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "BIOS/UEFI resets and NVMe disappears after &gt;48h power loss",
+      "id": 361915,
+      "title": "BIOS/UEFI resets and NVMe disappears after >48h power loss",
+      "slug": "bios-uefi-resets-and-nvme-disappears-after-48h-power-loss",
+      "posts_count": 2,
+      "reply_count": 0,
+      "highest_post_number": 3,
+      "image_url": null,
+      "created_at": "2026-02-27T14:26:27.438Z",
+      "last_posted_at": "2026-03-06T20:39:25.944Z",
+      "bumped": true,
+      "bumped_at": "2026-03-06T20:39:25.944Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 346,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 4946495,
+            "username": "tobias.kappeler",
+            "name": "Tobias Kappeler",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 0
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "Spark abruptly shuts down",
+      "id": 377478,
+      "title": "Spark abruptly shuts down",
+      "slug": "spark-abruptly-shuts-down",
+      "posts_count": 48,
+      "reply_count": 29,
+      "highest_post_number": 50,
+      "image_url": null,
+      "created_at": "2026-07-20T07:13:15.512Z",
+      "last_posted_at": "2026-10-09T04:18:54.735Z",
+      "bumped": true,
+      "bumped_at": "2026-10-09T04:18:54.735Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 1214,
+          "name": "dgx-spark-issue",
+          "slug": "dgx-spark-issue"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 17,
+      "views": 4438,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 1,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster, Accepted Answer",
+          "user": {
+            "id": 5070709,
+            "username": "mbnshahrzad",
+            "name": "Mbnshahrzad",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4742701,
+            "username": "DannyTup",
+            "name": "Danny",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/dannytup/{size}/450509_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4723345,
+            "username": "zneill",
+            "name": "Zeke Neill",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/zneill/{size}/502736_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster",
+          "user": {
+            "id": 4322758,
+            "username": "nvidia3528",
+            "name": "Nvidia",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "NVMe Write Failures on DGX Spark Founders Edition",
+      "id": 365094,
+      "title": "NVMe Write Failures on DGX Spark Founders Edition",
+      "slug": "nvme-write-failures-on-dgx-spark-founders-edition",
+      "posts_count": 6,
+      "reply_count": 0,
+      "highest_post_number": 6,
+      "image_url": null,
+      "created_at": "2026-03-30T12:57:15.029Z",
+      "last_posted_at": "2026-04-09T11:53:57.799Z",
+      "bumped": true,
+      "bumped_at": "2026-04-09T11:53:57.799Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 564,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 5023416,
+            "username": "kcollo",
+            "name": "Kcollo",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 0
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 192972,
+            "username": "NVES",
+            "name": null,
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/nves/{size}/14043_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4037119,
+            "username": "trystan1",
+            "name": "Trystan",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "Random reboots and 00 screen",
+      "id": 354205,
+      "title": "Random reboots and 00 screen",
+      "slug": "random-reboots-and-00-screen",
+      "posts_count": 47,
+      "reply_count": 27,
+      "highest_post_number": 47,
+      "image_url": null,
+      "created_at": "2025-12-10T16:07:15.753Z",
+      "last_posted_at": "2026-04-20T19:03:23.234Z",
+      "bumped": true,
+      "bumped_at": "2026-04-20T19:03:23.234Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": false,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 659,
+          "name": "reboot",
+          "slug": "reboot"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 2,
+      "views": 2525,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": false,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 101156,
+            "username": "mceballos",
+            "name": null,
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4773290,
+            "username": "Sanyam0605",
+            "name": "Sanyam Jain",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 565886,
+            "username": "kosta",
+            "name": "Kosta",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/kosta/{size}/474629_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": 4944148,
+            "username": "parallelArchitect",
+            "name": "Joe",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/parallelarchitect/{size}/471144_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "DGX SPARK NVMe not detected",
+      "id": 366914,
+      "title": "DGX SPARK NVMe not detected",
+      "slug": "dgx-spark-nvme-not-detected",
+      "posts_count": 2,
+      "reply_count": 0,
+      "highest_post_number": 2,
+      "image_url": null,
+      "created_at": "2026-04-17T15:36:21.723Z",
+      "last_posted_at": "2026-04-17T15:41:16.029Z",
+      "bumped": true,
+      "bumped_at": "2026-04-17T15:41:16.029Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 251,
+      "category_id": 723,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 2313632,
+            "username": "sezgin",
+            "name": "Sezgin",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 192972,
+            "username": "NVES",
+            "name": null,
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/nves/{size}/14043_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "DGX Spark freezes under load",
+      "id": 374413,
+      "title": "DGX Spark freezes under load",
+      "slug": "dgx-spark-freezes-under-load",
+      "posts_count": 4,
+      "reply_count": 1,
+      "highest_post_number": 4,
+      "image_url": null,
+      "created_at": "2026-06-25T02:28:16.927Z",
+      "last_posted_at": "2026-06-30T23:14:43.672Z",
+      "bumped": true,
+      "bumped_at": "2026-06-30T23:14:43.672Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 1214,
+          "name": "dgx-spark-issue",
+          "slug": "dgx-spark-issue"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 1,
+      "views": 801,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 1,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 4699055,
+            "username": "ningsuhen",
+            "name": "Ningsuhen",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/ningsuhen/{size}/446333_2.png",
+            "trust_level": 0
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 5042013,
+            "username": "MarcelStevano",
+            "name": "marcelstevano",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/marcelstevano/{size}/519540_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "DGX Spark GB10: partnerdiag PowerStress reproducibly hard-powers-off the box — acpitz 88→97.8°C in 5s, all other field tests pass",
+      "id": 377365,
+      "title": "DGX Spark GB10: partnerdiag PowerStress reproducibly hard-powers-off the box — acpitz 88→97.8°C in 5s, all other field tests pass",
+      "slug": "dgx-spark-gb10-partnerdiag-powerstress-reproducibly-hard-powers-off-the-box-acpitz-88-97-8-c-in-5s-all-other-field-tests-pass",
+      "posts_count": 10,
+      "reply_count": 5,
+      "highest_post_number": 10,
+      "image_url": null,
+      "created_at": "2026-07-18T21:16:51.413Z",
+      "last_posted_at": "2026-07-24T11:39:34.949Z",
+      "bumped": true,
+      "bumped_at": "2026-07-24T11:39:34.949Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 1214,
+          "name": "dgx-spark-issue",
+          "slug": "dgx-spark-issue"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 982,
+      "category_id": 723,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 4964609,
+            "username": "digiegg",
+            "name": "Digiegg",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/digiegg/{size}/498745_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 5047153,
+            "username": "mashie",
+            "name": "Mashie",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/mashie/{size}/503632_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4742701,
+            "username": "DannyTup",
+            "name": "Danny",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/dannytup/{size}/450509_2.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster",
+          "user": {
+            "id": 4723345,
+            "username": "zneill",
+            "name": "Zeke Neill",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/zneill/{size}/502736_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "DGX Spark - Persistent 30-Minute Restart After ALL Firmware Updates",
+      "id": 364312,
+      "title": "DGX Spark - Persistent 30-Minute Restart After ALL Firmware Updates",
+      "slug": "dgx-spark-persistent-30-minute-restart-after-all-firmware-updates",
+      "posts_count": 3,
+      "reply_count": 1,
+      "highest_post_number": 3,
+      "image_url": null,
+      "created_at": "2026-03-22T01:13:39.737Z",
+      "last_posted_at": "2026-03-22T03:55:56.301Z",
+      "bumped": true,
+      "bumped_at": "2026-03-22T03:55:56.301Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 84,
+          "name": "ota",
+          "slug": "ota"
+        },
+        {
+          "id": 1182,
+          "name": "dgx",
+          "slug": "dgx"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 564,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 3287894,
+            "username": "nirosha.s.v.nv",
+            "name": "Nirosha S V Nv",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Frequent Poster, Accepted Answer",
+          "user": {
+            "id": 4037119,
+            "username": "trystan1",
+            "name": "Trystan",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster",
+          "user": {
+            "id": 4924869,
+            "username": "twaggs88",
+            "name": "Tyler Wagler",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/twaggs88/{size}/524590_2.png",
+            "trust_level": 1
+          }
+        }
+      ]
+    },
+    {
+      "fancy_title": "Issues Setup and Update of New DGX Spark",
+      "id": 379261,
+      "title": "Issues Setup and Update of New DGX Spark",
+      "slug": "issues-setup-and-update-of-new-dgx-spark",
+      "posts_count": 2,
+      "reply_count": 0,
+      "highest_post_number": 2,
+      "image_url": null,
+      "created_at": "2026-08-05T17:06:30.196Z",
+      "last_posted_at": "2026-08-05T18:05:14.471Z",
+      "bumped": true,
+      "bumped_at": "2026-08-05T18:05:14.471Z",
+      "archetype": "regular",
+      "unseen": false,
+      "pinned": false,
+      "unpinned": null,
+      "visible": true,
+      "closed": true,
+      "archived": false,
+      "bookmarked": null,
+      "liked": null,
+      "thumbnails": null,
+      "tags": [
+        {
+          "id": 84,
+          "name": "ota",
+          "slug": "ota"
+        },
+        {
+          "id": 1214,
+          "name": "dgx-spark-issue",
+          "slug": "dgx-spark-issue"
+        }
+      ],
+      "tags_descriptions": {},
+      "like_count": 0,
+      "views": 587,
+      "category_id": 721,
+      "featured_link": null,
+      "op_like_count": 0,
+      "has_accepted_answer": true,
+      "posters": [
+        {
+          "extras": null,
+          "description": "Original Poster",
+          "user": {
+            "id": 5271758,
+            "username": "james587",
+            "name": "James",
+            "avatar_template": "https://developer.download.nvidia.com/images/forums/profile-default-devtalk-84.png",
+            "trust_level": 1
+          }
+        },
+        {
+          "extras": "latest",
+          "description": "Most Recent Poster, Accepted Answer",
+          "user": {
+            "id": 3567453,
+            "username": "aniculescu",
+            "name": "Aniculescu",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/aniculescu/{size}/382649_2.png",
+            "flair_name": "Employee",
+            "flair_group_id": 63,
+            "primary_group_name": "Employee",
+            "moderator": true,
+            "trust_level": 2
+          }
+        },
+        {
+          "extras": null,
+          "description": "Recent Poster",
+          "user": {
+            "id": -1,
+            "username": "system",
+            "name": "system",
+            "avatar_template": "/user_avatar/forums.developer.nvidia.com/system/{size}/68080_2.png",
+            "admin": true,
+            "moderator": true,
+            "trust_level": 4
+          }
+        }
+      ]
+    }
+  ]
+}
