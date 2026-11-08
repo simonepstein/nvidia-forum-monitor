@@ -309,6 +309,7 @@ class GitHubMock:
         status: int = 200,
         headers: dict[str, str] | None = None,
     ) -> None:
+        """Queue a response for `path`; a callable payload gets the request and returns one."""
         self.routes.setdefault(path, []).append((status, payload, headers or {}))
 
     def install(self, router: respx.Router) -> None:
@@ -324,6 +325,8 @@ class GitHubMock:
         index = self.counters.get(path, 0)
         status, payload, headers = queued[min(index, len(queued) - 1)]
         self.counters[path] = index + 1
+        if callable(payload):
+            return payload(request)
         if status == 304:
             return httpx.Response(304, headers=headers)
         if isinstance(payload, str):

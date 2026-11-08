@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 from conftest import add_github_spec
 
@@ -646,6 +647,101 @@ def tag_events(conn) -> list:
     return conn.execute("SELECT * FROM repo_events WHERE kind='tag' ORDER BY id").fetchall()
 
 
+def tags_requests(github) -> list:
+    return [request for request in github.requests if request.url.path == f"{BASE}/tags"]
+
+
+def conditional_tags(entries, etag: str = '"tags"'):
+    """A tags route that behaves like GitHub's: 304 when If-None-Match matches."""
+    payload = [{"name": entry} if isinstance(entry, str) else entry for entry in entries]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("If-None-Match") == etag:
+            return httpx.Response(304)
+        return httpx.Response(200, json=payload, headers={"ETag": etag})
+
+    return handler
+
+
+def forget_seen_tags(conn) -> None:
+    etags = repo_etags(conn)
+    etags.pop("seen_tags", None)
+    conn.execute(
+        "UPDATE repos SET etags=? WHERE url=?", (dumps(etags), f"https://github.com/{REPO}")
+    )
+
+
+def test_a_legacy_row_behind_a_304_seeds_seen_tags(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0", "v0.10.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    forget_seen_tags(conn)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(f"{BASE}/tags", conditional_tags(["v0.11.0", "v0.10.0"]))
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == []
+    assert tag_events(conn) == []
+    assert repo_etags(conn)["seen_tags"] == ["v0.11.0", "v0.10.0"]
+    assert repo_etags(conn)["tags"] == '"tags"'
+    assert tags_requests(github)[-1].headers.get("If-None-Match") is None
+
+
+def test_a_seeded_legacy_row_emits_one_new_tag_at_the_head(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0", "v0.10.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    forget_seen_tags(conn)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(f"{BASE}/tags", conditional_tags(["v0.11.0", "v0.10.0"]))
+    assert check_repos(conn, settings, repo=REPO)["changed"] == []
+    assert tag_events(conn) == []
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        conditional_tags(
+            [
+                {"name": "v0.12.0", "commit": {"sha": SHA2}},
+                {"name": "v0.11.0", "commit": {"sha": SHA1}},
+                {"name": "v0.10.0", "commit": {"sha": "c" * 40}},
+            ],
+            etag='"tags-2"',
+        ),
+    )
+    github.add(
+        f"{BASE}/commits/{SHA2}",
+        {"commit": {"committer": {"date": "2026-02-02T03:04:05+00:00"}}},
+    )
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == [{"repo": REPO, "tag": "v0.12.0"}]
+    events = tag_events(conn)
+    assert [event["ref"] for event in events] == ["v0.12.0"]
+    assert events[0]["occurred_at"] == "2026-02-02T03:04:05+00:00"
+    assert tags_requests(github)[-1].headers.get("If-None-Match") == '"tags"'
+
+
+def test_an_empty_tags_page_still_goes_conditional_next_time(settings, conn, router, github):
+    baseline(github, tags=())
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    assert repo_etags(conn)["seen_tags"] == []
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(f"{BASE}/tags", conditional_tags([]))
+    check_repos(conn, settings, repo=REPO)
+
+    assert repo_etags(conn)["seen_tags"] == []
+    assert tags_requests(github)[-1].headers.get("If-None-Match") == '"tags"'
+
+
 def test_tags_etag_change_alone_creates_no_events(settings, conn, router, github):
     baseline(github, tags=("v0.11.0", "v0.10.0", "v0.9.0"))
     github.install(router)
@@ -719,13 +815,7 @@ def test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline(settings, co
     baseline(github, tags=("staging-current-1790687448",))
     github.install(router)
     watch_repo(conn, REPO, settings=settings)
-
-    etags = repo_etags(conn)
-    etags.pop("seen_tags", None)
-    conn.execute(
-        "UPDATE repos SET etags=? WHERE url=?",
-        (dumps(etags), f"https://github.com/{REPO}"),
-    )
+    forget_seen_tags(conn)
 
     github.add(f"{BASE}/commits/main", None, status=304)
     github.add(f"{BASE}/releases/latest", None, status=304)
@@ -740,6 +830,7 @@ def test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline(settings, co
     assert payload["changed"] == []
     assert tag_events(conn) == []
     assert len(repo_etags(conn)["seen_tags"]) == 10
+    assert tags_requests(github)[-1].headers.get("If-None-Match") is None
 
 
 def test_a_tag_returning_to_the_page_does_not_duplicate_its_event(settings, conn, router, github):

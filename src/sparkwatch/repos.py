@@ -661,12 +661,13 @@ def check_repos(
                             "UPDATE repos SET latest_release_tag=? WHERE id=?", (tag, repo_id)
                         )
 
+                etags = _etags(row)
+                seen = etags.get("seen_tags")
                 try:
-                    tags_etag = _etags(row).get("tags")
                     status, response, new_etag = client.get(
                         f"/repos/{row['owner']}/{row['name']}/tags",
                         params={"per_page": 10},
-                        etag=tags_etag,
+                        etag=etags.get("tags") if isinstance(seen, list) else None,
                     )
                 except GitHubNotFound:
                     response = None
@@ -674,7 +675,6 @@ def check_repos(
                 if status != 304 and response is not None:
                     entries = [item for item in response.json() if item.get("name")]
                     tags = [item["name"] for item in entries]
-                    seen = _etags(row).get("seen_tags")
                     _update_etags(conn, repo_id, {"tags": new_etag or None, "seen_tags": tags})
                     if isinstance(seen, list) and not baseline:
                         for item in entries:

@@ -824,3 +824,24 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - A legacy row whose next tags response adds one tag at the head emits exactly that tag.
 
 **Housekeeping, not a bug:** `data/` now holds 5 full-size backups from the rehearsals (`sparkwatch.db.backup-*`, about 62 MB each). It's gitignored. The user can delete the ones they don't want; nothing reads them.
+
+## #53 fix: a legacy row seeds `seen_tags` with one unconditional tags request (2026-11-08, option (a))
+- **`repos.py` (tags block):**
+  - `seen = _etags(row).get('seen_tags')` is now read **before** the request. The request carries `If-None-Match` only when `seen` is a list; otherwise it goes out unconditional, so a 200 always arrives and the set is recorded. A 304 could never record it, which is what swallowed every legacy repo's first new tag.
+  - The seed costs one extra request per legacy row, once. After it, `seen_tags` exists — `[]` included — and the check is conditional again.
+  - Nothing else changes: a row with no recorded set records the page and emits nothing (baseline semantics), so repo 87's 9 deleted tags stay deleted. A tag published while the row was legacy is still swallowed on the seeding response; that is the price of (a), and (b)'s `/tags` ordering assumption was rejected.
+- **`tests/conftest.py`:** `GitHubMock.add()` accepts a callable payload, `(request) -> httpx.Response`, so a test can emulate GitHub's ETag matching. Existing payloads are untouched.
+- **Tests (399 passed, 1 skipped; ruff check and format clean):**
+  - `test_a_legacy_row_behind_a_304_seeds_seen_tags`: the row's ETag would 304 a conditional request; the fix sends none, the page is recorded, `changed: []`, 0 events, the ETag is kept.
+  - `test_a_seeded_legacy_row_emits_one_new_tag_at_the_head`: seed check emits nothing, the next response (new ETag) adds one tag at the head → exactly 1 event with its commit date, and the tags request is conditional again.
+  - `test_an_empty_tags_page_still_goes_conditional_next_time`: `seen_tags: []` counts as seeded, so a tagless repo doesn't fetch unconditionally forever.
+  - `test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline` now also asserts the tags request carries no `If-None-Match`.
+- **Rehearsal (on `data/sparkwatch.db.backup-53`, a `sqlite3.backup()` copy; live DB untouched):**
+  - The copy's repo 87 had `tags` but no `seen_tags`, exactly the live state. One `repos check --repo eugr/spark-vllm-docker` → 3 requests, `auth: token`, `changed: []`, and `seen_tags` recorded with the 10 `staging-current-*` names. The second check left it unchanged.
+  - Live repo 87 is still `has_seen: 0`, `last_checked_at 22:12:13`, 9 tag events: the live writes are the user's.
+- **What to test (user, live):**
+  1. Run the cleanup from #52 if you haven't: `DELETE FROM repo_events WHERE repo_id=87 AND kind='tag' AND detected_at='2026-11-08T22:12:13+00:00';` → 9 rows.
+  2. `uv run sparkwatch repos check --repo eugr/spark-vllm-docker` → `changed: []`, `auth: token`, and repo 87's `etags` now has `seen_tags` with 10 names.
+  3. `uv run sparkwatch repos check` → every watched repo gains `seen_tags`; no `tag` entries in `changed`.
+  4. `uv run sparkwatch repo_status --repo eugr/spark-vllm-docker` → `releases` no longer lists the 9 deleted tags.
+  5. When a genuinely new tag appears, `changed` lists exactly that tag with the tag's commit date as `occurred_at`.
