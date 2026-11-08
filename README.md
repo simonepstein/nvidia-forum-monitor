@@ -7,7 +7,7 @@ sparkwatch keeps an AI agent up to date with the NVIDIA DGX Spark / GB10 develop
 It is a local data layer behind an MCP server:
 
 - **Forum mirror.** Incremental, polite sync of the [DGX Spark / GB10](https://forums.developer.nvidia.com/c/accelerated-computing/dgx-spark-gb10/dgx-spark-gb10/721) and [Projects](https://forums.developer.nvidia.com/c/accelerated-computing/dgx-spark-gb10/dgx-spark-gb10-projects/723) categories into SQLite, with full-text search. It uses Discourse's JSON API, so no browser is needed.
-- **"Since I last asked" digest.** Shows new and updated threads, mentions of watchlist models, and first sightings of anticipated releases.
+- **"Since I last asked" digest.** Shows new and updated threads, mentions of watchlist models, and first sightings of anticipated releases. It also carries open state — unacknowledged sightings and open flags — so a digest is never empty even when nothing changed.
 - **Agent memory.** Recipes (model, quant, engine, topology, tok/s, setup, gotchas), benchmarks, research notes and flags are written back by the agent. Every one cites the forum posts it came from, and the quoted text is checked against those posts.
 - **Watched repos.** GitHub repos found in posts can be watched. sparkwatch tracks whether the branch has moved, new releases and tags, and how far your installed SHA is behind, so you know when to update your serving stack.
 

@@ -115,8 +115,9 @@ def digest(
     since: str = typer.Option("cursor", "--since"),
     cursor: str = typer.Option("default", "--cursor"),
     relevant_only: bool = typer.Option(False, "--relevant-only"),
-    limit: int = typer.Option(30, "--limit"),
+    limit: int = typer.Option(10, "--limit"),
     no_advance: bool = typer.Option(False, "--no-advance"),
+    as_json: bool = typer.Option(False, "--json", help="print the JSON the MCP tool returns"),
 ) -> None:
     """Show what changed since the cursor."""
     from .digest import build_digest, render_digest
@@ -132,7 +133,10 @@ def digest(
         limit=limit,
         advance=not no_advance,
     )
-    console.print(render_digest(payload))
+    if as_json:
+        _print(payload)
+    else:
+        console.print(render_digest(payload))
 
 
 @app.command("serve-mcp")

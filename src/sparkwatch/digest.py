@@ -48,11 +48,37 @@ def _topic_url(topic_id: int, slug: str | None = None) -> str:
     return f"{FORUM_URL}/t/{topic_id}"
 
 
-def _snippet(text: str | None, length: int = 300) -> str | None:
+SNIPPET_CHARS = 120
+WATCH_HITS_PER_LABEL = 2
+LATEST_POSTS_PER_TOPIC = 2
+SECTION_CAP = 10
+
+
+def _snippet(text: str | None, length: int = SNIPPET_CHARS) -> str | None:
     if not text:
         return None
     flat = " ".join(text.split())
-    return flat[:length]
+    if len(flat) <= length:
+        return flat
+    return flat[:length].rstrip() + "…"
+
+
+def _snippet_around(
+    text: str | None, needle: str | None, length: int = SNIPPET_CHARS
+) -> str | None:
+    """A snippet centred on the matched text, so it shows what actually matched."""
+    if not text:
+        return None
+    flat = " ".join(text.split())
+    index = flat.lower().find((needle or "").strip().lower()) if needle else -1
+    if index < 0:
+        return _snippet(flat, length)
+    start = max(0, index - length // 3)
+    end = min(len(flat), start + length)
+    start = max(0, end - length)
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(flat) else ""
+    return f"{prefix}{flat[start:end].strip()}{suffix}"
 
 
 def resolve_since(conn: sqlite3.Connection, since: str, cursor: str) -> str:
@@ -86,38 +112,48 @@ def _sightings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list[dict[str, Any]]:
     params = window_params(since_iso)
     rows = conn.execute(
-        "SELECT w.label, h.post_id, h.topic_id, h.matched_text, p.post_number, p.raw,"
+        "SELECT w.label, w.kind, h.post_id, h.topic_id, h.matched_text, p.post_number, p.raw,"
         " p.created_at, t.title FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
         " JOIN posts p ON p.id = h.post_id JOIN topics t ON t.id = h.topic_id"
-        f" WHERE w.kind='tracking' AND ({NEW_POSTS})"
-        " ORDER BY julianday(p.created_at) DESC LIMIT :limit",
-        {**params, "limit": limit},
+        f" WHERE ({NEW_POSTS})"
+        " ORDER BY julianday(p.created_at) DESC",
+        params,
     ).fetchall()
     edited = {
         row["label"]: row["n"]
         for row in conn.execute(
             "SELECT w.label, COUNT(DISTINCT h.post_id) AS n FROM watch_hits h"
             " JOIN watchlist w ON w.id = h.watch_id JOIN posts p ON p.id = h.post_id"
-            f" WHERE w.kind='tracking' AND ({EDITED_POSTS}) GROUP BY w.label",
+            f" WHERE ({EDITED_POSTS}) GROUP BY w.label",
             params,
         )
     }
-    grouped: dict[str, list[dict[str, Any]]] = {label: [] for label in edited}
+    grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
-        grouped.setdefault(row["label"], []).append(
+        anticipated = row["kind"] == "anticipated"
+        bucket = grouped.setdefault(
+            row["label"],
             {
-                "title": row["title"],
-                "url": _post_url(row["topic_id"], row["post_number"]),
-                "matched": row["matched_text"],
-                "date": row["created_at"],
-                "snippet": _snippet(row["raw"]),
-            }
+                "label": row["label"],
+                "kind": row["kind"],
+                "total": 0,
+                "edits": edited.get(row["label"], 0),
+                "hits": [],
+            },
         )
-    return [
-        {"label": label, "hits": hits, "edits": edited.get(label, 0)}
-        for label, hits in grouped.items()
-        if hits or edited.get(label)
-    ]
+        bucket["total"] += 1
+        cap = 3 if anticipated else WATCH_HITS_PER_LABEL
+        if len(bucket["hits"]) < cap:
+            bucket["hits"].append(
+                {
+                    "title": row["title"],
+                    "url": _post_url(row["topic_id"], row["post_number"]),
+                    "matched": row["matched_text"],
+                    "date": row["created_at"],
+                    "snippet": _snippet_around(row["raw"], row["matched_text"]),
+                }
+            )
+    return [entry for entry in list(grouped.values())[:limit] if entry["hits"] or entry["edits"]]
 
 
 def _new_topics(
@@ -135,7 +171,7 @@ def _new_topics(
             "topic_id": row["id"],
             "title": row["title"],
             "url": _topic_url(row["id"]),
-            "excerpt": _snippet(row["excerpt"], 300),
+            "excerpt": _snippet(row["excerpt"]),
             "created_at": row["created_at"],
             "relevance_score": row["relevance_score"],
             "posts_count": row["posts_count"],
@@ -166,8 +202,8 @@ def _updated_topics(
         posts = conn.execute(
             "SELECT p.id, p.post_number, p.username, p.created_at, p.raw FROM posts p"
             f" WHERE p.topic_id = :topic_id AND ({NEW_POSTS})"
-            " ORDER BY julianday(p.created_at) DESC LIMIT 3",
-            {**params, "topic_id": row["topic_id"]},
+            " ORDER BY julianday(p.created_at) DESC LIMIT :posts",
+            {**params, "topic_id": row["topic_id"], "posts": LATEST_POSTS_PER_TOPIC},
         ).fetchall()
         output.append(
             {
@@ -184,7 +220,7 @@ def _updated_topics(
                         "author": post["username"],
                         "date": post["created_at"],
                         "url": _post_url(row["topic_id"], post["post_number"]),
-                        "snippet": _snippet(post["raw"], 300),
+                        "snippet": _snippet(post["raw"]),
                     }
                     for post in posts
                 ],
@@ -246,8 +282,9 @@ def _watched_repos(conn: sqlite3.Connection, since_iso: str) -> list[dict[str, A
 def _repos_first_linked(
     conn: sqlite3.Connection, since_iso: str, limit: int
 ) -> list[dict[str, Any]]:
+    """One line per repo first linked since the cursor: candidate for watch_repo."""
     rows = conn.execute(
-        "SELECT r.owner, r.name, r.url, r.first_seen_at, m.post_id, m.topic_id, m.context_snippet,"
+        "SELECT r.owner, r.name, r.url, r.first_seen_at, m.post_id, m.topic_id,"
         " p.post_number, t.title FROM repos r LEFT JOIN repo_mentions m ON m.repo_id = r.id"
         " LEFT JOIN posts p ON p.id = m.post_id LEFT JOIN topics t ON t.id = m.topic_id"
         " WHERE r.first_seen_at >= ? ORDER BY r.first_seen_at DESC LIMIT ?",
@@ -260,7 +297,6 @@ def _repos_first_linked(
             "first_seen_at": row["first_seen_at"],
             "topic": row["title"],
             "post_url": _post_url(row["topic_id"], row["post_number"]) if row["topic_id"] else None,
-            "snippet": row["context_snippet"],
         }
         for row in rows
     ]
@@ -279,12 +315,19 @@ def build_digest(
     since: str = "cursor",
     cursor: str = "default",
     relevant_only: bool = False,
-    limit: int = 30,
+    limit: int = 10,
     advance: bool = True,
 ) -> dict[str, Any]:
+    """Build the "since I last asked" view.
+
+    Sections 1-7 are events since the cursor, except that unacknowledged watch sightings
+    and open flags are open *state*: they appear whenever they are open, so a digest is
+    never empty even when nothing changed.
+    """
     settings = settings or get_settings()
     since_iso = resolve_since(conn, since, cursor)
     built_at = utcnow_iso()
+    cap = max(1, min(limit, SECTION_CAP))
 
     backfilled_row = conn.execute(
         f"SELECT COUNT(*) AS posts, COUNT(DISTINCT p.topic_id) AS topics FROM posts p"
@@ -298,11 +341,11 @@ def build_digest(
         "cursor": cursor,
         "sections": {
             "watch_sightings": _sightings(conn),
-            "watchlist_activity": watch_activity(conn, since_iso, limit),
-            "new_topics": _new_topics(conn, since_iso, limit, relevant_only),
-            "updated_topics": _updated_topics(conn, since_iso, limit, relevant_only),
+            "watchlist_activity": watch_activity(conn, since_iso, cap),
+            "new_topics": _new_topics(conn, since_iso, cap, relevant_only),
+            "updated_topics": _updated_topics(conn, since_iso, cap, relevant_only),
             "watched_repos": _watched_repos(conn, since_iso),
-            "repos_first_linked": _repos_first_linked(conn, since_iso, limit),
+            "repos_first_linked": _repos_first_linked(conn, since_iso, cap),
             "open_flags": _open_flags(conn),
         },
         "backfilled": {
@@ -320,22 +363,81 @@ def build_digest(
     return digest
 
 
+def _render_sighting(item: dict[str, Any]) -> str:
+    return f"- [sighting] {item['label']}: {item['title']} — {item['url']}"
+
+
+def _render_watch(entry: dict[str, Any]) -> list[str]:
+    head = f"- {entry['label']} ({entry['kind']}): {entry['total']} new hit(s)"
+    if entry["edits"]:
+        head += f", {entry['edits']} edit(s)"
+    lines = [head]
+    for hit in entry["hits"]:
+        lines.append(f"  - {hit['date']} {hit['url']} — {hit['snippet']}")
+    return lines
+
+
+def _render_new_topic(item: dict[str, Any]) -> str:
+    return f"- {item['title']} — {item['url']} ({item['created_at']}, {item['posts_count']} posts)"
+
+
+def _render_updated_topic(item: dict[str, Any]) -> list[str]:
+    head = f"- {item['title']} — {item['url']}: {item['new_posts']} new post(s)"
+    if item["edits"]:
+        head += f", {item['edits']} edit(s)"
+    lines = [head]
+    for post in item["latest"]:
+        lines.append(f"  - {post['date']} {post['url']} — {post['snippet']}")
+    return lines
+
+
+def _render_repo(entry: dict[str, Any]) -> list[str]:
+    lines = [f"- {entry['repo']} — {entry['url']}"]
+    for event in entry["events"]:
+        detail = event["title"] or event["ref"] or ""
+        lines.append(f"  - {event['kind']} {detail} ({event['detected_at']})")
+    install = entry.get("installed")
+    if install:
+        behind = install.get("commits_behind")
+        where = f"{behind} commits behind" if behind is not None else "status unknown"
+        lines.append(f"  - installed {install['short_sha']}, now {where}")
+    return lines
+
+
 def render_digest(digest: dict[str, Any]) -> str:
+    """Readable CLI rendering: one line per item, with its URL and date."""
     lines = [f"sparkwatch digest — since {digest['since']} (built {digest['built_at']})"]
     sections = digest["sections"]
-    for label, key in (
-        ("Watch sightings", "watch_sightings"),
-        ("Watchlist activity", "watchlist_activity"),
-        ("New topics", "new_topics"),
-        ("Updated topics", "updated_topics"),
-        ("Watched repos", "watched_repos"),
-        ("Repos first linked", "repos_first_linked"),
-        ("Open flags", "open_flags"),
-    ):
-        items = sections[key]
-        lines.append(f"\n## {label} ({len(items)})")
-        for item in items:
-            lines.append(f"- {item}")
+
+    lines.append(f"\n## Watch sightings ({len(sections['watch_sightings'])})")
+    lines.extend(_render_sighting(item) for item in sections["watch_sightings"])
+
+    lines.append(f"\n## Watchlist activity ({len(sections['watchlist_activity'])})")
+    for entry in sections["watchlist_activity"]:
+        lines.extend(_render_watch(entry))
+
+    lines.append(f"\n## New topics ({len(sections['new_topics'])})")
+    lines.extend(_render_new_topic(item) for item in sections["new_topics"])
+
+    lines.append(f"\n## Updated topics ({len(sections['updated_topics'])})")
+    for item in sections["updated_topics"]:
+        lines.extend(_render_updated_topic(item))
+
+    lines.append(f"\n## Watched repos ({len(sections['watched_repos'])})")
+    for entry in sections["watched_repos"]:
+        lines.extend(_render_repo(entry))
+
+    lines.append(f"\n## Repos first linked ({len(sections['repos_first_linked'])})")
+    for item in sections["repos_first_linked"]:
+        lines.append(f"- {item['repo']} — {item['url']} ({item['first_seen_at']})")
+
+    lines.append(f"\n## Open flags ({len(sections['open_flags'])})")
+    for item in sections["open_flags"]:
+        lines.append(
+            f"- [P{item['priority']}] {item['label']} on {item['target_type']}"
+            f" {item['target_id']}: {item['reason']}"
+        )
+
     if digest["backfilled"]["posts"]:
         lines.append(
             f"\nbackfilled: {digest['backfilled']['posts']} posts"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sparkwatch import digest as digest_module
 from sparkwatch.digest import build_digest
 
 PAST = "2026-01-01T00:00:00+00:00"
@@ -156,6 +157,82 @@ def test_watch_hit_dates_come_from_the_post(conn, settings):
     digest = build_digest(conn, settings, since=OLDER, advance=False)
     hit = digest["sections"]["watchlist_activity"][0]["hits"][0]
     assert hit["date"] == PAST
+
+
+def test_watch_hit_snippet_shows_the_match(conn, settings):
+    from sparkwatch import watch
+
+    seed_topic(conn, 14, "Thread with a long OP", created_at=PAST)
+    filler = "we spent the morning on a Qwen SGLang setup. " * 8
+    raw = f"{filler}then GLM 5.3 Flash hit 31 tok/s with nvfp4. {filler}"
+    seed_post(conn, 1401, 14, raw, created_at=PAST)
+    watch.match_post(conn, 1401, 14, "Thread with a long OP", raw)
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    snippet = digest["sections"]["watchlist_activity"][0]["hits"][0]["snippet"]
+    assert "GLM 5.3 Flash" in snippet
+    assert len(snippet) <= digest_module.SNIPPET_CHARS + 2
+
+
+def test_default_digest_stays_under_the_size_budget(conn, settings):
+    import json
+
+    for index in range(12):
+        topic_id = 2000 + index
+        seed_topic(conn, topic_id, f"GLM 5.3 Flash topic {index}", created_at=OLDER, relevance=9.0)
+        seed_post(
+            conn,
+            20000 + index,
+            topic_id,
+            f"glm 5.3 flash on two sparks with vllm nvfp4, run {index} " + "detail " * 40,
+            created_at=PAST,
+            first_fetched_at=PAST,
+        )
+        conn.execute(
+            "INSERT INTO repos (owner, name, url, watch, first_seen_at) VALUES (?, ?, ?, 0, ?)",
+            (f"owner{index}", f"repo{index}", f"https://github.com/owner{index}/repo{index}", PAST),
+        )
+        conn.execute(
+            "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+            " SELECT id, ?, ?, url, ? FROM repos WHERE owner=?",
+            (20000 + index, topic_id, PAST, f"owner{index}"),
+        )
+        conn.execute(
+            "INSERT INTO flags (target_type, target_id, label, reason, priority, created_at)"
+            " VALUES ('topic', ?, 'perf-claim', ?, 2, ?)",
+            (str(topic_id), "reason " * 30, PAST),
+        )
+    from sparkwatch import watch
+
+    watch.match_post(
+        conn, 20000, 2000, "GLM 5.3 Flash topic 0", "glm 5.3 flash on two sparks with vllm nvfp4"
+    )
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    size = len(json.dumps(digest))
+    assert size < 10_000, size
+    assert len(digest["sections"]["new_topics"]) <= digest_module.SECTION_CAP
+    assert len(digest["sections"]["repos_first_linked"]) <= digest_module.SECTION_CAP
+    assert "snippet" not in digest["sections"]["repos_first_linked"][0]
+
+
+def test_render_digest_is_readable_lines(conn, settings):
+    from sparkwatch.digest import render_digest
+
+    seed_topic(conn, 15, "GLM 5.3 Flash on two Sparks", created_at="2025-11-01T00:00:00+00:00")
+    seed_post(conn, 1501, 15, "glm 5.3 flash numbers", created_at=PAST, first_fetched_at=PAST)
+    conn.execute(
+        "INSERT INTO flags (target_type, target_id, label, reason, priority, created_at)"
+        " VALUES ('topic', '15', 'perf-claim', 'two numbers disagree', 1, ?)",
+        (PAST,),
+    )
+
+    text = render_digest(build_digest(conn, settings, since=OLDER, advance=False))
+
+    assert "{'" not in text
+    assert "## Updated topics (1)" in text
+    assert "https://forums.developer.nvidia.com/t/15" in text
+    assert "[P1] perf-claim on topic 15" in text
 
 
 def test_anticipated_sighting_tops_digest_until_acked(conn, settings):

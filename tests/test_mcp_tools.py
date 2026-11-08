@@ -460,6 +460,30 @@ def test_topic_overview_and_mark_topic(settings, conn):
     assert row["relevance_override"] == 0
 
 
+def test_topic_overview_groups_watch_hits_per_label(settings, conn):
+    from sparkwatch import watch
+
+    seed(conn)
+    conn.execute("UPDATE posts SET created_at=? WHERE id IN (7001, 7002)", (PAST,))
+    watch.match_post(conn, 7001, 700, "GLM 5.3 Flash on two Sparks", QUOTE)
+    watch.match_post(conn, 7002, 700, "GLM 5.3 Flash on two Sparks", "fp8 instead")
+
+    overview = m.get_topic_overview(700)
+
+    hits = overview["watch_hits"]
+    assert len(hits) == 1
+    assert hits[0]["label"] == "GLM 5.3 Flash"
+    assert hits[0]["count"] == 2
+    assert hits[0]["latest"]["url"].startswith("https://forums.developer.nvidia.com/t/700/")
+    assert hits[0]["latest"]["date"] == PAST
+
+
+def test_digest_description_mentions_open_state(settings, conn):
+    description = m.digest.__doc__ or ""
+    assert "open state" in description
+    assert "never empty" in description
+
+
 def test_watchlist_tools(settings, conn):
     created = m.add_watch("Kimi K2", r"kimi[\s._-]*k2", kind="tracking")
     assert created["label"] == "Kimi K2"

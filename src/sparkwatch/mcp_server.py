@@ -238,13 +238,15 @@ def digest(
     since: str = "cursor",
     cursor: str = "default",
     relevant_only: bool = False,
-    limit: int = 30,
+    limit: int = 10,
     advance: bool = True,
 ) -> dict[str, Any]:
     """Show what changed since the last time the agent looked ("since I last asked").
 
-    Sections: unacknowledged watch sightings, watchlist activity, new topics, updated topics,
-    watched repo events, repos first linked from posts, and open flags. Timing is based on
+    Sections 1-6 are events since the cursor: watchlist activity, new topics, updated topics,
+    watched repo events, and repos first linked from posts. Sections 1 and 7 of the spec
+    (unacknowledged watch sightings and open flags) are open state: they appear whenever
+    they are open, so a digest is never empty even when nothing changed. Timing is based on
     when sparkwatch first saw a post, so backfilled posts are reported as a count, not as news.
     """
     settings = _settings()
@@ -551,10 +553,33 @@ def get_topic_overview(topic_id: int) -> dict[str, Any]:
         (topic_id,),
     ).fetchall()
     hits = conn.execute(
-        "SELECT w.label, h.matched_text FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
-        " WHERE h.topic_id=?",
+        "SELECT w.label, COUNT(*) AS n FROM watch_hits h"
+        " JOIN watchlist w ON w.id = h.watch_id WHERE h.topic_id=? GROUP BY w.label"
+        " ORDER BY n DESC",
         (topic_id,),
     ).fetchall()
+    watch_hits = []
+    for row in hits:
+        latest = conn.execute(
+            "SELECT p.id, p.post_number, p.created_at FROM watch_hits h"
+            " JOIN posts p ON p.id = h.post_id"
+            " WHERE h.topic_id=? AND h.watch_id = (SELECT id FROM watchlist WHERE label=?)"
+            " ORDER BY julianday(p.created_at) DESC LIMIT 1",
+            (topic_id, row["label"]),
+        ).fetchone()
+        watch_hits.append(
+            {
+                "label": row["label"],
+                "count": row["n"],
+                "latest": {
+                    "post_id": latest["id"],
+                    "date": latest["created_at"],
+                    "url": _post_url(topic_id, latest["post_number"]),
+                }
+                if latest is not None
+                else None,
+            }
+        )
     return {
         "topic_id": topic["id"],
         "title": topic["title"],
@@ -577,7 +602,7 @@ def get_topic_overview(topic_id: int) -> dict[str, Any]:
         else None,
         "repos": [{"repo": f"{row['owner']}/{row['name']}", "url": row["url"]} for row in repos],
         "hf_models": [row["repo_id"] for row in hf],
-        "watch_hits": [{"label": row["label"], "matched": row["matched_text"]} for row in hits],
+        "watch_hits": watch_hits,
         "recipes": [
             dict(row)
             for row in conn.execute(
