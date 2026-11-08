@@ -257,16 +257,24 @@ This is regex only.
 - **Repos are discovered from posts.** Discovery never watches a repo; you choose which repos to watch (§4).
 
 ### Watch matching (`watch.py`)
-- For each active `watchlist` row, run `re.search(match_regex, raw, re.I)` against the title and raw text of each new or changed post.
-- On a match, insert a row into `watch_hits(watch_id, post_id)`. These are unique, so re-matching an edited post is a no-op.
+- For each active `watchlist` row, `watch._match` runs `re.search(match_regex, …, re.I)` against the raw text and then the topic title. One matcher serves every path: `sync`, `rematch_watch` (on `add_watch` / `update_watch`) and `rematch_all`.
+- **Where it matched is recorded** in `watch_hits.matched_in`, with the matched text in `matched_text`. The body is checked first, so a post that names the model itself is a **mention** (`body`) even when the topic title also matches. A hit that only matched the topic title is **thread activity** (`title`).
+  - **Mentions** are what the counts mean: `model_summary.mentions`, `find_model_mentions.total_posts`, `list_watchlist.hits_7d` / `hits_30d` and `get_topic_overview.watch_hits[].count`.
+  - **Title-only hits** are reported per topic as replies, with ordinary snippets: the digest's `watchlist_activity[].threads`, `find_model_mentions.threads` and `model_summary.threads`. They keep a busy thread visible without inflating the counts. The user asked for this: replies in a thread like "Qwen4 is coming" are news even when they never name the model.
+- On a match, insert a row into `watch_hits(watch_id, post_id)`. These are unique, so re-matching an edited post is a no-op apart from refreshing `matched_in` and `matched_text`.
 - The first hit for an entry sets `watchlist.first_seen_post_id` and `first_seen_at`.
 - **Anticipated entries (revised 2026-11-08).** Speculation about a much-awaited model is constant, so a first *mention* says little. An anticipated entry may therefore have a `release_regex`, which is stricter than `match_regex`, e.g. a Hugging Face URL or phrases like "weights are out".
-  - **With a `release_regex`:** only a post matching it raises the sighting alert (`sighting_post_id`, `sighting_at`). After `ack_watch_sighting`, the next release match raises a new alert.
+  - **With a `release_regex`:** a sighting alert (`sighting_post_id`, `sighting_at`) is raised by either of two things:
+    1. a **post body** matching it, or
+    2. the **OP** (`post_number = 1`) of a **newly stored topic** whose title matches it.
+
+    Nothing else raises an alert: a reply that only matches the topic title is thread activity, so a thread titled "Qwen4 is out" cannot re-open the alert on every reply. After `ack_watch_sighting`, only a post **created after the acknowledgement** re-arms it; a post written earlier that sparkwatch sees later does not.
   - **Without one:** the first hit raises the alert, as before.
-  - **Every other hit is still recorded,** and appears in the digest only as a count.
+  - **Edits raise nothing (a choice, not a gap).** A re-fetch of a post sparkwatch already had never raises a sighting, so an OP edited to add "weights are out" produces no alert. The edit still shows as an edit or as thread activity, and the agent judges it.
+  - **Every other hit is still recorded,** and appears in the digest as a mention count or as thread activity.
   - **The judgement belongs to the agent:** `catch_up` tells it to classify anticipated-model hits as rumour or release, and to `flag` only releases.
 - An alert appears at the top of every digest until the agent acknowledges it with `ack_watch_sighting`.
-- When a watch entry is added or its regex changes, it is matched against all stored posts once. That's local only, with no fetching.
+- When a watch entry is added or its regex changes, it is matched against all stored posts once. That's local only, with no fetching, and it can never raise a sighting.
 
 ## 2. SQLite schema (`db.py`, migration 1)
 Every write is an idempotent upsert keyed on natural or Discourse IDs.
@@ -319,7 +327,10 @@ CREATE TABLE watchlist (id INTEGER PRIMARY KEY, label TEXT NOT NULL UNIQUE, cano
   -- migration 3 adds: release_regex TEXT, sighting_post_id INTEGER, sighting_at TEXT (see §1, Watch matching)
   active INTEGER NOT NULL DEFAULT 1, note TEXT, created_at TEXT NOT NULL);
 CREATE TABLE watch_hits (watch_id INTEGER REFERENCES watchlist(id), post_id INTEGER REFERENCES posts(id),
-  topic_id INTEGER, matched_text TEXT, created_at TEXT NOT NULL, PRIMARY KEY (watch_id, post_id));
+  topic_id INTEGER, matched_text TEXT, created_at TEXT NOT NULL, PRIMARY KEY (watch_id, post_id),
+  -- migration 5 adds: matched_in TEXT NOT NULL DEFAULT 'body' CHECK (matched_in IN ('title','body'))
+  --   (see §1, Watch matching: a body hit is a mention, a title-only hit is thread activity)
+  );
 CREATE TABLE digest_cursors (name TEXT PRIMARY KEY, last_seen_at TEXT NOT NULL);  -- 'default', or named per use
 
 -- Links
@@ -549,7 +560,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `digest(since="cursor", cursor="default", relevant_only=False, limit=6, advance=True)`. This is the "since I last asked" view. `since` is `"cursor"` or an ISO date.
   - **Sections, in order:**
     1. Unacknowledged **watch sightings**, i.e. first sightings of an anticipated model.
-    2. **Watchlist activity**: per tracked model, new hits since the cursor, each with a topic, post URL and a 120-character snippet.
+    2. **Watchlist activity**: per tracked model, new **mentions** since the cursor (hits that matched in the post body), each with a topic, post URL and a 120-character snippet, plus **threads**: title-matched topics with new replies. The head line carries `replies` (every new title-only reply) and `threads_total`, so nothing is hidden; `threads` lists at most 2 topics with their 2 newest replies and ordinary snippets, and any beyond that are reported as a count.
     3. **New topics** (created since the cursor), by relevance: title, URL, OP excerpt, author.
     4. **Updated topics**: the number of new posts and the newest 2 post snippets. Topics are ordered by relevance × number of new posts.
     5. **Watched repos:** for each repo with events since the cursor, whether or not anyone has posted about it:
@@ -566,9 +577,9 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
     - **backfilled:** `first_fetched_at >= since` and `created_at < since - 24h`.
   - **How each kind is reported:** sections 2–4 count and show only *new* posts, with edits as a separate count. Backfilled posts appear as a single line, `backfilled: N posts in M topics`. A topic made up only of backfilled posts isn't listed as new or updated.
   - **Item dates:** every item's `date` is the post's `created_at`.
-  - **Snippets:** watch-hit snippets are taken from around the matched text, not from the start of the post.
+  - **Snippets:** watch-hit snippets are taken from around the matched text, not from the start of the post. Thread replies are the exception: their snippet is the start of the reply, because the match is the topic title, not the text.
   - **Size:** the default digest should be well under 10 KB. Section caps and snippet lengths are chosen to meet that. "Repos first linked" is one line per repo.
-  - **Anticipated models:** in section 2, hits for an anticipated model (`kind='anticipated'`) are shown as a count, plus the 3 newest hits.
+  - **Anticipated models:** in section 2, mentions for an anticipated model (`kind='anticipated'`) are shown as a count, plus the 3 newest mentions; its thread activity is shown the same way as for tracked models.
   - **Cursor:** with `advance=True`, the cursor moves to the time the digest was built.
 - `whats_new_for(model, since?)`: the same as the digest, but narrowed to one model. It uses watch hits, an alias regex and FTS. `since` applies to **every** section, using the new, edited and backfilled definitions above.
 - `ack_watch_sighting(label)`: clears the current alert. An anticipated entry with a `release_regex` fires again on the next *release* match (see §1, Watch matching).
@@ -577,13 +588,13 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `search_posts(query, topic_id?, forum_id?, since?, username?, order="rank"|"recent", raw_fts=False, limit)`: FTS5 with `snippet()`.
   - **Query handling (revised 2026-11-08):** by default, `query` is plain text. Each whitespace-separated term is quoted as an FTS5 string, and the terms are joined with AND. So `GLM 5.3 Flash` and `tok/s` work as typed, and a phrase the agent quotes (`"tensor parallel"`) stays one FTS5 phrase. A bare `or`, `and`, `not` or `near` is searched as a word, and the response carries a `hint` pointing at `raw_fts`.
   - `raw_fts=True` passes the query through unchanged, for FTS5 operators. A query that cannot be searched — a syntax error, or no searchable terms — comes back as a tool error.
-- `find_model_mentions(model, since?, limit)`: resolves aliases and the watch regex, then returns matching posts grouped by topic, newest first, with snippets.
+- `find_model_mentions(model, since?, limit)`: resolves aliases and the watch regex, then returns matching posts grouped by topic, newest first, with snippets. `total_posts`, `edits` and `backfilled` count **body mentions only**; topics whose title matches but whose posts do not are returned under `threads`, with a reply count and the 2 newest replies.
 - `list_topics(forum_id?, since?, relevant_only=False, order="bumped"|"relevance"|"likes"|"created", limit)`
 - `get_topic_overview(topic_id)`:
   - metadata, the OP (truncated), the date range and participant count;
   - `has_accepted_answer`;
   - linked repos and HF models;
-  - watch hits;
+  - watch hits, split into `count` (body mentions) and `replies` (title-only hits), each with its newest post;
   - recipes, benchmarks, notes and flags that cite this topic.
 - `get_posts(topic_id, from_post?, to_post?, since?, last_n?, username?, max_chars?)`: the raw text of the selected posts.
   - `post_count` is the number of posts in this page, `selected_total` the number the filters selected and `topic_total` the topic's whole post count; pages break at a line or word boundary, so no word is split.
@@ -616,19 +627,20 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `model_summary(model)`. This is the starting point for a "best way to serve X" question. It returns:
   - the model's metadata;
   - its aliases;
-  - mention counts over 7, 30 and 60 days. These count **distinct posts by `posts.created_at`**, not watch-hit rows or when sparkwatch recorded them. The same rule applies to `list_watchlist`'s `hits_7d` and `hits_30d`.
+  - mention counts over 7, 30 and 60 days. These count **distinct posts by `posts.created_at`**, not watch-hit rows or when sparkwatch recorded them, and only matches in the **post body**: a post that only matches a topic title is thread activity. The same rule applies to `list_watchlist`'s `hits_7d` and `hits_30d`, which sit beside `replies_7d` / `replies_30d` for title-only hits.
   - its active recipes, newest first;
   - its benchmarks;
   - its latest research notes;
   - open flags;
   - repos mentioned in the model's topics (marking the watched ones, with their install status);
-  - topics with the most mentions.
+  - topics with the most mentions;
+  - `threads`: topics whose title matches the model, with `body_posts` and `title_posts` counts (at most 3). These are all-time and only cover title-matching topics, unlike the windowed `mentions` above.
 - `save_note(subject, body, model?, as_of, source_post_ids: [int], supersedes?: note_id)` and `get_notes(model?, subject_query?, include_superseded=False)`
   - A `model` that resolves through `models`/`model_aliases` is stored; an unknown name is stored as null with a `hint`, so a free-text name never creates a junk model row.
 - `flag(target_type, target_id, label, reason, priority=2)`, `list_flags(open_only=True)`, `resolve_flag(id, resolution)`
 - `review_proposed(kind="recipe"|"benchmark"|"alias")`, `set_review(kind, id, review)`
 - `add_model_alias(alias, canonical)`, `upsert_model(canonical, family?, params_total_b?, params_active_b?, released_at?, hf_repo_id?, note?)`
-- `list_watchlist()` (with hit counts over 7 and 30 days, first-seen dates and the latest hit), `add_watch(label, match_regex, kind, canonical?, release_regex?)`, `update_watch(label, …)`
+- `list_watchlist()` (with mention and reply counts over 7 and 30 days, first-seen dates and the latest of each), `add_watch(label, match_regex, kind, canonical?, release_regex?)`, `update_watch(label, …)`
   - Seeded entries resolve `canonical` through `models` and `model_aliases` when the seed omits it, and an agent-written `canonical` is never overwritten.
 - `watch_repo(repo, watch=True, branch?, note?)`. `repo` is `owner/name` or a URL.
   - A repo that hasn't been seen yet is created with `origin='agent'`.
@@ -699,7 +711,11 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - `recipes.engine_raw` (the engine name as the agent wrote it, searchable via `list_recipes(engine=…)`);
   - mark legacy `hidden` tombstones due for recheck (`last_checked_at` back-dated), so the next sync reclassifies the ones that are `post_type` 3 or 4 as `not_content`;
   - rewrite **every** timestamp column to the one stored format `YYYY-MM-DDTHH:MM:SS+00:00` (see §2, Timestamps). Unparseable values, such as a hand-written `benchmark_results.measured_at`, are left alone.
-- **Migration 5 (Run B):**
+- **Migration 5 (Run A fixes, 2026-11-08):** `watch_hits.matched_in TEXT NOT NULL DEFAULT 'body' CHECK (matched_in IN ('title','body'))`, which records whether a hit matched the post body (a mention) or only the topic title (thread activity).
+  - The ALTER, the backfill and the `PRAGMA user_version=5` bump run in **one transaction**, owned by a callable migration step rather than an `executescript` string. The backfill re-derives `matched_in` and `matched_text` for every stored hit from the post and its topic: local only, no fetching, no hits deleted, and each hit keeps its `created_at`.
+  - Atomicity matters because `matched_in` defaults to `body`: a crash after the ALTER but before the backfill would leave a v5 database that claims every title-only hit is a mention, and would never be retried. A crash rolls everything back to v4, and the next open migrates again.
+  - A historical hit whose watch regex no longer matches its post keeps the column default, `body`, and so still counts as a mention. That is a documented choice, not an oversight: a changed regex rematches its entry and drops the hits it can no longer make, so the only way to reach this state is an old hit whose post text changed, and there are none today.
+- **Migration 6 (Run B):**
   - `post_tags(post_id PK, content_hash, models JSON, has_perf INT, has_benchmark INT, has_recipe INT, is_question INT, is_solution INT, summary TEXT, triage_model, prompt_version, tagged_at)`
   - `triage_runs`
 - **`sparkwatch triage`:**

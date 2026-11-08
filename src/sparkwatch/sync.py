@@ -425,6 +425,7 @@ def _sync_topic(
             topic_id,
             topic_row["title"] if topic_row else None,
             stored_row["raw"],
+            is_new=outcome == "new",
         )
         result.watch_hits_new += len(hits)
 

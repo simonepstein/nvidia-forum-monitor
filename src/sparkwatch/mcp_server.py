@@ -17,6 +17,7 @@ from .digest import (
     BACKFILLED_POSTS,
     EDITED_POSTS,
     NEW_POSTS,
+    add_thread_reply,
     build_digest,
     resolve_since,
     watch_activity,
@@ -287,7 +288,13 @@ def whats_new_for(model: str, since: str | None = None) -> dict[str, Any]:
     mentions = find_model_mentions(model, since=since_iso, limit=limit)
     mentions.pop("since", None)
     watch_rows = [
-        {"label": row["label"], "hits": row["hits"], "edits": row["edits"]}
+        {
+            "label": row["label"],
+            "total": row["total"],
+            "hits": row["hits"],
+            "edits": row["edits"],
+            "threads": row["threads"],
+        }
         for row in watch_activity(conn, since_iso, limit)
         if pattern.search(row["label"])
     ]
@@ -440,6 +447,8 @@ def find_model_mentions(
 ) -> dict[str, Any]:
     """Find every post that mentions a model, grouped by topic, newest first.
 
+    A mention is a match in the post body. A topic whose title matches but whose posts do
+    not is reported under `threads` as replies, and is left out of the counts.
     With `since`, only posts that are new since then are listed (the digest's timing rule,
     with its 24-hour grace); edits and backfilled posts are counted, not listed.
     Use this when recipes are missing for a model people keep talking about.
@@ -450,8 +459,8 @@ def find_model_mentions(
     params = window_params(since) if since else {}
     where = f" WHERE ({NEW_POSTS})" if since else ""
     rows = conn.execute(
-        "SELECT p.id, p.topic_id, p.post_number, p.username, p.created_at, p.raw, t.title"
-        " FROM posts p JOIN topics t ON t.id = p.topic_id"
+        "SELECT p.id AS post_id, p.topic_id, p.post_number, p.username, p.created_at, p.raw,"
+        " t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
         + where
         + " ORDER BY julianday(p.created_at) DESC",
         params,
@@ -467,7 +476,7 @@ def find_model_mentions(
             f" WHERE ({EDITED_POSTS}) OR ({BACKFILLED_POSTS})",
             params,
         ):
-            if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
+            if pattern.search(row["raw"] or "") is None:
                 continue
             if row["timing"] == "edited":
                 edits += 1
@@ -475,9 +484,13 @@ def find_model_mentions(
                 backfilled += 1
 
     grouped: dict[int, dict[str, Any]] = {}
+    threads: dict[int, dict[str, Any]] = {}
     total = 0
     for row in rows:
-        if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
+        body = pattern.search(row["raw"] or "")
+        if body is None:
+            if pattern.search(row["title"] or "") is not None:
+                add_thread_reply(threads, row, "replies", THREAD_SNIPPET_CHARS)
             continue
         total += 1
         bucket = grouped.setdefault(
@@ -492,21 +505,22 @@ def find_model_mentions(
         if len(bucket["posts"]) < 5:
             bucket["posts"].append(
                 {
-                    "post_id": row["id"],
+                    "post_id": row["post_id"],
                     "author": row["username"],
                     "date": row["created_at"],
                     "url": _post_url(row["topic_id"], row["post_number"]),
                     "snippet": _snippet(row["raw"], 300),
                 }
             )
-    topics = list(grouped.values())[: _limit(limit, settings)]
+    cap = _limit(limit, settings)
     return {
         "model": model,
         "since": since,
         "total_posts": total,
         "edits": edits,
         "backfilled": backfilled,
-        "topics": topics,
+        "topics": list(grouped.values())[:cap],
+        "threads": list(threads.values())[:cap],
     }
 
 
@@ -565,6 +579,18 @@ def list_topics(
     }
 
 
+def _latest_hit(conn: sqlite3.Connection, topic_id: int, label: str, matched_in: str) -> Any:
+    """The newest hit for one label in one topic, from the body or the title."""
+    return conn.execute(
+        "SELECT p.id, p.post_number, p.created_at FROM watch_hits h"
+        " JOIN posts p ON p.id = h.post_id"
+        " JOIN watchlist w ON w.id = h.watch_id"
+        " WHERE h.topic_id=? AND w.label=? AND h.matched_in=?"
+        " ORDER BY julianday(p.created_at) DESC LIMIT 1",
+        (topic_id, label, matched_in),
+    ).fetchone()
+
+
 @tool
 def get_topic_overview(topic_id: int) -> dict[str, Any]:
     """Summarise a topic: metadata, the OP, participants, linked repos and recorded knowledge.
@@ -593,30 +619,35 @@ def get_topic_overview(topic_id: int) -> dict[str, Any]:
         (topic_id,),
     ).fetchall()
     hits = conn.execute(
-        "SELECT w.label, COUNT(*) AS n FROM watch_hits h"
-        " JOIN watchlist w ON w.id = h.watch_id WHERE h.topic_id=? GROUP BY w.label"
-        " ORDER BY n DESC",
+        "SELECT w.label,"
+        " SUM(CASE WHEN h.matched_in='body' THEN 1 ELSE 0 END) AS mentions,"
+        " SUM(CASE WHEN h.matched_in='title' THEN 1 ELSE 0 END) AS replies"
+        " FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id WHERE h.topic_id=?"
+        " GROUP BY w.label ORDER BY mentions DESC, replies DESC",
         (topic_id,),
     ).fetchall()
     watch_hits = []
     for row in hits:
-        latest = conn.execute(
-            "SELECT p.id, p.post_number, p.created_at FROM watch_hits h"
-            " JOIN posts p ON p.id = h.post_id"
-            " WHERE h.topic_id=? AND h.watch_id = (SELECT id FROM watchlist WHERE label=?)"
-            " ORDER BY julianday(p.created_at) DESC LIMIT 1",
-            (topic_id, row["label"]),
-        ).fetchone()
+        latest = _latest_hit(conn, topic_id, row["label"], "body")
+        latest_reply = _latest_hit(conn, topic_id, row["label"], "title")
         watch_hits.append(
             {
                 "label": row["label"],
-                "count": row["n"],
+                "count": row["mentions"],
+                "replies": row["replies"],
                 "latest": {
                     "post_id": latest["id"],
                     "date": latest["created_at"],
                     "url": _post_url(topic_id, latest["post_number"]),
                 }
                 if latest is not None
+                else None,
+                "latest_reply": {
+                    "post_id": latest_reply["id"],
+                    "date": latest_reply["created_at"],
+                    "url": _post_url(topic_id, latest_reply["post_number"]),
+                }
+                if latest_reply is not None
                 else None,
             }
         )
@@ -1263,6 +1294,8 @@ SUMMARY_RECIPES = 5
 SUMMARY_NOTES = 3
 SUMMARY_FLAGS = 5
 SUMMARY_TOPICS = 5
+SUMMARY_THREADS = 3
+THREAD_SNIPPET_CHARS = 300
 FLAG_REASON_CHARS = 240
 NOTE_BODY_CHARS = 300
 
@@ -1366,10 +1399,12 @@ def _model_repos(
 def model_summary(model: str) -> dict[str, Any]:
     """The starting point for a "best way to serve X" question.
 
-    Returns metadata, aliases, mention counts over 7/30/60 days, active recipes newest first,
-    benchmarks, latest research notes, open flags on the model, its recipes and its topics,
-    the repos mentioned in the model's topics (watched first, at most 10, with a total) and
-    the topics with the most mentions. Step 1 of get_workflow('serve_model') is this tool.
+    Returns metadata, aliases, mention counts over 7/30/60 days (post-body matches only),
+    active recipes newest first, benchmarks, latest research notes, open flags on the model,
+    its recipes and its topics, the repos mentioned in the model's topics (watched first, at
+    most 10, with a total), the topics with the most mentions, and `threads`: topics whose
+    title matches the model, with their mention and reply counts.
+    Step 1 of get_workflow('serve_model') is this tool.
     """
     settings = _settings()
     conn = _conn(settings)
@@ -1387,8 +1422,22 @@ def model_summary(model: str) -> dict[str, Any]:
     now = utcnow()
     counts = {"7d": 0, "30d": 0, "60d": 0}
     topic_counts: dict[int, dict[str, Any]] = {}
+    title_topics: dict[int, dict[str, Any]] = {}
     for row in posts:
-        if not (pattern.search(row["raw"] or "") or pattern.search(row["title"] or "")):
+        body = pattern.search(row["raw"] or "")
+        if pattern.search(row["title"] or "") is not None:
+            thread = title_topics.setdefault(
+                row["topic_id"],
+                {
+                    "topic_id": row["topic_id"],
+                    "title": row["title"],
+                    "url": _topic_url(row["topic_id"]),
+                    "body_posts": 0,
+                    "title_posts": 0,
+                },
+            )
+            thread["body_posts" if body else "title_posts"] += 1
+        if body is None:
             continue
         written = parse_dt(row["created_at"])
         if written is not None:
@@ -1434,6 +1483,11 @@ def model_summary(model: str) -> dict[str, Any]:
         "top_topics": sorted(
             topic_counts.values(), key=lambda item: item["mentions"], reverse=True
         )[:SUMMARY_TOPICS],
+        "threads": sorted(
+            title_topics.values(),
+            key=lambda item: item["body_posts"] + item["title_posts"],
+            reverse=True,
+        )[:SUMMARY_THREADS],
     }
 
 
@@ -1647,7 +1701,7 @@ def upsert_model(
 
 @tool
 def list_watchlist() -> dict[str, Any]:
-    """List watched models with hit counts over 7 and 30 days and first-seen dates."""
+    """List watched models with mention and reply counts over 7 and 30 days and first-seen dates."""
     conn = _conn()
     return {"watchlist": watch_mod.list_watchlist(conn)}
 

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import sqlite3
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from .config import PROJECT_ROOT, Settings, get_settings
 from .normalize import canonical_model
 from .util import utcnow_iso
-from .watch import rematch_watch
+from .watch import recompute_matched_in, rematch_watch
 
 MIGRATION_1 = """
 CREATE TABLE forums (
@@ -416,7 +417,40 @@ UPDATE missing_posts SET last_checked_at='1970-01-01T00:00:00+00:00' WHERE reaso
     )
 )
 
-MIGRATIONS: tuple[str, ...] = (MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4)
+MIGRATION_5_SQL = """
+ALTER TABLE watch_hits ADD COLUMN matched_in TEXT NOT NULL DEFAULT 'body'
+  CHECK (matched_in IN ('title','body'));
+"""
+
+
+def _migration_5(conn: sqlite3.Connection) -> None:
+    """Migration 5 and its backfill in one transaction (SPEC §6).
+
+    `executescript` would commit the ALTER on its own, so the statement runs through
+    `execute`. A crash rolls back the ALTER and the version bump together, leaving a v4
+    database that the next open migrates again, rather than a v5 one whose hits all claim
+    `body`.
+    """
+    conn.execute("BEGIN")
+    try:
+        conn.execute(MIGRATION_5_SQL)
+        recompute_matched_in(conn)
+        conn.execute("PRAGMA user_version=5")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+
+
+Migration = str | Callable[[sqlite3.Connection], None]
+
+MIGRATIONS: tuple[Migration, ...] = (
+    MIGRATION_1,
+    MIGRATION_2,
+    MIGRATION_3,
+    MIGRATION_4,
+    _migration_5,
+)
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
@@ -434,8 +468,12 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
 def migrate(conn: sqlite3.Connection) -> int:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     for index in range(version, len(MIGRATIONS)):
-        conn.executescript(MIGRATIONS[index])
-        conn.execute(f"PRAGMA user_version={index + 1}")
+        step = MIGRATIONS[index]
+        if callable(step):
+            step(conn)
+        else:
+            conn.executescript(step)
+            conn.execute(f"PRAGMA user_version={index + 1}")
         version = index + 1
     return version
 

@@ -267,6 +267,85 @@ def test_anticipated_hits_show_as_a_count_plus_three_newest(conn, settings):
     assert len(entry["hits"]) == 3
 
 
+def test_title_only_hits_are_thread_activity_not_mentions(conn, settings):
+    from sparkwatch import watch
+
+    title = "Qwen4 is coming"
+    seed_topic(conn, 40, title, created_at=PAST)
+    filler = "we spent the morning on a Qwen SGLang setup. " * 4
+    bodies = {
+        4011: f"{filler}Qwen4-72B weights are out on the hub",
+        4012: f"{filler}still waiting for news",
+        4013: f"{filler}no numbers yet",
+    }
+    for post_id, raw in bodies.items():
+        seed_post(conn, post_id, 40, raw)
+        watch.match_post(conn, post_id, 40, title, raw)
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    entry = next(row for row in digest["sections"]["watchlist_activity"] if row["label"] == "Qwen4")
+
+    # One body mention, two replies that only match the topic title.
+    assert entry["total"] == 1
+    assert len(entry["hits"]) == 1
+    assert "Qwen4-72B" in entry["hits"][0]["snippet"]
+
+    thread = entry["threads"][0]
+    assert thread["topic_id"] == 40
+    assert thread["new_replies"] == 2
+    assert len(thread["latest"]) == 2
+    # Ordinary snippets: the start of the reply, not text around a match.
+    assert thread["latest"][0]["snippet"].startswith("we spent the morning")
+    assert thread["latest"][0]["url"].startswith("https://forums.developer.nvidia.com/t/40/")
+
+
+def test_thread_activity_is_capped_and_digest_stays_small(conn, settings):
+    from sparkwatch import watch
+
+    for index in range(3):
+        topic_id = 50 + index
+        title = f"GLM 5.3 Flash thread {index}"
+        seed_topic(conn, topic_id, title, created_at=PAST)
+        for reply in range(3):
+            post_id = 5000 + index * 10 + reply
+            raw = f"reply number {reply} in thread {index}"
+            seed_post(conn, post_id, topic_id, raw)
+            watch.match_post(conn, post_id, topic_id, title, raw)
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    entry = next(
+        row for row in digest["sections"]["watchlist_activity"] if row["label"] == "GLM 5.3 Flash"
+    )
+    assert entry["total"] == 0
+    assert entry["hits"] == []
+    # Every reply is counted; only the busiest threads are listed, and the rest are flagged.
+    assert entry["replies"] == 9
+    assert entry["threads_total"] == 3
+    assert len(entry["threads"]) == digest_module.THREADS_PER_LABEL
+    assert all(
+        len(thread["latest"]) <= digest_module.REPLIES_PER_THREAD for thread in entry["threads"]
+    )
+    assert digest_module.THREADS_PER_LABEL == 2
+
+    rendered = digest_module.render_digest(digest)
+    assert "0 new mention(s), 9 new replies in 3 threads (+1 more)" in rendered
+
+
+def test_cli_renders_thread_activity(conn, settings):
+    from sparkwatch import watch
+
+    title = "GLM 5.3 Flash thread"
+    seed_topic(conn, 60, title, created_at=PAST)
+    seed_post(conn, 6011, 60, "plain reply with no model name")
+    watch.match_post(conn, 6011, 60, title, "plain reply with no model name")
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    rendered = digest_module.render_digest(digest)
+    assert "thread GLM 5.3 Flash thread" in rendered
+    assert "1 new replies" in rendered
+    assert "0 new mention(s)" in rendered
+
+
 def test_watched_repo_without_mentions_still_appears(conn, settings):
     conn.execute(
         "INSERT INTO repos (id, owner, name, url, watch, first_seen_at, head_sha, last_checked_at)"

@@ -50,6 +50,8 @@ def _topic_url(topic_id: int, slug: str | None = None) -> str:
 
 SNIPPET_CHARS = 120
 WATCH_HITS_PER_LABEL = 2
+THREADS_PER_LABEL = 2
+REPLIES_PER_THREAD = 2
 LATEST_POSTS_PER_TOPIC = 2
 SECTION_CAP = 6
 FLAG_REASON_CHARS = 200
@@ -112,10 +114,18 @@ def _sightings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list[dict[str, Any]]:
+    """New watch activity since the cursor, split into mentions and thread replies.
+
+    A hit whose text matched in the post body is a mention: it is counted in `total` and
+    shown with a snippet centred on the match. A hit that matched only the topic title is
+    thread activity: `replies` counts them all, `threads` lists the busiest topics (capped)
+    with ordinary snippets, so a busy thread stays visible without inflating the mentions.
+    """
     params = window_params(since_iso)
     rows = conn.execute(
-        "SELECT w.label, w.kind, h.post_id, h.topic_id, h.matched_text, p.post_number, p.raw,"
-        " p.created_at, t.title FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        "SELECT w.label, w.kind, h.post_id, h.topic_id, h.matched_in, h.matched_text,"
+        " p.post_number, p.username, p.raw, p.created_at, t.title"
+        " FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
         " JOIN posts p ON p.id = h.post_id JOIN topics t ON t.id = h.topic_id"
         f" WHERE ({NEW_POSTS})"
         " ORDER BY julianday(p.created_at) DESC",
@@ -126,7 +136,7 @@ def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list
         for row in conn.execute(
             "SELECT w.label, COUNT(DISTINCT h.post_id) AS n FROM watch_hits h"
             " JOIN watchlist w ON w.id = h.watch_id JOIN posts p ON p.id = h.post_id"
-            f" WHERE ({EDITED_POSTS}) GROUP BY w.label",
+            f" WHERE ({EDITED_POSTS}) AND h.matched_in='body' GROUP BY w.label",
             params,
         )
     }
@@ -141,8 +151,12 @@ def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list
                 "total": 0,
                 "edits": edited.get(row["label"], 0),
                 "hits": [],
+                "threads": {},
             },
         )
+        if row["matched_in"] == "title":
+            add_thread_reply(bucket["threads"], row, "new_replies")
+            continue
         bucket["total"] += 1
         cap = 3 if anticipated else WATCH_HITS_PER_LABEL
         if len(bucket["hits"]) < cap:
@@ -155,7 +169,50 @@ def watch_activity(conn: sqlite3.Connection, since_iso: str, limit: int) -> list
                     "snippet": _snippet_around(row["raw"], row["matched_text"]),
                 }
             )
-    return [entry for entry in list(grouped.values())[:limit] if entry["hits"] or entry["edits"]]
+    entries: list[dict[str, Any]] = []
+    for entry in list(grouped.values())[:limit]:
+        threads = list(entry["threads"].values())
+        entry["replies"] = sum(thread["new_replies"] for thread in threads)
+        entry["threads_total"] = len(threads)
+        entry["threads"] = threads[:THREADS_PER_LABEL]
+        if entry["hits"] or entry["edits"] or entry["threads"]:
+            entries.append(entry)
+    return entries
+
+
+def add_thread_reply(
+    threads: dict[int, dict[str, Any]],
+    row: Any,
+    counter: str,
+    snippet_chars: int = SNIPPET_CHARS,
+) -> None:
+    """Count one title-only hit as a reply in its topic, with an ordinary snippet.
+
+    Shared with the MCP tools so both surfaces agree on what a thread reply is. `threads` is
+    keyed by topic and holds every matching topic; each caller caps the list it returns, so
+    the counters stay complete.
+    """
+    thread = threads.get(row["topic_id"])
+    if thread is None:
+        thread = {
+            "topic_id": row["topic_id"],
+            "title": row["title"],
+            "url": _topic_url(row["topic_id"]),
+            counter: 0,
+            "latest": [],
+        }
+        threads[row["topic_id"]] = thread
+    thread[counter] += 1
+    if len(thread["latest"]) < REPLIES_PER_THREAD:
+        thread["latest"].append(
+            {
+                "post_id": row["post_id"],
+                "author": row["username"],
+                "date": row["created_at"],
+                "url": _post_url(row["topic_id"], row["post_number"]),
+                "snippet": _snippet(row["raw"], snippet_chars),
+            }
+        )
 
 
 def _new_topics(
@@ -368,12 +425,24 @@ def _render_sighting(item: dict[str, Any]) -> str:
 
 
 def _render_watch(entry: dict[str, Any]) -> list[str]:
-    head = f"- {entry['label']} ({entry['kind']}): {entry['total']} new hit(s)"
+    head = f"- {entry['label']} ({entry['kind']}): {entry['total']} new mention(s)"
     if entry["edits"]:
         head += f", {entry['edits']} edit(s)"
+    if entry["replies"]:
+        threads_word = "thread" if entry["threads_total"] == 1 else "threads"
+        head += f", {entry['replies']} new replies in {entry['threads_total']} {threads_word}"
+        hidden = entry["threads_total"] - len(entry["threads"])
+        if hidden > 0:
+            head += f" (+{hidden} more)"
     lines = [head]
     for hit in entry["hits"]:
         lines.append(f"  - {hit['date']} {hit['url']} — {hit['snippet']}")
+    for thread in entry["threads"]:
+        lines.append(
+            f"  - thread {thread['title']} — {thread['url']}: {thread['new_replies']} new replies"
+        )
+        for reply in thread["latest"]:
+            lines.append(f"    - {reply['date']} {reply['url']} — {reply['snippet']}")
     return lines
 
 

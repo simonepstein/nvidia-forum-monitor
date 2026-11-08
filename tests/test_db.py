@@ -16,14 +16,54 @@ def _table_count(conn: sqlite3.Connection) -> int:
 def test_migration_applies_once(settings, tmp_path):
     path = tmp_path / "mig.db"
     first = connect(path)
-    assert first.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert first.execute("PRAGMA user_version").fetchone()[0] == 5
     tables = _table_count(first)
     first.close()
 
     second = connect(path)
-    assert second.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert second.execute("PRAGMA user_version").fetchone()[0] == 5
     assert _table_count(second) == tables
     second.close()
+
+
+def _v4_connection(path):
+    import sqlite3
+
+    from sparkwatch.db import MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4
+
+    conn = sqlite3.connect(path, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    for script in (MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4):
+        conn.executescript(script)
+    conn.execute("PRAGMA user_version=4")
+    return conn
+
+
+def _seed_title_and_body_hits(conn):
+    """One title-only hit (topic 900) and one body hit (topic 901) at v4."""
+    stamp = "2026-01-01T00:00:00+00:00"
+    conn.execute("INSERT INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute("INSERT INTO topics (id, forum_id, title) VALUES (900, 723, 'Qwen4 is out')")
+    conn.execute("INSERT INTO topics (id, forum_id, title) VALUES (901, 723, 'Other')")
+    conn.execute(
+        "INSERT INTO watchlist (id, label, match_regex, kind, created_at)"
+        " VALUES (1, 'Qwen4', 'qwen[\\s._-]*4', 'tracking', ?)",
+        (stamp,),
+    )
+    for post_id, topic_id, raw in ((9001, 900, "plain text"), (9002, 901, "Qwen4-72B runs here")):
+        conn.execute(
+            "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
+            " created_at, first_fetched_at, changed_at)"
+            " VALUES (?, ?, 1, 1, ?, '<p>x</p>', ?, ?, ?, ?)",
+            (post_id, topic_id, raw, f"h{post_id}", stamp, stamp, stamp),
+        )
+        conn.execute(
+            "INSERT INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
+            " VALUES (1, ?, ?, 'Qwen4', '2026-01-02T00:00:00+00:00')",
+            (post_id, topic_id),
+        )
 
 
 def _v2_connection(path):
@@ -167,6 +207,79 @@ def test_migration_four_marks_legacy_hidden_tombstones_for_recheck(settings, tmp
     conn.close()
 
 
+def test_migration_five_labels_existing_hits(settings, tmp_path):
+    from sparkwatch.db import migrate
+
+    conn = _v4_connection(tmp_path / "mig5.db")
+    _seed_title_and_body_hits(conn)
+    assert migrate(conn) == 5
+
+    rows = {
+        row["post_id"]: (row["matched_in"], row["matched_text"], row["created_at"])
+        for row in conn.execute("SELECT * FROM watch_hits")
+    }
+    assert rows[9001][0] == "title"
+    assert rows[9001][1] == "Qwen4"
+    assert rows[9002][0] == "body"
+    assert rows[9002][1] == "Qwen4"
+    assert conn.execute("SELECT COUNT(*) FROM watch_hits").fetchone()[0] == 2
+    # A hit keeps the time sparkwatch recorded it.
+    assert rows[9001][2] == "2026-01-02T00:00:00+00:00"
+    conn.close()
+
+
+def test_migration_five_rolls_back_when_the_backfill_fails(settings, tmp_path, monkeypatch):
+    from sparkwatch import db
+
+    conn = _v4_connection(tmp_path / "mig5b.db")
+    _seed_title_and_body_hits(conn)
+
+    def interrupted(connection):
+        connection.execute("UPDATE watch_hits SET matched_in='title' WHERE post_id=9001")
+        raise RuntimeError("backfill interrupted")
+
+    monkeypatch.setattr(db, "recompute_matched_in", interrupted)
+    with pytest.raises(RuntimeError):
+        db.migrate(conn)
+
+    # The ALTER, the partial backfill and the version bump all rolled back together, so the
+    # next open migrates again instead of trusting a v5 database full of `body` defaults.
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    columns = {info["name"] for info in conn.execute("PRAGMA table_info(watch_hits)")}
+    assert "matched_in" not in columns
+
+    monkeypatch.undo()
+    assert db.migrate(conn) == 5
+    labelled = dict(conn.execute("SELECT post_id, matched_in FROM watch_hits").fetchall())
+    assert labelled == {9001: "title", 9002: "body"}
+    conn.close()
+
+
+def test_watch_hit_matched_in_is_constrained(conn):
+    conn.execute("INSERT INTO forums (id, path, name) VALUES (1, 'p', 'n')")
+    conn.execute("INSERT INTO topics (id, forum_id, title) VALUES (10, 1, 't')")
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
+        " created_at, first_fetched_at, changed_at)"
+        " VALUES (11, 10, 1, 1, 'x', '<p>x</p>', 'h', '2026-01-01T00:00:00+00:00',"
+        " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    conn.execute(
+        "INSERT INTO watchlist (id, label, match_regex, kind, created_at)"
+        " VALUES (999, 'Schema Check', 'qwen', 'tracking', '2026-01-01T00:00:00+00:00')"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO watch_hits (watch_id, post_id, topic_id, matched_in, created_at)"
+            " VALUES (999, 11, 10, 'elsewhere', '2026-01-01T00:00:00+00:00')"
+        )
+    conn.execute(
+        "INSERT INTO watch_hits (watch_id, post_id, topic_id, created_at)"
+        " VALUES (999, 11, 10, '2026-01-01T00:00:00+00:00')"
+    )
+    assert conn.execute("SELECT matched_in FROM watch_hits").fetchone()[0] == "body"
+
+
 def test_migration_three_initialises_listing_floor_and_keeps_coverage(settings, tmp_path):
     from sparkwatch.db import migrate
 
@@ -175,7 +288,7 @@ def test_migration_three_initialises_listing_floor_and_keeps_coverage(settings, 
         "INSERT INTO forums (id, path, name, last_synced_at, backfill_floor)"
         " VALUES (723, 'p', 'n', '2026-11-08T13:23:51+00:00', '2026-09-09T12:27:53+00:00')"
     )
-    assert migrate(conn) == 4
+    assert migrate(conn) == 5
 
     row = conn.execute("SELECT * FROM forums WHERE id=723").fetchone()
     assert row["listing_floor"] == "2026-09-09T12:27:53+00:00"

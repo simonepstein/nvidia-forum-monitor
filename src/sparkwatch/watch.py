@@ -5,7 +5,15 @@ import sqlite3
 from datetime import timedelta
 from typing import Any
 
-from .util import to_iso, utcnow, utcnow_iso
+from .util import parse_dt, to_iso, utcnow, utcnow_iso
+
+WATCH_COLUMNS = (
+    "id, match_regex, kind, release_regex, first_seen_post_id, sighting_post_id, sighting_acked_at"
+)
+STORED_POSTS = (
+    "SELECT p.id, p.topic_id, p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
+    " ORDER BY julianday(p.created_at)"
+)
 
 
 def _compile(pattern: str) -> re.Pattern[str] | None:
@@ -15,40 +23,87 @@ def _compile(pattern: str) -> re.Pattern[str] | None:
         return None
 
 
+def _match(pattern: re.Pattern[str], title: str | None, raw: str | None) -> tuple[str, str] | None:
+    """The one matcher every path uses: what matched, and where.
+
+    The body is checked first, so a post that mentions the model in its own text counts as a
+    mention even when the topic title also matches. A title-only match is thread activity
+    (SPEC §1, Watch matching).
+    """
+    body = pattern.search(raw or "")
+    if body is not None:
+        return "body", body.group(0)
+    heading = pattern.search(title or "")
+    if heading is not None:
+        return "title", heading.group(0)
+    return None
+
+
+def _record_hit(
+    conn: sqlite3.Connection,
+    row: Any,
+    post_id: int,
+    topic_id: int,
+    title: str | None,
+    raw: str | None,
+    now: str,
+    is_new: bool,
+) -> tuple[bool, bool]:
+    """Match one post against one watch entry. Shared by sync and both rematch paths.
+
+    Returns `(matched, inserted)`: `matched` says the regex found something, `inserted` says
+    the hit is new. A re-match of an existing hit still refreshes `matched_in` and
+    `matched_text`, so an edit can move a hit from the title to the body.
+    """
+    pattern = _compile(row["match_regex"])
+    if pattern is None:
+        return False, False
+    found = _match(pattern, title, raw)
+    if found is None:
+        return False, False
+    matched_in, matched_text = found
+    cursor = conn.execute(
+        "INSERT OR IGNORE INTO watch_hits"
+        " (watch_id, post_id, topic_id, matched_in, matched_text, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (row["id"], post_id, topic_id, matched_in, matched_text, now),
+    )
+    inserted = bool(cursor.rowcount)
+    if not inserted:
+        conn.execute(
+            "UPDATE watch_hits SET matched_in=?, matched_text=? WHERE watch_id=? AND post_id=?",
+            (matched_in, matched_text, row["id"], post_id),
+        )
+    conn.execute(
+        "UPDATE watchlist SET first_seen_post_id=?, first_seen_at=?"
+        " WHERE id=? AND first_seen_post_id IS NULL",
+        (post_id, now, row["id"]),
+    )
+    if row["kind"] == "anticipated":
+        _raise_sighting(conn, row, post_id, title, raw, now, is_new)
+    return True, inserted
+
+
 def match_post(
     conn: sqlite3.Connection,
     post_id: int,
     topic_id: int,
     title: str | None,
     raw: str | None,
+    is_new: bool = True,
 ) -> list[int]:
+    """Match one stored post against every active watch entry.
+
+    `is_new` is False for a post sparkwatch already had, i.e. an edit. An edit updates
+    thread activity but never raises a sighting (SPEC §1, "Edits raise nothing").
+    """
     now = utcnow_iso()
     hits: list[int] = []
-    rows = conn.execute(
-        "SELECT id, match_regex, kind, release_regex, first_seen_post_id, sighting_post_id,"
-        " sighting_acked_at FROM watchlist WHERE active=1"
-    ).fetchall()
+    rows = conn.execute(f"SELECT {WATCH_COLUMNS} FROM watchlist WHERE active=1").fetchall()
     for row in rows:
-        pattern = _compile(row["match_regex"])
-        if pattern is None:
-            continue
-        match = pattern.search(title or "") or pattern.search(raw or "")
-        if match is None:
-            continue
-        cursor = conn.execute(
-            "INSERT OR IGNORE INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (row["id"], post_id, topic_id, match.group(0), now),
-        )
-        if cursor.rowcount:
+        matched, inserted = _record_hit(conn, row, post_id, topic_id, title, raw, now, is_new)
+        if matched and inserted:
             hits.append(row["id"])
-        conn.execute(
-            "UPDATE watchlist SET first_seen_post_id=?, first_seen_at=?"
-            " WHERE id=? AND first_seen_post_id IS NULL",
-            (post_id, now, row["id"]),
-        )
-        if row["kind"] == "anticipated":
-            _raise_sighting(conn, row, post_id, title, raw, now)
     return hits
 
 
@@ -59,22 +114,40 @@ def _raise_sighting(
     title: str | None,
     raw: str | None,
     now: str,
+    is_new: bool,
 ) -> None:
     """Record a sighting alert for an anticipated model.
 
-    With a `release_regex`, only a release match raises it, and an acknowledgement re-arms
-    it for the next release. Without one, the first hit raises it, as before.
+    With a `release_regex`, a release raises it from a post body, or from the OP of a topic
+    whose title matches it. A reply that only matches the topic title is thread activity, and
+    an edit to an old post raises nothing. After an acknowledgement, only a post created
+    after it re-arms the alert. Without a `release_regex`, the first hit raises it, as before.
     """
+    if not is_new:
+        return
     release_regex = row["release_regex"]
     if release_regex:
         release = _compile(release_regex)
         if release is None:
             return
-        if not (release.search(title or "") or release.search(raw or "")):
+        post = conn.execute(
+            "SELECT post_number, created_at FROM posts WHERE id=?", (post_id,)
+        ).fetchone()
+        if post is None:
             return
-        rearm = row["sighting_post_id"] is None or row["sighting_acked_at"] is not None
-        if not rearm or row["sighting_post_id"] == post_id:
+        body_release = release.search(raw or "") is not None
+        op_title_release = post["post_number"] == 1 and release.search(title or "") is not None
+        if not (body_release or op_title_release):
             return
+        if row["sighting_post_id"] == post_id:
+            return
+        if row["sighting_post_id"] is not None and row["sighting_acked_at"] is None:
+            return
+        if row["sighting_acked_at"] is not None:
+            acked = parse_dt(row["sighting_acked_at"])
+            created = parse_dt(post["created_at"])
+            if acked is None or created is None or created <= acked:
+                return
     elif row["sighting_post_id"] is not None:
         return
     conn.execute(
@@ -84,42 +157,77 @@ def _raise_sighting(
 
 
 def rematch_all(conn: sqlite3.Connection) -> int:
+    """Re-match every active entry against every stored post, as a regex change would.
+
+    Returns the number of matches, not new hits: a rematch refreshes existing hits too.
+    """
+    now = utcnow_iso()
+    rows = conn.execute(f"SELECT {WATCH_COLUMNS} FROM watchlist WHERE active=1").fetchall()
     total = 0
-    rows = conn.execute(
-        "SELECT p.id, p.topic_id, p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
-    ).fetchall()
-    for row in rows:
-        total += len(match_post(conn, row["id"], row["topic_id"], row["title"], row["raw"]))
+    for post in conn.execute(STORED_POSTS).fetchall():
+        for row in rows:
+            matched, _inserted = _record_hit(
+                conn, row, post["id"], post["topic_id"], post["title"], post["raw"], now, False
+            )
+            total += matched
     return total
 
 
 def rematch_watch(conn: sqlite3.Connection, watch_id: int) -> int:
     """Re-match one entry against every stored post, dropping hits its old regex made.
 
-    Used when a watch entry is added or its regex changes: local only, no fetching.
+    Used when a watch entry is added or its regex changes: local only, no fetching, and
+    never a sighting.
     """
-    row = conn.execute("SELECT match_regex FROM watchlist WHERE id=?", (watch_id,)).fetchone()
+    row = conn.execute(f"SELECT {WATCH_COLUMNS} FROM watchlist WHERE id=?", (watch_id,)).fetchone()
     if row is None:
         return 0
-    pattern = _compile(row["match_regex"])
     conn.execute("DELETE FROM watch_hits WHERE watch_id=?", (watch_id,))
-    if pattern is None:
+    if _compile(row["match_regex"]) is None:
         return 0
     now = utcnow_iso()
     total = 0
-    for post in conn.execute(
-        "SELECT p.id, p.topic_id, p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
-    ):
-        match = pattern.search(post["title"] or "") or pattern.search(post["raw"] or "")
-        if match is None:
-            continue
-        cursor = conn.execute(
-            "INSERT OR IGNORE INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (watch_id, post["id"], post["topic_id"], match.group(0), now),
+    for post in conn.execute(STORED_POSTS).fetchall():
+        matched, _inserted = _record_hit(
+            conn, row, post["id"], post["topic_id"], post["title"], post["raw"], now, False
         )
-        total += cursor.rowcount
+        total += matched
     return total
+
+
+def recompute_matched_in(conn: sqlite3.Connection) -> int:
+    """Re-derive `matched_in` and `matched_text` for stored hits (migration 5).
+
+    Local only: no fetching, no hits deleted, and each hit keeps its `created_at`. A hit
+    whose current regex no longer matches the stored post is left at the column default
+    (`body`), so it keeps counting as a mention; SPEC §6 records that choice. In practice
+    there are none: a changed regex rematches its entry, which drops the hits it can no
+    longer make.
+    """
+    rows = conn.execute(
+        "SELECT h.watch_id, h.post_id, w.match_regex FROM watch_hits h"
+        " JOIN watchlist w ON w.id = h.watch_id"
+    ).fetchall()
+    updated = 0
+    for row in rows:
+        pattern = _compile(row["match_regex"])
+        if pattern is None:
+            continue
+        post = conn.execute(
+            "SELECT p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id WHERE p.id=?",
+            (row["post_id"],),
+        ).fetchone()
+        if post is None:
+            continue
+        found = _match(pattern, post["title"], post["raw"])
+        if found is None:
+            continue
+        conn.execute(
+            "UPDATE watch_hits SET matched_in=?, matched_text=? WHERE watch_id=? AND post_id=?",
+            (found[0], found[1], row["watch_id"], row["post_id"]),
+        )
+        updated += 1
+    return updated
 
 
 def add_watch(
@@ -202,17 +310,33 @@ def list_watchlist(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Watch entries with hit counts over 7 and 30 days, counted by post date.
 
     The windows use `posts.created_at` and count distinct posts: activity, not novelty.
+    `hits_*` count mentions (hits whose text matched in the post body); `replies_*` count
+    title-only hits, i.e. replies in a topic whose title matches.
     """
     now = utcnow()
+
+    def window(matched_in: str, column: str, days: int) -> str:
+        return (
+            f"(SELECT COUNT(DISTINCT h.post_id) FROM watch_hits h JOIN posts p ON p.id = h.post_id"
+            f" WHERE h.watch_id = w.id AND h.matched_in = '{matched_in}'"
+            f" AND julianday(p.created_at) >= julianday(:cut_{days})) AS {column}_{days}d"
+        )
+
+    def latest(matched_in: str, alias: str) -> str:
+        return (
+            f"(SELECT MAX(p.created_at) FROM watch_hits h JOIN posts p ON p.id = h.post_id"
+            f" WHERE h.watch_id = w.id AND h.matched_in = '{matched_in}') AS {alias}"
+        )
+
     rows = conn.execute(
-        """
+        f"""
         SELECT w.*,
-          (SELECT COUNT(DISTINCT h.post_id) FROM watch_hits h JOIN posts p ON p.id = h.post_id
-             WHERE h.watch_id = w.id AND julianday(p.created_at) >= julianday(:cut_7)) AS hits_7d,
-          (SELECT COUNT(DISTINCT h.post_id) FROM watch_hits h JOIN posts p ON p.id = h.post_id
-             WHERE h.watch_id = w.id AND julianday(p.created_at) >= julianday(:cut_30)) AS hits_30d,
-          (SELECT MAX(p.created_at) FROM watch_hits h JOIN posts p ON p.id = h.post_id
-             WHERE h.watch_id = w.id) AS latest_hit
+          {window("body", "hits", 7)},
+          {window("body", "hits", 30)},
+          {window("title", "replies", 7)},
+          {window("title", "replies", 30)},
+          {latest("body", "latest_hit")},
+          {latest("title", "latest_reply")}
         FROM watchlist w ORDER BY w.label
         """,
         {"cut_7": to_iso(now - timedelta(days=7)), "cut_30": to_iso(now - timedelta(days=30))},

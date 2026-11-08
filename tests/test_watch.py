@@ -8,7 +8,13 @@ from sparkwatch import watch
 
 
 def _seed_post(
-    conn, post_id: int, topic_id: int, title: str, raw: str, created_at: str | None = None
+    conn,
+    post_id: int,
+    topic_id: int,
+    title: str,
+    raw: str,
+    created_at: str | None = None,
+    post_number: int = 1,
 ) -> None:
     conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
     conn.execute(
@@ -18,11 +24,12 @@ def _seed_post(
     )
     conn.execute(
         "INSERT INTO posts (id, topic_id, post_number, post_type, raw, cooked, content_hash,"
-        " created_at, first_fetched_at, changed_at) VALUES (?, ?, 1, 1, ?, '<p>x</p>', ?, ?,"
+        " created_at, first_fetched_at, changed_at) VALUES (?, ?, ?, 1, ?, '<p>x</p>', ?, ?,"
         " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
         (
             post_id,
             topic_id,
+            post_number,
             raw,
             f"h{post_id}",
             created_at or "2026-01-01T00:00:00+00:00",
@@ -98,12 +105,189 @@ def test_sighting_needs_a_release_match_when_a_release_regex_is_set(conn):
         conn.execute("SELECT sighting_acked_at FROM watchlist WHERE label='Qwen4'").fetchone()[0]
         is not None
     )
+    conn.execute(
+        "UPDATE watchlist SET sighting_acked_at='2026-01-01T00:00:00+00:00' WHERE label='Qwen4'"
+    )
 
-    _seed_post(conn, 22, 22, "Qwen4 released", "Qwen 4 27B is out now")
+    # New to sparkwatch, but written before the ack: no alert.
+    _seed_post(
+        conn,
+        22,
+        22,
+        "Qwen4 released",
+        "Qwen 4 27B is out now",
+        created_at="2025-06-01T00:00:00+00:00",
+    )
     watch.match_post(conn, 22, 22, "Qwen4 released", "Qwen 4 27B is out now")
     row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
-    assert row["sighting_post_id"] == 22
+    assert row["sighting_post_id"] == 21
+    assert row["sighting_acked_at"] is not None
+
+    # Written after the ack: the alert re-arms.
+    _seed_post(
+        conn,
+        23,
+        23,
+        "Qwen4 released",
+        "Qwen 4 27B is out now",
+        created_at="2026-06-01T00:00:00+00:00",
+    )
+    watch.match_post(conn, 23, 23, "Qwen4 released", "Qwen 4 27B is out now")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] == 23
     assert row["sighting_acked_at"] is None
+
+
+def test_replies_in_a_release_titled_topic_are_activity_not_a_sighting(conn):
+    # The OP of a new topic whose title reads like a release raises the alert once.
+    _seed_post(conn, 50, 50, "Qwen4 is out", "thread opened")
+    watch.match_post(conn, 50, 50, "Qwen4 is out", "thread opened")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] == 50
+    assert conn.execute("SELECT matched_in FROM watch_hits WHERE post_id=50").fetchone()[0] == (
+        "title"
+    )
+
+    # A reply that only matches the topic title is thread activity (ISSUES #34/#35).
+    _seed_post(conn, 51, 50, "Qwen4 is out", "thanks for the numbers", post_number=2)
+    watch.match_post(conn, 51, 50, "Qwen4 is out", "thanks for the numbers")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] == 50
+    assert conn.execute("SELECT matched_in FROM watch_hits WHERE post_id=51").fetchone()[0] == (
+        "title"
+    )
+
+    # An ack re-arms the alert for a release, never for the next reply in the thread.
+    watch.ack_sighting(conn, "Qwen4")
+    conn.execute(
+        "UPDATE watchlist SET sighting_acked_at='2026-01-02T12:00:00+00:00' WHERE label='Qwen4'"
+    )
+    _seed_post(
+        conn,
+        52,
+        50,
+        "Qwen4 is out",
+        "another reply",
+        created_at="2026-01-03T00:00:00+00:00",
+        post_number=3,
+    )
+    watch.match_post(conn, 52, 50, "Qwen4 is out", "another reply")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] == 50
+    assert row["sighting_acked_at"] is not None
+
+
+def test_editing_an_old_post_never_raises_a_sighting(conn):
+    _seed_post(conn, 40, 40, "Qwen4 thread", "nothing to see")
+    watch.match_post(conn, 40, 40, "Qwen4 thread", "nothing to see")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] is None
+
+    # An edit that adds a release phrase is thread activity: the agent judges it (SPEC §1).
+    conn.execute("UPDATE posts SET raw='Qwen 4 27B weights are out on the hub' WHERE id=40")
+    watch.match_post(
+        conn, 40, 40, "Qwen4 thread", "Qwen 4 27B weights are out on the hub", is_new=False
+    )
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] is None
+    # The hit is still recorded, and it now counts as a mention.
+    hit = conn.execute("SELECT matched_in FROM watch_hits WHERE post_id=40").fetchone()[0]
+    assert hit == "body"
+
+
+def test_hits_record_where_they_matched(conn):
+    _seed_post(conn, 60, 60, "GLM 5.3 Flash thread", "glm 5.3 flash at 31 tok/s")
+    watch.match_post(conn, 60, 60, "GLM 5.3 Flash thread", "glm 5.3 flash at 31 tok/s")
+    hit = conn.execute(
+        "SELECT matched_in, matched_text FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        " WHERE h.post_id=60 AND w.label='GLM 5.3 Flash'"
+    ).fetchone()
+    # Both the title and the body match: the body wins, so it is a mention.
+    assert (hit["matched_in"], hit["matched_text"]) == ("body", "glm 5.3 flash")
+
+    _seed_post(conn, 61, 60, "GLM 5.3 Flash thread", "fp8 instead", post_number=2)
+    watch.match_post(conn, 61, 60, "GLM 5.3 Flash thread", "fp8 instead")
+    hit = conn.execute(
+        "SELECT matched_in, matched_text FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        " WHERE h.post_id=61 AND w.label='GLM 5.3 Flash'"
+    ).fetchone()
+    assert (hit["matched_in"], hit["matched_text"]) == ("title", "GLM 5.3 Flash")
+
+
+def test_rematch_labels_hits_and_never_raises_a_sighting(conn):
+    _seed_post(conn, 70, 70, "Qwen4 is out", "thread opened")
+    _seed_post(conn, 71, 71, "Other thread", "Qwen4-72B runs at 12 tok/s")
+
+    watch.update_watch(conn, "Qwen4", match_regex=r"qwen[\s._-]*4")
+
+    hits = {
+        row["post_id"]: row["matched_in"]
+        for row in conn.execute(
+            "SELECT h.post_id, h.matched_in FROM watch_hits h"
+            " JOIN watchlist w ON w.id = h.watch_id WHERE w.label='Qwen4'"
+        )
+    }
+    assert hits == {70: "title", 71: "body"}
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["sighting_post_id"] is None
+    assert row["sighting_acked_at"] is None
+
+
+def test_rematch_all_labels_hits_without_raising_sightings(conn):
+    _seed_post(conn, 80, 80, "Qwen4 is out", "thread opened")
+    conn.execute(
+        "INSERT INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
+        " VALUES ((SELECT id FROM watchlist WHERE label='Qwen4'), 80, 80, 'Qwen4',"
+        " '2026-01-01T00:00:00+00:00')"
+    )
+
+    assert watch.rematch_all(conn) >= 1
+
+    hit = conn.execute("SELECT matched_in FROM watch_hits WHERE post_id=80").fetchone()
+    assert hit[0] == "title"
+    assert (
+        conn.execute("SELECT sighting_post_id FROM watchlist WHERE label='Qwen4'").fetchone()[0]
+        is None
+    )
+
+
+def test_rematch_never_raises_a_sighting_without_a_release_regex(conn):
+    # An anticipated watch with no release_regex has no "release" to match, so neither
+    # adding nor re-matching it may fire an alert (SPEC §1).
+    _seed_post(conn, 100, 100, "Kimi K2 thread", "kimi k2 thinking is fast on two sparks")
+    watch.add_watch(conn, "Kimi K2", r"kimi[\s._-]*k2", kind="anticipated")
+    row = conn.execute("SELECT * FROM watchlist WHERE label='Kimi K2'").fetchone()
+    assert row["first_seen_post_id"] == 100
+    assert row["sighting_post_id"] is None
+
+    watch.rematch_all(conn)
+    assert (
+        conn.execute("SELECT sighting_post_id FROM watchlist WHERE label='Kimi K2'").fetchone()[0]
+        is None
+    )
+
+    watch.update_watch(conn, "Kimi K2", match_regex=r"kimi[\s._-]*k2")
+    assert (
+        conn.execute("SELECT sighting_post_id FROM watchlist WHERE label='Kimi K2'").fetchone()[0]
+        is None
+    )
+
+
+def test_recompute_matched_in_relabels_without_touching_hits(conn):
+    _seed_post(conn, 90, 90, "Qwen4 is out", "thread opened")
+    conn.execute(
+        "INSERT INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
+        " VALUES ((SELECT id FROM watchlist WHERE label='Qwen4'), 90, 90, 'Qwen4',"
+        " '2026-01-01T00:00:00+00:00')"
+    )
+
+    assert watch.recompute_matched_in(conn) >= 1
+
+    hit = conn.execute(
+        "SELECT matched_in, matched_text, created_at FROM watch_hits WHERE post_id=90"
+    ).fetchone()
+    assert (hit["matched_in"], hit["matched_text"]) == ("title", "Qwen4")
+    assert hit["created_at"] == "2026-01-01T00:00:00+00:00"
 
 
 def test_first_hit_raises_the_alert_without_a_release_regex(conn):

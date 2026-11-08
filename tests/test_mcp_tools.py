@@ -281,7 +281,49 @@ def test_model_summary_mention_windows_use_post_dates(settings, conn):
     conn.execute("UPDATE posts SET created_at=? WHERE id=7002", (iso_days_ago(40),))
 
     summary = m.model_summary("GLM 5.3 Flash")
-    assert summary["mentions"] == {"7d": 1, "30d": 1, "60d": 2}
+    # 7002 only matches the topic title, so it is thread activity, not a mention.
+    assert summary["mentions"] == {"7d": 1, "30d": 1, "60d": 1}
+    thread = summary["threads"][0]
+    assert thread["topic_id"] == 700
+    assert thread["body_posts"] == 1
+    assert thread["title_posts"] == 1
+
+
+def test_model_summary_counts_only_body_mentions(settings, conn):
+    from conftest import iso_days_ago
+
+    recent = iso_days_ago(2)
+    seed(conn)
+    conn.execute("UPDATE posts SET created_at=? WHERE id IN (7001, 7002)", (recent,))
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw,"
+        " cooked, content_hash, first_fetched_at, changed_at) VALUES (7003, 700, 3, 1, 'carol',"
+        " ?, 'glm 5.3 flash again at 33 tok/s', '<p>x</p>', 'h3', ?, ?)",
+        (recent, recent, recent),
+    )
+    conn.execute(
+        "INSERT INTO topics (id, forum_id, title, created_at, bumped_at, posts_count, like_count,"
+        " relevance_score, first_fetched_at) VALUES (701, 723, 'GLM 5.3 Flash mega thread', ?, ?,"
+        " 40, 2, 9.0, ?)",
+        (recent, recent, recent),
+    )
+    for index, raw in enumerate(("unrelated chatter", "more chatter", "GLM 5.3 Flash is fast")):
+        conn.execute(
+            "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw,"
+            " cooked, content_hash, first_fetched_at, changed_at) VALUES (?, 701, ?, 1, 'dave',"
+            " ?, ?, '<p>x</p>', ?, ?, ?)",
+            (7011 + index, index + 1, recent, raw, f"h{7011 + index}", recent, recent),
+        )
+
+    summary = m.model_summary("GLM 5.3 Flash")
+    # 7002 only matches its topic title, so it is a reply, not a mention.
+    assert summary["mentions"] == {"7d": 3, "30d": 3, "60d": 3}
+    assert [topic["topic_id"] for topic in summary["top_topics"]] == [700, 701]
+    threads = {thread["topic_id"]: thread for thread in summary["threads"]}
+    assert threads[700]["body_posts"] == 2
+    assert threads[700]["title_posts"] == 1
+    assert threads[701]["body_posts"] == 1
+    assert threads[701]["title_posts"] == 2
 
 
 def test_model_summary_repos_are_ranked_and_capped(settings, conn):
@@ -376,6 +418,7 @@ def test_whats_new_for_applies_since_to_mentions(settings, conn):
     from conftest import iso_days_ago
 
     seed(conn)
+    conn.execute("UPDATE posts SET raw='GLM 5.3 Flash at 28 tok/s with fp8' WHERE id=7002")
     conn.execute("UPDATE posts SET created_at=? WHERE id=7001", (iso_days_ago(20),))
     conn.execute("UPDATE posts SET created_at=? WHERE id=7002", (iso_days_ago(1),))
     conn.execute(
@@ -430,11 +473,18 @@ def test_list_watchlist_windows_use_post_dates(settings, conn):
     watch.match_post(conn, 7002, 700, "GLM 5.3 Flash on two Sparks", "fp8 instead")
 
     rows = {row["label"]: row for row in m.list_watchlist()["watchlist"]}
+    # 7001 mentions GLM in its body; 7002 only matches the topic title, so it is a reply.
     assert rows["GLM 5.3 Flash"]["hits_7d"] == 1
-    assert rows["GLM 5.3 Flash"]["hits_30d"] == 2
+    assert rows["GLM 5.3 Flash"]["hits_30d"] == 1
+    assert rows["GLM 5.3 Flash"]["replies_7d"] == 0
+    assert rows["GLM 5.3 Flash"]["replies_30d"] == 1
     assert (
         rows["GLM 5.3 Flash"]["latest_hit"]
         == conn.execute("SELECT created_at FROM posts WHERE id=7001").fetchone()[0]
+    )
+    assert (
+        rows["GLM 5.3 Flash"]["latest_reply"]
+        == conn.execute("SELECT created_at FROM posts WHERE id=7002").fetchone()[0]
     )
 
 
@@ -530,6 +580,54 @@ def test_search_and_find_model_mentions(settings, conn):
     mentions = m.find_model_mentions("GLM 5.3 Flash")
     assert mentions["total_posts"] >= 1
     assert mentions["topics"][0]["topic_id"] == 700
+
+
+def test_find_model_mentions_splits_threads_from_mentions(settings, conn):
+    seed(conn)
+    conn.execute(
+        "INSERT INTO topics (id, forum_id, title, created_at, posts_count, first_fetched_at)"
+        " VALUES (702, 723, 'GLM 5.3 Flash release thread', ?, 20, ?)",
+        (PAST, PAST),
+    )
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw,"
+        " cooked, content_hash, first_fetched_at, changed_at) VALUES (7021, 702, 1, 1, 'eve',"
+        " ?, 'opening post with no model name', '<p>x</p>', 'h7021', ?, ?)",
+        (PAST, PAST, PAST),
+    )
+
+    found = m.find_model_mentions("GLM 5.3 Flash")
+
+    # 7002 and 7021 only match a topic title, so they are replies, not mentions.
+    assert found["total_posts"] == 1
+    assert [topic["topic_id"] for topic in found["topics"]] == [700]
+    threads = {thread["topic_id"]: thread for thread in found["threads"]}
+    assert threads[700]["replies"] == 1
+    assert threads[702]["replies"] == 1
+    assert threads[702]["latest"][0]["snippet"].startswith("opening post")
+
+
+def test_whats_new_for_includes_thread_activity(settings, conn):
+    from conftest import iso_days_ago
+
+    from sparkwatch import watch
+
+    seed(conn)
+    recent = iso_days_ago(1)
+    conn.execute(
+        "UPDATE posts SET created_at=?, first_fetched_at=?, changed_at=? WHERE id IN (7001, 7002)",
+        (recent, recent, recent),
+    )
+    watch.match_post(conn, 7001, 700, "GLM 5.3 Flash on two Sparks", QUOTE)
+    watch.match_post(conn, 7002, 700, "GLM 5.3 Flash on two Sparks", "fp8 instead")
+
+    payload = m.whats_new_for("GLM 5.3 Flash", since=iso_days_ago(2))
+
+    row = payload["watch"][0]
+    assert row["total"] == 1
+    assert row["threads"][0]["topic_id"] == 700
+    assert row["threads"][0]["new_replies"] == 1
+    assert payload["mentions"]["threads"][0]["topic_id"] == 700
 
 
 def test_search_posts_accepts_plain_model_names_and_units(settings, conn):
@@ -703,9 +801,12 @@ def test_topic_overview_groups_watch_hits_per_label(settings, conn):
     hits = overview["watch_hits"]
     assert len(hits) == 1
     assert hits[0]["label"] == "GLM 5.3 Flash"
-    assert hits[0]["count"] == 2
+    # 7001 mentions the model in its body; 7002 only matches the topic title.
+    assert hits[0]["count"] == 1
+    assert hits[0]["replies"] == 1
     assert hits[0]["latest"]["url"].startswith("https://forums.developer.nvidia.com/t/700/")
     assert hits[0]["latest"]["date"] == PAST
+    assert hits[0]["latest_reply"]["url"].endswith("/t/700/2")
 
 
 def test_digest_description_mentions_open_state(settings, conn):
