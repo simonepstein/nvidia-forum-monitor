@@ -628,6 +628,17 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `global_digest(since="cursor", until?, cursor="global", forum_id?, limit=10, relevant_only=False, detail=False, advance=True, next?)`
   - **Window:** `[since, until)`. `since` is `"cursor"` (read from `digest_cursors[cursor]`; the epoch if it's unset) or an ISO date. `until` defaults to the build time and is echoed back, so a newsletter can name its exact period and a rerun with the same `since`/`until` against the same DB returns the same ranking.
   - **Posts counted:** only *new* posts in the window, using the digest's definitions (§5 `digest`, Timing): `first_fetched_at >= since`, `first_fetched_at < until`, `created_at >= since - 24h` and `created_at < until`. Backfilled posts are never hot; they appear as one `backfilled: {posts, topics}` count. Edits are not counted.
+  - **Basis (added 2026-11-08, ISSUES #48):** `basis="seen"` (the default) or `basis="written"`.
+    - `seen` is the definition above. It answers "what's new to me", and backfill is never news.
+    - `written` answers "what was the forum talking about in this period", which is what a report or blog post over a past range needs.
+      - A post counts if `created_at >= since` and `created_at < until`, whenever sparkwatch fetched it. Backfilled posts count; edits still don't.
+      - `backfilled` is omitted.
+      - `since` must be an ISO date (`"cursor"` is rejected), and the cursor is never read or moved: `advance` is ignored, and the response says `cursor: null`.
+      - `unanswered`, `first_linked`, `knowledge` and `repo_events` use the same written-date window.
+      - The score, tie-breaks, `next` paging and size budget are unchanged.
+    - **Why:** the whole mirror was first fetched on 2026-11-08, so a `seen` window ending before that is empty. With any mirror, a `seen` window leaves out posts that arrived by backfill. Ranking by written date is the only correct basis for a report.
+    - **Likes:** they're as of each post's last fetch. Before a report, run `refresh_engagement` with `days` covering the range (§1 Engagement refresh).
+    - **CLI:** `--basis seen|written`.
   - **Cursor:** its own cursor (`'global'`), separate from `digest`'s `'default'`, so asking "what's hot?" never consumes the user's catch-up and vice versa. With `advance=True` (the default, as for `digest`), the cursor moves to `until`. Pass `advance=False` to look without moving it.
   - **Hotness score**, per topic with at least one new post. Every component is returned — as the term already multiplied by the factor — with `base` and `factor` alongside, so the agent can explain the ranking and the components add up to `score`:
     ```
@@ -937,6 +948,13 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - Expect `posts_changed` to be 0, apart from genuine edits.
   - `listing_floor`, `last_synced_at` and the digest cursors are unchanged.
   - `sum(like_count>0)` rises across many topics, not just 384438.
+
+**Run A follow-up (2026-11-08, ISSUES #48):** `global_digest(basis="written")` (§5 Hot topics).
+- **Acceptance:** `global_digest(since="2026-10-25", until="2026-11-08", basis="written", advance=False)` on the live DB.
+  - It returns about 147 topics with new posts.
+  - Its top 3 by score match an independent SQL ranking by `created_at` with the same weights.
+  - `basis="seen"` with the same window still returns 0.
+  - No cursor row is written.
 
 **Enhancement, after `global_digest` has been in use (ISSUES #38):** `save_newsletter`, the `'newsletter'` cursor and the `newsletter` workflow through all four channels (§5 Newsletter).
 - **Acceptance:** one real `newsletter` run in an MCP client. The issue is saved with sources, and `unresolved_links` is empty. The `'newsletter'` cursor moves, while `'global'` and `'default'` are unchanged.

@@ -583,3 +583,55 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 5. **#46:** MCP `set_installed(repo=…, ref="<40-char SHA>")` → `subject` and `commit_date` filled; a nonexistent SHA raises a clear error and adds no install; an unwatched repo returns `hint`. `uv run pytest tests/test_installs.py -q`.
 6. **#43:** `uv run sparkwatch global-digest --since 2026-11-01 --no-advance` → the recipe 2 line shows `/t/386738/1` once.
 7. **#47 (live, after the re-test):** `uv run sparkwatch sync --refresh-engagement --days 14 --budget 180` → about 150 requests, `posts_changed: 0` apart from real edits, `likes_positive` rising well beyond topic 384438, and `listing_floor`/`last_synced_at`/cursors unchanged. Expect `partial: true` only if 180 s runs out.
+
+## #42–#47 re-test (2026-11-08 21:15, `fix/run-a-issues` @ d47dcfb, tested on the working tree before it was committed)
+
+**All passed.**
+- 367 passed, 1 skipped. ruff check and ruff format are clean.
+- **#42:** the `/t/382733/335` line prints `[quote="azampatti, …"] … [/quote]` verbatim.
+  - On a `.backup` copy I set a new post's raw to `[/quote] stray close and [bold]not bold[/bold] [red]x`. `global-digest --detail` printed it verbatim, exit 0.
+- **#44:** since 13:28:40 the section is empty. That's correct: an independent query finds 0 repo mentions on new posts in that window.
+  - Since 2026-11-01 it shows 6 rows (the cap) out of 55 repos with new-post mentions, with 0 duplicate repos.
+  - Each `post_url` is a window post, e.g. /t/372662/46 created 2026-11-01T00:10.
+- **#43:** the recipe 2 line shows /t/386738/1 once.
+- **#45 (on a copy, live GitHub):**
+  - The first `repos check` after the upgrade (no `meta_checked_at`) made 5 requests, adopted `gilesco/glm-5.3-flash-exl3-2x-gb10-tensorfold-zig` and stamped `meta_checked_at`.
+  - An immediate second check made 3 requests, with no metadata request.
+- **#46 (on a copy, live GitHub):**
+  - A full SHA (97bda06…) returned its subject and `commit_date`.
+  - `'0'*40` raised `ValueError: cannot resolve … not found`, and 0 rows were added.
+  - An unwatched repo returned the `watch_repo` hint.
+- **#47 CLI:** `--help` lists the option. Combining it with `--repair-coverage` gives exit 1 with "cannot be combined", and `--days 0` gives exit 1 with "days must be at least 1".
+- **#47 live run (run by the user, 21:09–21:11):**
+  - Result: `requests 150` (149 s, so 1/s), `topics 146`, `posts_checked 1030`, `likes_changed 386`, `posts_changed 0`, `partial false`.
+  - It wrote a `sync_runs` row with trigger `engagement`.
+  - `last_synced_at`, `backfill_floor`, `listing_floor` and all digest cursors are unchanged, and 0 posts have `changed_at` after the run started.
+  - Likes now cover 445 posts in 80 topics, up from 60 posts.
+  - Spot check against the live API: the newest 20 posts of 386125 and of 381350, 40/40 `reaction_users_count` matches (2 requests).
+  - `global_digest` since 11-01 is now led by 386125 (15.75), 381350 (15.57) and 382733 (13.24). 384438 drops from #3 to #8.
+
+### #48 (P2, spec gap): `global_digest` can't rank a past date range, so reports and blog posts get nothing
+- **Repro:** `uv run sparkwatch global-digest --since 2026-10-25 --until 2026-11-08 --no-advance --json`.
+  - It returns `hot_topics_total: 0, backfilled: {posts: 0, topics: 0}`.
+  - But `select count(*), count(distinct topic_id) from posts where created_at >= '2026-10-25' and created_at < '2026-11-08'` gives `1054|147`.
+- **Cause:** the response follows the spec. "New" means `first_fetched_at` is in `[since, until)`, and the whole mirror was first fetched from 2026-11-08T12:27. Even with an older mirror, a seen-based window leaves out every post that arrived by backfill.
+  - That's right for catch-up ("what's new to me"). It's wrong for a report ("what was written in this period").
+  - In the blog-post trial, the agent had to rank by `created_at` through `sql_query` instead.
+- **Spec:** SPEC §5 Hot topics, **Basis**: `basis="written"` ranks by `created_at` in `[since, until)`, counts backfilled posts, ignores the cursor, requires an ISO `since`, and applies the same window to all sections. CLI: `--basis`. Build plan: "Run A follow-up (ISSUES #48)".
+- **Acceptance:** for 2026-10-25 → 2026-11-08 with `basis="written"`, about 147 topics.
+  - An independent ranking by `created_at` with the default weights (before the #47 refresh) gave 384438 at 14.4, 386125 at 14.0 and 387397 at 11.3. With the refreshed likes the numbers will shift, so recompute rather than reuse them.
+  - `basis="seen"` still returns 0, and no cursor row is written.
+- **Unblocks:** an on-demand `/blogpost` command, held until this lands. The #38 newsletter will be revised to be on-demand, with no cursor.
+
+### #49 (P3): one GitHub repo is stored as two rows under different old names
+- **Observed:** row 69 (`…-tensorfold-v1.1-testing`, watched) and row 71 (`…-tensorfold-zig-testing`, unwatched) both 301 to `api.github.com/repositories/1424520842`, which is now `…-tensorfold-zig`.
+  - #45 renames row 69 at its next metadata check.
+  - Row 71 is never checked, because it's unwatched. It keeps its own `repo_mentions` (3 posts), which `repo_status` for the watched install doesn't see.
+- **Fix:** store GitHub's numeric `id` from the metadata response. When a repo resolves to an id another row already has, merge the rows: move `repo_mentions` and installs to the watched (or older) row and drop the other one.
+  - Discovery could also resolve unwatched repos lazily on first `watch_repo` / `set_installed`.
+  - A new column needs a migration, so coordinate with Run B's 6, or keep the id in the `etags` JSON as #45 did.
+
+### #50 (P3): `save_note` stores `as_of` exactly as given, so one note has a date-only timestamp
+- **Observed:** `research_notes` id 5 has `as_of = '2026-11-08'`. Every other row is `YYYY-MM-DDTHH:MM:SS+00:00`, and the timestamp-format scanner flags `research_notes.as_of` as MIXED.
+  - Comparing it as a string against full timestamps is wrong for that whole day (#27's rule).
+- **Fix:** normalise `as_of` on write with the same helper as other timestamps, so a bare date becomes `T00:00:00+00:00`, and reject unparseable values. A one-off fix for row 5 can go in the next migration or be a documented `UPDATE`.
