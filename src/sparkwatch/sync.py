@@ -69,6 +69,24 @@ def _window(
     return floor, cutoff, backfill, first_run
 
 
+def _due_tombstone_topics(
+    conn: sqlite3.Connection, forum_id: int, recheck_cut: datetime
+) -> list[int]:
+    """Topics holding a tombstoned post that is due a re-check (never `not_content`).
+
+    This is the SPEC §1 re-check policy: a tombstoned ID is requested again during a
+    backfill, or once its last check is older than `missing_post_recheck_days`.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT t.id FROM topics t JOIN missing_posts m ON m.topic_id = t.id"
+        " WHERE t.forum_id=? AND m.reason <> 'not_content'"
+        " AND (m.last_checked_at IS NULL"
+        "   OR julianday(m.last_checked_at) < julianday(?))",
+        (forum_id, to_iso(recheck_cut)),
+    ).fetchall()
+    return [int(row["id"]) for row in rows]
+
+
 def _upsert_topic(
     conn: sqlite3.Connection, forum_id: int, topic: dict[str, Any], backfill: bool
 ) -> str | None:
@@ -531,6 +549,12 @@ def sync(
                 conn, client, category, max_pages, floor, cutoff, backfill, result, deadline
             )
             coverage[category.id] = (oldest_listed, reached)
+            recheck_cut = started - timedelta(days=settings.sync.missing_post_recheck_days)
+            for topic_id in _due_tombstone_topics(conn, category.id, recheck_cut):
+                if topic_id not in queued:
+                    if topic_id not in result.updated_topic_ids:
+                        result.updated_topic_ids.append(topic_id)
+                    queued.append(topic_id)
             for topic_id in queued:
                 if deadline is not None and time.monotonic() > deadline:
                     result.partial = True

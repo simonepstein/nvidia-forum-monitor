@@ -171,6 +171,25 @@ def test_update_watch_regex_rematches(conn):
     assert hits == 1
 
 
+def test_update_watch_drops_hits_the_old_regex_made(conn):
+    _seed_post(
+        conn, 25, 25, "Qwen4Exp notes", "Resolved architecture: Qwen4ExpForConditionalGeneration"
+    )
+    watch.update_watch(conn, "Qwen4", match_regex=r"qwen[\s._-]*4")
+    before = conn.execute(
+        "SELECT COUNT(*) FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        " WHERE w.label='Qwen4'"
+    ).fetchone()[0]
+    assert before == 1
+
+    watch.update_watch(conn, "Qwen4", match_regex=r"qwen[\s._-]*4(?![\d.])(?![\s_-]*exp)(?!\s*b\b)")
+    after = conn.execute(
+        "SELECT COUNT(*) FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        " WHERE w.label='Qwen4'"
+    ).fetchone()[0]
+    assert after == 0
+
+
 def test_invalid_regex_is_rejected(conn):
     with pytest.raises(ValueError):
         watch.add_watch(conn, "Broken", "([unclosed")

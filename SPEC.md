@@ -586,6 +586,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - watch hits;
   - recipes, benchmarks, notes and flags that cite this topic.
 - `get_posts(topic_id, from_post?, to_post?, since?, last_n?, username?, max_chars?)`: the raw text of the selected posts.
+  - `post_count` is the number of posts in this page and `topic_total` the number the filter selected; pages break at a line or word boundary, so no word is split.
   - Use `last_n` for "what's the current state of this thread".
   - Use `since` for catching up.
 - `get_post(post_id, with_parent=True, with_replies=True)`
@@ -623,6 +624,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - repos mentioned in the model's topics (marking the watched ones, with their install status);
   - topics with the most mentions.
 - `save_note(subject, body, model?, as_of, source_post_ids: [int], supersedes?: note_id)` and `get_notes(model?, subject_query?, include_superseded=False)`
+  - A `model` that resolves through `models`/`model_aliases` is stored; an unknown name is stored as null with a `hint`, so a free-text name never creates a junk model row.
 - `flag(target_type, target_id, label, reason, priority=2)`, `list_flags(open_only=True)`, `resolve_flag(id, resolution)`
 - `review_proposed(kind="recipe"|"benchmark"|"alias")`, `set_review(kind, id, review)`
 - `add_model_alias(alias, canonical)`, `upsert_model(canonical, family?, params_total_b?, params_active_b?, released_at?, hf_repo_id?, note?)`

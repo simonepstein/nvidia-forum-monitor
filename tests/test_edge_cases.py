@@ -304,6 +304,35 @@ def test_rechecked_non_content_post_is_reclassified_and_then_left_alone(
     assert 2152 not in [post_id for batch in forum.post_requests() for post_id in batch]
 
 
+def test_due_tombstones_requeue_their_topic(settings, conn, router, forum):
+    topic = make_topic(216, bumped_days_ago=2, posts_count=2, highest_post_number=2)
+    posts = [make_post(2161, 216, 1, "op"), make_post(2162, 216, 2, "gone", post_type=3)]
+    forum.add_page(723, listing([topic]))
+    forum.add_topic(topic_with_stream(topic, [posts[0]], [2161, 2162]), posts)
+    forum.install(router)
+    client = DiscourseClient(settings)
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+
+    # A legacy tombstone marked due by migration 4 is re-checked on the next sync,
+    # even though the topic was not bumped.
+    conn.execute(
+        "UPDATE missing_posts SET reason='hidden', last_checked_at='1970-01-01T00:00:00+00:00'"
+        " WHERE post_id=2162"
+    )
+    forum.calls.clear()
+    result = sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+
+    assert 216 in result.updated_topic_ids
+    assert 2162 in [post_id for batch in forum.post_requests() for post_id in batch]
+    reason = conn.execute("SELECT reason FROM missing_posts WHERE post_id=2162").fetchone()[0]
+    assert reason == "not_content"
+
+    # Once reclassified, the topic is no longer re-queued for that reason.
+    forum.calls.clear()
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    assert ("topic", 216, None) not in forum.calls
+
+
 def test_deleted_and_hidden_posts_are_tombstoned(settings, conn, router, forum):
     topic = make_topic(211, bumped_days_ago=2, posts_count=3, highest_post_number=3)
     posts = [

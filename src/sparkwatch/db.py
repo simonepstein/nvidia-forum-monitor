@@ -8,6 +8,7 @@ from typing import Any
 from .config import PROJECT_ROOT, Settings, get_settings
 from .normalize import canonical_model
 from .util import utcnow_iso
+from .watch import rematch_watch
 
 MIGRATION_1 = """
 CREATE TABLE forums (
@@ -555,6 +556,8 @@ def load_seeds(conn: sqlite3.Connection, seed_dir: str | Path | None = None) -> 
                     existing["id"],
                 ),
             )
+            if existing["match_regex"] != entry["match_regex"]:
+                rematch_watch(conn, existing["id"])
 
 
 def open_db(settings: Settings | None = None, load_seed: bool = True) -> sqlite3.Connection:

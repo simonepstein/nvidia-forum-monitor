@@ -93,6 +93,35 @@ def rematch_all(conn: sqlite3.Connection) -> int:
     return total
 
 
+def rematch_watch(conn: sqlite3.Connection, watch_id: int) -> int:
+    """Re-match one entry against every stored post, dropping hits its old regex made.
+
+    Used when a watch entry is added or its regex changes: local only, no fetching.
+    """
+    row = conn.execute("SELECT match_regex FROM watchlist WHERE id=?", (watch_id,)).fetchone()
+    if row is None:
+        return 0
+    pattern = _compile(row["match_regex"])
+    conn.execute("DELETE FROM watch_hits WHERE watch_id=?", (watch_id,))
+    if pattern is None:
+        return 0
+    now = utcnow_iso()
+    total = 0
+    for post in conn.execute(
+        "SELECT p.id, p.topic_id, p.raw, t.title FROM posts p JOIN topics t ON t.id = p.topic_id"
+    ):
+        match = pattern.search(post["title"] or "") or pattern.search(post["raw"] or "")
+        if match is None:
+            continue
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO watch_hits (watch_id, post_id, topic_id, matched_text, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (watch_id, post["id"], post["topic_id"], match.group(0), now),
+        )
+        total += cursor.rowcount
+    return total
+
+
 def add_watch(
     conn: sqlite3.Connection,
     label: str,
@@ -118,7 +147,8 @@ def add_watch(
         " release_regex=COALESCE(excluded.release_regex, watchlist.release_regex)",
         (label, canonical, match_regex, kind, note, release_regex, utcnow_iso()),
     )
-    rematch_all(conn)
+    row = conn.execute("SELECT id FROM watchlist WHERE label=?", (label,)).fetchone()
+    rematch_watch(conn, row["id"])
     return dict(conn.execute("SELECT * FROM watchlist WHERE label=?", (label,)).fetchone())
 
 
@@ -152,8 +182,8 @@ def update_watch(
             row["id"],
         ),
     )
-    if match_regex is not None:
-        rematch_all(conn)
+    if match_regex is not None and match_regex != row["match_regex"]:
+        rematch_watch(conn, row["id"])
     return dict(conn.execute("SELECT * FROM watchlist WHERE id=?", (row["id"],)).fetchone())
 
 
