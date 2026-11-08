@@ -621,7 +621,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
       - `flags`: open flags on the topic or its posts, each with `id`, `label` and `url`.
     - `unanswered`: new topics in the window with no replies, as `{count, top: [3]}` by relevance, each with `url`, `date` and an OP snippet. These are often questions worth surfacing.
     - `first_linked`: repos and HF models first linked anywhere in the window, as `{count, top: [5]}` by mention count, each with `url` and its first post's `url`.
-    - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), at most 5 lines each with their evidence `url`s. Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
+    - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), at most 5 lines: recipe and benchmark lines carry their evidence `url`s, and a note line carries `sources: [{post_id, url, date}]` (§5 Knowledge). Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
     - `repo_events`: releases and tags of watched repos in the window, with `url`.
     - `backfilled: {posts, topics}`.
     - `next`: when more hot topics remain, an argument set (`since`, `until`, `offset`) to pass back for the next page.

@@ -301,7 +301,13 @@ def test_unanswered_first_linked_and_knowledge_sections(settings, conn):
     assert payload["first_linked"]["top"][0]["url"] == "https://github.com/o/r"
     knowledge = payload["knowledge"]["items"]
     assert knowledge[0]["kind"] == "note"
-    assert knowledge[0]["urls"] == ["https://forums.developer.nvidia.com/t/2/21"]
+    assert knowledge[0]["sources"] == [
+        {
+            "post_id": 21,
+            "url": "https://forums.developer.nvidia.com/t/2/21",
+            "date": IN_WINDOW,
+        }
+    ]
 
 
 def test_default_response_stays_under_10_kb_on_a_busy_window(settings, conn):

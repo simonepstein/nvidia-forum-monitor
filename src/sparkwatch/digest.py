@@ -770,7 +770,7 @@ def _window_knowledge(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[
                 "model": row["model_canonical"],
                 "summary": row["subject"],
                 "date": row["created_at"],
-                "urls": [source["url"] for source in knowledge.note_sources(conn, row["id"])],
+                "sources": knowledge.note_sources(conn, row["id"]),
             }
         )
     items.sort(key=lambda item: item["date"], reverse=True)
@@ -923,8 +923,8 @@ def render_global_digest(payload: dict[str, Any]) -> str:
     knowledge = payload["knowledge"]
     lines.append(f"\n## Recorded knowledge ({knowledge['count']})")
     for item in knowledge["items"]:
-        urls = " ".join(item["urls"]) or "(no evidence)"
-        lines.append(f"- [{item['kind']}] {item['summary']} — {urls}")
+        urls = item.get("urls") or [source["url"] for source in item.get("sources") or []]
+        lines.append(f"- [{item['kind']}] {item['summary']} — {' '.join(urls) or '(no evidence)'}")
 
     lines.append(f"\n## Watched repo events ({len(payload['repo_events'])})")
     for item in payload["repo_events"]:
