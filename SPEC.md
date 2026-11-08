@@ -625,7 +625,8 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `flag(target_type, target_id, label, reason, priority=2)`, `list_flags(open_only=True)`, `resolve_flag(id, resolution)`
 - `review_proposed(kind="recipe"|"benchmark"|"alias")`, `set_review(kind, id, review)`
 - `add_model_alias(alias, canonical)`, `upsert_model(canonical, family?, params_total_b?, params_active_b?, released_at?, hf_repo_id?, note?)`
-- `list_watchlist()` (with hit counts over 7 and 30 days, first-seen dates and the latest hit), `add_watch(label, match_regex, kind, canonical?)`, `update_watch(label, …)`
+- `list_watchlist()` (with hit counts over 7 and 30 days, first-seen dates and the latest hit), `add_watch(label, match_regex, kind, canonical?, release_regex?)`, `update_watch(label, …)`
+  - Seeded entries resolve `canonical` through `models` and `model_aliases` when the seed omits it, and an agent-written `canonical` is never overwritten.
 - `watch_repo(repo, watch=True, branch?, note?)`. `repo` is `owner/name` or a URL.
   - A repo that hasn't been seen yet is created with `origin='agent'`.
   - Watching a repo runs a baseline check straight away.

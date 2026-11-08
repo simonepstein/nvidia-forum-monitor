@@ -256,6 +256,26 @@ def test_seeds_are_idempotent(settings):
     assert conn.execute("SELECT COUNT(*) FROM models").fetchone()[0] == models
 
 
+def test_seeded_watchlist_resolves_its_canonical_name(settings):
+    conn = open_db(settings)
+    canonicals = {
+        row["label"]: row["canonical"]
+        for row in conn.execute("SELECT label, canonical FROM watchlist")
+    }
+    assert canonicals["GLM 5.3 Flash"] == "glm-5.3-flash"
+    assert canonicals["DeepSeek V4.1 Flash"] == "deepseek-v4.1-flash"
+    assert canonicals["Qwen3.8 Flash Next"] == "qwen3.8-flash-next"
+    assert canonicals["Qwen4"] == "qwen4"
+
+
+def test_seeds_do_not_overwrite_an_agent_canonical(settings):
+    conn = open_db(settings)
+    conn.execute("UPDATE watchlist SET canonical='agent-chosen' WHERE label='Qwen4'")
+    load_seeds(conn)
+    row = conn.execute("SELECT canonical FROM watchlist WHERE label='Qwen4'").fetchone()
+    assert row["canonical"] == "agent-chosen"
+
+
 def test_seeds_do_not_overwrite_agent_rows(settings):
     conn = open_db(settings)
     conn.execute(

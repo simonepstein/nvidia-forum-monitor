@@ -1611,11 +1611,14 @@ def add_watch(
     match_regex: str,
     kind: str = "tracking",
     canonical: str | None = None,
+    release_regex: str | None = None,
 ) -> dict[str, Any]:
-    """Watch a model. kind='anticipated' alerts on the first sighting, before release."""
+    """Watch a model. kind='anticipated' alerts on a sighting; release_regex narrows it."""
     conn = _conn()
     try:
-        return watch_mod.add_watch(conn, label, match_regex, kind=kind, canonical=canonical)
+        return watch_mod.add_watch(
+            conn, label, match_regex, kind=kind, canonical=canonical, release_regex=release_regex
+        )
     except ValueError as exc:
         return {"error": str(exc)}
 
@@ -1628,6 +1631,7 @@ def update_watch(
     canonical: str | None = None,
     active: bool | None = None,
     note: str | None = None,
+    release_regex: str | None = None,
 ) -> dict[str, Any]:
     """Change a watch entry's regex, kind, canonical name or active state.
 
@@ -1643,6 +1647,7 @@ def update_watch(
             canonical=canonical,
             active=active,
             note=note,
+            release_regex=release_regex,
         )
     except ValueError as exc:
         return {"error": str(exc)}

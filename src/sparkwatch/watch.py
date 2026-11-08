@@ -25,7 +25,8 @@ def match_post(
     now = utcnow_iso()
     hits: list[int] = []
     rows = conn.execute(
-        "SELECT id, match_regex, first_seen_post_id FROM watchlist WHERE active=1"
+        "SELECT id, match_regex, kind, release_regex, first_seen_post_id, sighting_post_id,"
+        " sighting_acked_at FROM watchlist WHERE active=1"
     ).fetchall()
     for row in rows:
         pattern = _compile(row["match_regex"])
@@ -46,7 +47,40 @@ def match_post(
             " WHERE id=? AND first_seen_post_id IS NULL",
             (post_id, now, row["id"]),
         )
+        if row["kind"] == "anticipated":
+            _raise_sighting(conn, row, post_id, title, raw, now)
     return hits
+
+
+def _raise_sighting(
+    conn: sqlite3.Connection,
+    row: Any,
+    post_id: int,
+    title: str | None,
+    raw: str | None,
+    now: str,
+) -> None:
+    """Record a sighting alert for an anticipated model.
+
+    With a `release_regex`, only a release match raises it, and an acknowledgement re-arms
+    it for the next release. Without one, the first hit raises it, as before.
+    """
+    release_regex = row["release_regex"]
+    if release_regex:
+        release = _compile(release_regex)
+        if release is None:
+            return
+        if not (release.search(title or "") or release.search(raw or "")):
+            return
+        rearm = row["sighting_post_id"] is None or row["sighting_acked_at"] is not None
+        if not rearm or row["sighting_post_id"] == post_id:
+            return
+    elif row["sighting_post_id"] is not None:
+        return
+    conn.execute(
+        "UPDATE watchlist SET sighting_post_id=?, sighting_at=?, sighting_acked_at=NULL WHERE id=?",
+        (post_id, now, row["id"]),
+    )
 
 
 def rematch_all(conn: sqlite3.Connection) -> int:
@@ -66,18 +100,23 @@ def add_watch(
     kind: str = "tracking",
     canonical: str | None = None,
     note: str | None = None,
+    release_regex: str | None = None,
 ) -> dict[str, Any]:
     if _compile(match_regex) is None:
         raise ValueError(f"invalid regex: {match_regex}")
+    if release_regex is not None and _compile(release_regex) is None:
+        raise ValueError(f"invalid release_regex: {release_regex}")
     if kind not in ("tracking", "anticipated"):
         raise ValueError(f"invalid kind: {kind}")
     conn.execute(
-        "INSERT INTO watchlist (label, canonical, match_regex, kind, active, note, created_at)"
-        " VALUES (?, ?, ?, ?, 1, ?, ?)"
+        "INSERT INTO watchlist (label, canonical, match_regex, kind, active, note, release_regex,"
+        " created_at)"
+        " VALUES (?, ?, ?, ?, 1, ?, ?, ?)"
         " ON CONFLICT(label) DO UPDATE SET match_regex=excluded.match_regex, kind=excluded.kind,"
         " canonical=COALESCE(excluded.canonical, watchlist.canonical),"
-        " note=COALESCE(excluded.note, watchlist.note)",
-        (label, canonical, match_regex, kind, note, utcnow_iso()),
+        " note=COALESCE(excluded.note, watchlist.note),"
+        " release_regex=COALESCE(excluded.release_regex, watchlist.release_regex)",
+        (label, canonical, match_regex, kind, note, release_regex, utcnow_iso()),
     )
     rematch_all(conn)
     return dict(conn.execute("SELECT * FROM watchlist WHERE label=?", (label,)).fetchone())
@@ -91,20 +130,25 @@ def update_watch(
     canonical: str | None = None,
     active: bool | None = None,
     note: str | None = None,
+    release_regex: str | None = None,
 ) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM watchlist WHERE label=?", (label,)).fetchone()
     if row is None:
         return None
     if match_regex is not None and _compile(match_regex) is None:
         raise ValueError(f"invalid regex: {match_regex}")
+    if release_regex is not None and _compile(release_regex) is None:
+        raise ValueError(f"invalid release_regex: {release_regex}")
     conn.execute(
-        "UPDATE watchlist SET match_regex=?, kind=?, canonical=?, active=?, note=? WHERE id=?",
+        "UPDATE watchlist SET match_regex=?, kind=?, canonical=?, active=?, note=?,"
+        " release_regex=? WHERE id=?",
         (
             match_regex if match_regex is not None else row["match_regex"],
             kind if kind is not None else row["kind"],
             canonical if canonical is not None else row["canonical"],
             int(active) if active is not None else row["active"],
             note if note is not None else row["note"],
+            release_regex if release_regex is not None else row["release_regex"],
             row["id"],
         ),
     )

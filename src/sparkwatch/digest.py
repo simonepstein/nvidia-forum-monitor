@@ -91,19 +91,20 @@ def resolve_since(conn: sqlite3.Connection, since: str, cursor: str) -> str:
 
 
 def _sightings(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Open sighting alerts: release matches for anticipated models, until acknowledged."""
     rows = conn.execute(
-        "SELECT w.label, w.first_seen_post_id, w.first_seen_at, p.topic_id, p.post_number, t.title"
-        " FROM watchlist w LEFT JOIN posts p ON p.id = w.first_seen_post_id"
+        "SELECT w.label, w.sighting_post_id, w.sighting_at, p.topic_id, p.post_number, t.title"
+        " FROM watchlist w LEFT JOIN posts p ON p.id = w.sighting_post_id"
         " LEFT JOIN topics t ON t.id = p.topic_id"
-        " WHERE w.kind='anticipated' AND w.first_seen_post_id IS NOT NULL"
-        " AND w.sighting_acked_at IS NULL ORDER BY w.first_seen_at DESC"
+        " WHERE w.kind='anticipated' AND w.sighting_post_id IS NOT NULL"
+        " AND w.sighting_acked_at IS NULL ORDER BY w.sighting_at DESC"
     ).fetchall()
     return [
         {
             "label": row["label"],
             "title": row["title"],
-            "first_seen_at": row["first_seen_at"],
-            "post_id": row["first_seen_post_id"],
+            "sighting_at": row["sighting_at"],
+            "post_id": row["sighting_post_id"],
             "url": _post_url(row["topic_id"], row["post_number"]) if row["topic_id"] else None,
         }
         for row in rows

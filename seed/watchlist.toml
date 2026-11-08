@@ -16,4 +16,7 @@ match_regex = 'qwen[\s._-]*3\.8[\s._-]*(flash|next)'
 [[watch]]
 label = "Qwen4"
 kind = "anticipated"
-match_regex = 'qwen[\s._-]*4(?![\d.])'
+# Excludes vLLM's Qwen4Exp / qwen4_exp (Qwen3.8 Flash Next's architecture) and "Qwen 4B".
+match_regex = 'qwen[\s._-]*4(?![\d.])(?![\s_-]*exp)(?!\s*b\b)'
+# Only a real release raises the sighting; hopeful phrasing still matches the agent's judgement.
+release_regex = 'huggingface\.co/qwen/qwen[\s._-]*4(?![\d.])|qwen[\s._-]*4\b[^\n]{0,40}\b(released|weights (are )?(out|available)|now available|is out)'

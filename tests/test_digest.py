@@ -236,11 +236,12 @@ def test_render_digest_is_readable_lines(conn, settings):
 
 
 def test_anticipated_sighting_tops_digest_until_acked(conn, settings):
+    from sparkwatch import watch
+
     seed_topic(conn, 4, "Qwen4 spotted")
-    seed_post(conn, 41, 4, "Qwen4-72B is out")
-    conn.execute(
-        "UPDATE watchlist SET first_seen_post_id=41, first_seen_at=? WHERE label='Qwen4'", (PAST,)
-    )
+    seed_post(conn, 41, 4, "Qwen4-72B weights are out", created_at=PAST, first_fetched_at=PAST)
+    watch.match_post(conn, 41, 4, "Qwen4 spotted", "Qwen4-72B weights are out")
+
     digest = build_digest(conn, settings, since=OLDER, advance=False)
     assert digest["sections"]["watch_sightings"][0]["label"] == "Qwen4"
     assert digest["sections"]["watch_sightings"][0]["url"].endswith("/t/4/41")
@@ -248,6 +249,22 @@ def test_anticipated_sighting_tops_digest_until_acked(conn, settings):
     conn.execute("UPDATE watchlist SET sighting_acked_at=? WHERE label='Qwen4'", (PAST,))
     digest = build_digest(conn, settings, since=OLDER, advance=False)
     assert digest["sections"]["watch_sightings"] == []
+
+
+def test_anticipated_hits_show_as_a_count_plus_three_newest(conn, settings):
+    from sparkwatch import watch
+
+    seed_topic(conn, 30, "Qwen4 chatter", created_at="2025-11-01T00:00:00+00:00")
+    for index in range(5):
+        raw = f"Qwen 4 rumour number {index}"
+        seed_post(conn, 3000 + index, 30, raw, created_at=PAST, first_fetched_at=PAST)
+        watch.match_post(conn, 3000 + index, 30, "Qwen4 chatter", raw)
+
+    digest = build_digest(conn, settings, since=OLDER, advance=False)
+    entry = next(row for row in digest["sections"]["watchlist_activity"] if row["label"] == "Qwen4")
+    assert entry["kind"] == "anticipated"
+    assert entry["total"] == 5
+    assert len(entry["hits"]) == 3
 
 
 def test_watched_repo_without_mentions_still_appears(conn, settings):

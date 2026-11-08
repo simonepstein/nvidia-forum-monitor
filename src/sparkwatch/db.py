@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import PROJECT_ROOT, Settings, get_settings
+from .normalize import canonical_model
 from .util import utcnow_iso
 
 MIGRATION_1 = """
@@ -471,33 +472,7 @@ def load_seeds(conn: sqlite3.Connection, seed_dir: str | Path | None = None) -> 
     directory = Path(seed_dir) if seed_dir else PROJECT_ROOT / "seed"
     now = utcnow_iso()
 
-    for entry in _read_toml(directory / "watchlist.toml").get("watch", []):
-        existing = conn.execute(
-            "SELECT * FROM watchlist WHERE label=?", (entry["label"],)
-        ).fetchone()
-        canonical = entry.get("canonical")
-        kind = entry.get("kind", "tracking")
-        note = entry.get("note")
-        if existing is None:
-            conn.execute(
-                "INSERT INTO watchlist (label, canonical, match_regex, kind, active, note, created_at)"
-                " VALUES (?, ?, ?, ?, 1, ?, ?)",
-                (entry["label"], canonical, entry["match_regex"], kind, note, now),
-            )
-            continue
-        new_canonical = canonical if canonical is not None else existing["canonical"]
-        new_note = note if note is not None else existing["note"]
-        if (
-            existing["match_regex"] != entry["match_regex"]
-            or existing["kind"] != kind
-            or existing["canonical"] != new_canonical
-            or existing["note"] != new_note
-        ):
-            conn.execute(
-                "UPDATE watchlist SET match_regex=?, kind=?, canonical=?, note=? WHERE id=?",
-                (entry["match_regex"], kind, new_canonical, new_note, existing["id"]),
-            )
-
+    # Models and aliases first: the watchlist resolves its canonical name through them.
     for entry in _read_toml(directory / "models.toml").get("model", []):
         if conn.execute("SELECT 1 FROM models WHERE canonical=?", (entry["canonical"],)).fetchone():
             continue
@@ -530,6 +505,55 @@ def load_seeds(conn: sqlite3.Connection, seed_dir: str | Path | None = None) -> 
             conn.execute(
                 "UPDATE model_aliases SET canonical=? WHERE alias=?",
                 (entry["canonical"], entry["alias"]),
+            )
+
+    for entry in _read_toml(directory / "watchlist.toml").get("watch", []):
+        existing = conn.execute(
+            "SELECT * FROM watchlist WHERE label=?", (entry["label"],)
+        ).fetchone()
+        canonical = entry.get("canonical")
+        if canonical is None:
+            resolved, is_new = canonical_model(conn, entry["label"])
+            canonical = None if is_new else resolved
+        kind = entry.get("kind", "tracking")
+        note = entry.get("note")
+        release_regex = entry.get("release_regex")
+        if existing is None:
+            conn.execute(
+                "INSERT INTO watchlist (label, canonical, match_regex, kind, active, note,"
+                " release_regex, created_at) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+                (
+                    entry["label"],
+                    canonical,
+                    entry["match_regex"],
+                    kind,
+                    note,
+                    release_regex,
+                    now,
+                ),
+            )
+            continue
+        new_canonical = existing["canonical"] if existing["canonical"] is not None else canonical
+        new_note = note if note is not None else existing["note"]
+        new_release = release_regex if release_regex is not None else existing["release_regex"]
+        if (
+            existing["match_regex"] != entry["match_regex"]
+            or existing["kind"] != kind
+            or existing["canonical"] != new_canonical
+            or existing["note"] != new_note
+            or existing["release_regex"] != new_release
+        ):
+            conn.execute(
+                "UPDATE watchlist SET match_regex=?, kind=?, canonical=?, note=?, release_regex=?"
+                " WHERE id=?",
+                (
+                    entry["match_regex"],
+                    kind,
+                    new_canonical,
+                    new_note,
+                    new_release,
+                    existing["id"],
+                ),
             )
 
 
