@@ -259,7 +259,7 @@ This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It correct
   - one `posts.json` call per topic per 50 target IDs, newest topics first;
   - no listing calls and no `get_topic` calls;
   - the same client, pacing (1 request per second) and retry rules as `sync`;
-  - expect about 1 request per active topic, e.g. about 90 for 14 days today.
+  - expect about 1 request per active topic, e.g. about 150 for 14 days today (146 topics, four needing a second batch).
 - **Writes:**
   - only the unchanged-content path from §1 "Post likes": `like_count`, `accepted_answer`, `fetched_at`;
   - if a returned post's content hash differs, it's upserted as a normal edit and counted in `posts_changed`;
@@ -271,9 +271,9 @@ This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It correct
 - **Result:** `{requests, topics, posts_checked, likes_changed, accepted_changed, posts_changed, partial, errors}`, It also writes a `sync_runs` row with `trigger='engagement'` and `posts_new=0`, so request totals stay auditable (no migration needed).
 - **Never automatic:**
   - not on the timer, not inside `sync`, `sync_now` or `catch_up`;
-  - `days` is capped at `lookback_days`;
+  - `days` is capped at `lookback_days` and must be at least 1; a value below 1 is rejected with a clear error;
   - a larger refresh is a deliberate, separate run.
-- **CLI:** `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]`.
+- **CLI:** `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]`. It cannot be combined with `--repair-coverage`, `--apply` or `--max-pages`, and `--budget` defaults to 180 s so it never runs unbounded.
 - **MCP:** `refresh_engagement(days=14, forum_id=None, time_budget_s=None)`, calling the same function (the user runs sparkwatch from an MCP client on a laptop, so maintenance goes through MCP too). Its description says to use it **only when the user asks** to refresh likes or accepted answers, never as part of `catch_up` or any other workflow.
 
 `sparkwatch backfill --days D` is `sync(lookback_days=D)`. You never need to start from scratch.
@@ -540,7 +540,7 @@ This covers watched repos only.
      - Then update `head_sha` and `head_seen_at`.
      - A 404 or 422 means the branch has gone: create a `branch_gone` event.
   2. **Releases and tags:** `GET /repos/{o}/{n}/releases/latest` creates a `release` event, with the notes cut to 2,000 characters; a 404 means no releases. `GET /repos/{o}/{n}/tags?per_page=10` creates a `tag` event for each new tag.
-  3. **Repo metadata:** `GET /repos/{o}/{n}`, at most once a day. It refreshes `default_branch`, `archived` and `description`. `archived` turning true creates an `archived` event.
+  3. **Repo metadata:** `GET /repos/{o}/{n}`, at most once a day, measured from the last **metadata** fetch (`repos.etags['meta_checked_at']`), not from `last_checked_at`, which every check moves. A 304 on the metadata ETag also counts as fetched. It refreshes `default_branch`, `archived` and `description`. `archived` turning true creates an `archived` event; a repo that stays archived does not repeat the event.
 - **Baseline:** the first check after `watch_repo` records the current head, latest release and tags. It creates no events.
 
 ### Comparing against what's installed (`repo_status`)
@@ -594,6 +594,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 
 ### Keeping up to date
 - `sync_now(forum_id?, include_repos=True, time_budget_s=90)`: runs `sync()` in the server process, then `check_repos()` within the time that's left. It returns the `SyncResult`, with titles for new and updated topics, plus a list of watched repos whose head moved or that got a release. If it returns `partial: true`, the agent calls it again.
+- `refresh_engagement(days=14, forum_id?, time_budget_s?)`: the explicit engagement refresh in §1. **Use it only when the user asks** to refresh likes or accepted answers; never as part of `catch_up`, `sync_now` or another workflow.
 - `digest(since="cursor", cursor="default", relevant_only=False, limit=6, advance=True)`. This is the "since I last asked" view. `since` is `"cursor"` or an ISO date.
   - **Sections, in order:**
     1. Unacknowledged **watch sightings**, i.e. first sightings of an anticipated model.
@@ -605,7 +606,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
        - new releases or tags;
        - archived, or branch gone.
        If an install is recorded, it also shows "installed `abc1234`, now N commits behind; releases since then: …".
-    6. **Repos first linked from posts** since the cursor, one line each with its topic. These are candidates for `watch_repo`.
+    6. **Repos first linked from posts** since the cursor, one line per repo. Only mentions on **new** posts count, so a link found only in a backfilled post is left out; `mentions` is the in-window count and `post_url` is the earliest such post. These are candidates for `watch_repo`.
     7. **Open flags.**
   - **Events and open state.** Sections 1 and 7 are open *state*, not events: they are present whenever they are open, so a digest is never empty even when nothing changed. The tool description says so.
   - **Timing (revised 2026-11-08).** Three kinds of post are distinguished:
@@ -740,6 +741,7 @@ A regular "what's hot on the Spark forums" issue, written by the agent from `glo
   - `watch=False` stops the checks but keeps the history.
 - `set_installed(repo, ref, label="default", installed_at?, note?)`: records what you're running. `ref` can be a SHA (full or short), a tag or a branch, and it's resolved to a full SHA.
   - The response confirms the resolved SHA, the commit subject and date, and the current status against the branch head.
+  - When the repo isn't watched (`repos.watch=0`), the response adds a `hint` pointing at `watch_repo`, because `repo_status()` with no repo covers watched repos only.
   - `clear_installed(repo, label)`
 - `list_installs()`: every recorded install, with its current `ahead_by` against the branch head (from the cache, or computed).
 - `mark_topic(topic_id, relevant: bool | None)`

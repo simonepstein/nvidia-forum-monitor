@@ -224,6 +224,38 @@ def sync_now(
     return payload
 
 
+@tool
+def refresh_engagement(
+    days: int = 14,
+    forum_id: int | None = None,
+    time_budget_s: int | None = None,
+) -> dict[str, Any]:
+    """Refresh like counts and accepted answers on recent posts.
+
+    Use this ONLY when the user asks to refresh likes or accepted answers, for example
+    "refresh the engagement on the last two weeks of posts". Never call it as part of
+    catch_up, sync_now or any other workflow: it is an explicit, budgeted re-fetch that
+    makes about one request per active topic. It writes only like_count, accepted_answer
+    and fetched_at, and never moves floors or cursors.
+    """
+    from .sync import refresh_engagement as run_refresh
+
+    settings = _settings()
+    try:
+        with write_lock("engagement", settings.db_path):
+            conn = _conn(settings)
+            result = run_refresh(
+                settings=settings,
+                days=days,
+                forum_ids=[forum_id] if forum_id else None,
+                time_budget_s=time_budget_s,
+                conn=conn,
+            )
+    except LockBusy as exc:
+        return exc.as_dict()
+    return result.as_dict()
+
+
 def _topic_titles(conn: sqlite3.Connection, topic_ids: list[int]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for topic_id in topic_ids:

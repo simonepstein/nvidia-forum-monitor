@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from conftest import synthetic
 
 from sparkwatch.repos import (
@@ -42,6 +43,10 @@ def prepare(settings, conn, router, github):
         BASE, {"default_branch": "main", "archived": False, "description": "d", "pushed_at": PAST}
     )
     github.add(f"{BASE}/commits/main", HEAD, headers={"ETag": '"h"'})
+    github.add(
+        f"{BASE}/commits/{OLD}",
+        {"sha": OLD, "commit": {"message": "old commit", "author": {"date": PAST}}},
+    )
     github.add(f"{BASE}/releases/latest", {"message": "Not Found"}, status=404)
     github.add(f"{BASE}/tags", [], headers={"ETag": '"t"'})
     github.install(router)
@@ -64,12 +69,42 @@ def test_set_installed_resolves_short_sha(settings, conn, router, github):
     assert payload["status"]["ahead_by"] == 0
 
 
-def test_set_installed_accepts_full_sha_without_a_request(settings, conn, router, github):
+def test_set_installed_resolves_a_full_sha_and_returns_its_subject(settings, conn, router, github):
     prepare(settings, conn, router, github)
-    before = len(github.calls)
     github.add(f"{BASE}/compare/{OLD}...{HEAD}", COMPARE)
-    set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
-    assert f"{BASE}/commits/{OLD}" not in github.calls[before:]
+
+    payload = set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
+
+    assert payload["sha"] == OLD
+    assert payload["subject"] == "old commit"
+    assert payload["commit_date"] == PAST
+    assert f"{BASE}/commits/{OLD}" in github.calls
+    assert "hint" not in payload
+
+
+def test_set_installed_rejects_an_unknown_full_sha(settings, conn, router, github):
+    prepare(settings, conn, router, github)
+    missing = "f" * 40
+
+    with pytest.raises(ValueError, match="not found"):
+        set_installed(conn, REPO, missing, installed_at=PAST, settings=settings)
+
+    assert conn.execute("SELECT COUNT(*) FROM repo_installs").fetchone()[0] == 0
+
+
+def test_set_installed_hints_when_the_repo_is_not_watched(settings, conn, router, github):
+    repo = "o/n"
+    github.add(
+        f"/repos/{repo}/commits/{OLD}",
+        {"sha": OLD, "commit": {"message": "x", "author": {"date": PAST}}},
+    )
+    github.add(f"/repos/{repo}/commits/HEAD", HEAD)
+    github.install(router)
+
+    payload = set_installed(conn, repo, OLD, installed_at=PAST, settings=settings)
+
+    assert "watch_repo" in payload["hint"]
+    assert repo_status(conn, settings)["repos"] == []
 
 
 def test_repo_status_reports_commits_releases_and_mentions(settings, conn, router, github):

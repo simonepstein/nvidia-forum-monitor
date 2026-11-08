@@ -537,3 +537,49 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - it never moves floors or cursors, and is never automatic.
   - CLI `sync --refresh-engagement` plus an MCP tool `refresh_engagement`, to be called only when the user asks.
 - **Acceptance:** first rehearse on a copy, then run `--days 14 --budget 180` live. That's about 90 requests, with `posts_changed` 0 and likes present across many topics.
+
+## #42 fix: CLI text output no longer parses forum text as rich markup (2026-11-08, `fix/run-a-issues` working tree)
+- **Cause.** `cli.py` printed the rendered digest and global digest with `console.print(...)`, which parses `[...]` as rich markup. So `[quote]`/`[/quote]` disappeared and an unmatched `[/quote]` raised `rich.errors.MarkupError`.
+- **Fix.** Both text paths (`digest` and `global-digest`) now call `console.print(rendered, markup=False, highlight=False)`. `--json` is unchanged.
+- **Test.** `tests/test_digest.py::test_cli_digest_prints_forum_markup_verbatim` and `tests/test_global_digest.py::test_cli_global_digest_prints_forum_markup_verbatim` seed `[/quote] [bold]GLM 5.3 Flash[/bold] …` and assert both tags come out verbatim with exit code 0.
+
+## #44 fix: "Repos first linked" counts only links on new posts, one row per repo (2026-11-08, `fix/run-a-issues` working tree)
+- **Cause.** `digest._repos_first_linked` filtered on `repos.first_seen_at >= since` and LEFT JOINed `repo_mentions` without grouping, so links in backfilled posts counted as news and a repo appeared once per mention.
+- **Fix.** The query now mirrors `global_digest._window_first_linked`: a mention only counts when its post is **new** (`NEW_POSTS`: `first_fetched_at >= since`, `created_at >= since - 24h`), results are `GROUP BY r.id HAVING mentions > 0`, and each item carries `mentions` plus the earliest such post as `post_url` (new helper `_first_new_mention_url`). Links seen only in backfilled posts are left out; the section stays a list, and the CLI line now shows the repo, the earliest new post URL and `mentions` when there's more than one.
+- **Test.** `test_repos_first_linked_ignores_links_from_backfilled_posts` (absent) and `test_repos_first_linked_is_one_row_per_repo` (two new mentions → one row, `mentions == 2`, earliest `post_url`); `test_repos_first_linked_and_open_flags` now gives its repo a new-post mention.
+
+## #45 fix: metadata refreshes once a day from its own timestamp (2026-11-08, `fix/run-a-issues` working tree)
+- **Cause.** The metadata call was gated on `last_checked_at < now - 1 day`, but every check writes `last_checked_at`, so on a 2-hourly schedule metadata was never re-fetched and renames, `archived` and `default_branch` changes were missed.
+- **Fix.** The metadata fetch time is tracked separately as `repos.etags['meta_checked_at']` (option 1: no migration, so Run B keeps migration 6). `_save_meta_checked` stamps it after a 200 **or a 304**, and the gate measures a day from it. The `archived` event now fires only on a 0/None → 1 transition, so daily metadata refreshes can't duplicate it.
+- **Test.** `test_metadata_refreshes_once_a_day_not_once_a_check` (checks at t0, +2 h, +25 h request metadata on the 1st and 3rd only), `test_metadata_304_counts_as_a_metadata_check`, `test_archived_event_is_created_once`. Existing rename/archived tests now call `expire_metadata()` instead of moving `last_checked_at`.
+
+## #46 fix: `set_installed` resolves full SHAs and hints on unwatched repos (2026-11-08, `fix/run-a-issues` working tree)
+- **Cause.** `_resolve_ref` returned early for a 40-character SHA, so no commits request was made: the response had `subject: null` and `commit_date: null`, and a mistyped SHA was stored.
+- **Fix.** Every ref now goes through `GET /repos/{o}/{n}/commits/{ref}` (one request; no new cache). A 404/422 becomes `ValueError("cannot resolve '<ref>' in owner/name: not found")` and no install row is written. `set_installed` adds `hint` when `repos.watch=0`, pointing at `watch_repo` (documented in SPEC §5).
+- **Test.** `test_set_installed_resolves_a_full_sha_and_returns_its_subject`, `test_set_installed_rejects_an_unknown_full_sha` (no row), `test_set_installed_hints_when_the_repo_is_not_watched`. `prepare()` now serves `commits/{OLD}` for the other install tests.
+
+## #43 fix: recipe lines no longer repeat a source URL (2026-11-08, `fix/run-a-issues` working tree)
+- **Cause.** `render_global_digest` joined every evidence URL, so two quotes from one post printed `/t/386738/1` twice.
+- **Fix.** The CLI line dedupes URLs with `dict.fromkeys` (order preserved). The JSON `urls`/`sources` still list every quote.
+- **Test.** `test_knowledge_line_dedupes_source_urls`: two evidence rows on post 11 and one on post 12 render one `/t/1/11` and one `/t/1/12`, while the payload still has 3 URLs.
+
+## #47 feature: `refresh_engagement`, an explicit budgeted engagement refresh (2026-11-08, `fix/run-a-issues` working tree)
+- **Library.** `sync.refresh_engagement(settings, days=14, forum_ids=None, time_budget_s=None, …)` selects stored posts with `created_at >= now - days` (capped at `lookback_days`), skips `missing_posts` and deleted/hidden/`not_content` posts, and makes one `posts.json` call per topic per 50 IDs, newest topics first.
+  - Writes go through `_upsert_post`: the unchanged path refreshes `like_count`, `accepted_answer` and `fetched_at`; a genuine content change takes the normal edit path and counts in `posts_changed`. It never inserts a post, never runs watch matching, and never touches `listing_floor`, `last_synced_at`, `backfill_floor` or digest cursors.
+  - It returns `{requests, topics, posts_checked, likes_changed, accepted_changed, posts_changed, partial, errors}` and writes a `sync_runs` row with `trigger='engagement'` and `posts_new=0`. It stops after the current batch with `partial=true` when the budget runs out.
+- **Wiring.** CLI `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]` under the `engagement` write lock. It rejects `--repair-coverage`/`--apply`/`--max-pages`, defaults `--budget` to 180 s, and exits 1 with a one-line error for `--days < 1`. MCP tool `refresh_engagement(days=14, forum_id?, time_budget_s?)` whose description says to use it **only when the user asks**, never as part of `catch_up`/`sync_now`. `tests/snapshots/tools.json` was regenerated. README lists the CLI form.
+- **Tests.** `test_refresh_engagement_updates_likes_and_leaves_content_alone` (1 request, 3 posts, likes 0→5/3, accepted 0→1, `changed_at` untouched, floors/cursors identical, run row), `…only_targets_recent_posts`, `…skips_missing_posts`, `…records_a_genuine_edit`, `…stops_at_the_budget`, `…rejects_a_zero_day_window`, `…continues_after_a_bad_topic` (one topic raising `RuntimeError` doesn't stop the rest), `test_cli_refresh_engagement`, `…rejects_repair_coverage`, `…rejects_zero_days`, and the MCP tool + busy + description tests.
+- **Rehearsal (copy only, live DB untouched).** `sqlite3 data/sparkwatch.db ".backup data/sparkwatch.db.backup-20261108"`, then `SPARKWATCH_GENERAL__DB_PATH=data/sparkwatch.db.backup-20261108 uv run sparkwatch sync --refresh-engagement --days 14 --budget 180`.
+  - Result: **150 requests**, 146 topics, 1,030 posts checked, **386 likes changed**, 0 accepted changed, **0 posts changed**, `partial: false`, no errors. 2 min 30 s at 1 request/s.
+  - The copy's `likes_positive` rose 60 → 445 across 80 topics; `listing_floor`, `last_synced_at`, `backfill_floor` and all digest cursors were unchanged; no `changed_at` moved.
+  - 150 requests for 146 topics: four topics needed a second 50-ID batch. That is above the spec's "about 90" estimate, because 146 topics currently have posts from the last 14 days.
+  - The live DB still shows 60 posts with likes, 26 sync runs and no `engagement` run.
+
+### What to test
+1. `uv run pytest -q` → 367 passed, 1 skipped; `uv run ruff check` and `uv run ruff format --check` clean.
+2. **#42:** `uv run sparkwatch global-digest --since 2026-11-01 --until 2026-11-08T19:40:40+00:00 --detail --no-advance` → the /t/382733/335 line keeps `[quote="azampatti, post:331, topic:382733"] … [/quote]` verbatim; no `MarkupError`. `uv run sparkwatch digest --no-advance` also renders any `[bold]`/`[/quote]` verbatim.
+3. **#44:** `uv run sparkwatch digest --since 2026-11-08T13:28:40+00:00 --no-advance --json` → `repos_first_linked` has no backfilled-only repos and `deepseek-ai/deepseek-harness` appears once with `mentions: 2`; the text section prints one line per repo.
+4. **#45:** `uv run sparkwatch repos check` twice within a day → metadata is requested once; after a day without a metadata fetch, the next check follows repo 69's 301 to `gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG`. `uv run pytest tests/test_repos.py -q`.
+5. **#46:** MCP `set_installed(repo=…, ref="<40-char SHA>")` → `subject` and `commit_date` filled; a nonexistent SHA raises a clear error and adds no install; an unwatched repo returns `hint`. `uv run pytest tests/test_installs.py -q`.
+6. **#43:** `uv run sparkwatch global-digest --since 2026-11-01 --no-advance` → the recipe 2 line shows `/t/386738/1` once.
+7. **#47 (live, after the re-test):** `uv run sparkwatch sync --refresh-engagement --days 14 --budget 180` → about 150 requests, `posts_changed: 0` apart from real edits, `likes_positive` rising well beyond topic 384438, and `listing_floor`/`last_synced_at`/cursors unchanged. Expect `partial: true` only if 180 s runs out.

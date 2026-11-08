@@ -364,9 +364,16 @@ def test_watched_repo_without_mentions_still_appears(conn, settings):
 
 
 def test_repos_first_linked_and_open_flags(conn, settings):
+    seed_topic(conn, 30, "repo thread")
+    seed_post(conn, 3011, 30, "see https://github.com/a/b")
     conn.execute(
         "INSERT INTO repos (id, owner, name, url, watch, first_seen_at)"
         " VALUES (2, 'a', 'b', 'https://github.com/a/b', 0, ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (2, 3011, 30, 'https://github.com/a/b', ?)",
         (PAST,),
     )
     conn.execute(
@@ -377,3 +384,83 @@ def test_repos_first_linked_and_open_flags(conn, settings):
     digest = build_digest(conn, settings, since=OLDER, advance=False)
     assert digest["sections"]["repos_first_linked"][0]["repo"] == "a/b"
     assert digest["sections"]["open_flags"][0]["label"] == "breaking-change"
+
+
+def test_repos_first_linked_ignores_links_from_backfilled_posts(conn, settings):
+    seed_topic(conn, 31, "old thread", created_at=OLDER)
+    seed_post(
+        conn,
+        3111,
+        31,
+        "old https://github.com/o/old link",
+        created_at="2025-11-01T00:00:00+00:00",
+        first_fetched_at=PAST,
+    )
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, watch, first_seen_at)"
+        " VALUES (3, 'o', 'old', 'https://github.com/o/old', 0, ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (3, 3111, 31, 'https://github.com/o/old', ?)",
+        (PAST,),
+    )
+
+    digest = build_digest(conn, settings, since=PAST, advance=False)
+
+    assert digest["sections"]["repos_first_linked"] == []
+    assert digest["backfilled"]["posts"] == 1
+
+
+def test_repos_first_linked_is_one_row_per_repo(conn, settings):
+    seed_topic(conn, 32, "new thread")
+    seed_post(conn, 3211, 32, "first https://github.com/n/new")
+    seed_post(conn, 3212, 32, "again https://github.com/n/new")
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, watch, first_seen_at)"
+        " VALUES (4, 'n', 'new', 'https://github.com/n/new', 0, ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (4, 3211, 32, 'https://github.com/n/new', ?)",
+        (PAST,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (4, 3212, 32, 'https://github.com/n/new', ?)",
+        (PAST,),
+    )
+
+    digest = build_digest(conn, settings, since=PAST, advance=False)
+    items = digest["sections"]["repos_first_linked"]
+
+    assert len(items) == 1
+    assert items[0]["repo"] == "n/new"
+    assert items[0]["mentions"] == 2
+    assert items[0]["post_url"] == "https://forums.developer.nvidia.com/t/32/211"
+
+    rendered = digest_module.render_digest(digest)
+    assert (
+        "- n/new — https://forums.developer.nvidia.com/t/32/211"
+        " (2026-01-01T00:00:00+00:00, 2 mentions)"
+    ) in rendered
+
+
+def test_cli_digest_prints_forum_markup_verbatim(conn, settings):
+    from typer.testing import CliRunner
+
+    from sparkwatch import watch
+    from sparkwatch.cli import app
+
+    raw = "[/quote] [bold]GLM 5.3 Flash[/bold] runs at 30 tok/s"
+    seed_topic(conn, 70, "GLM 5.3 Flash thread")
+    seed_post(conn, 7011, 70, raw)
+    watch.match_post(conn, 7011, 70, "GLM 5.3 Flash thread", raw)
+
+    result = CliRunner().invoke(app, ["digest", "--since", OLDER, "--no-advance"])
+
+    assert result.exit_code == 0
+    assert "[/quote]" in result.stdout
+    assert "[bold]GLM 5.3 Flash[/bold]" in result.stdout

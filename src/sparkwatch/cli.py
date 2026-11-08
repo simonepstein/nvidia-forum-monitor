@@ -40,8 +40,17 @@ def _settings_or_exit() -> Settings:
 def sync(
     forum: list[int] | None = typer.Option(None, "--forum", help="category id, repeatable"),
     max_pages: int | None = typer.Option(None, "--max-pages", help="stop after N listing pages"),
-    days: int | None = typer.Option(None, "--days", help="override lookback_days"),
-    budget: float | None = typer.Option(None, "--budget", help="time budget in seconds"),
+    days: int | None = typer.Option(
+        None, "--days", help="lookback_days override, or the engagement window in days"
+    ),
+    budget: float | None = typer.Option(
+        None, "--budget", help="time budget in seconds (engagement defaults to 180)"
+    ),
+    refresh_engagement: bool = typer.Option(
+        False,
+        "--refresh-engagement",
+        help="refresh likes and accepted answers on recent posts (explicit, budgeted)",
+    ),
     repair_coverage: bool = typer.Option(
         False,
         "--repair-coverage",
@@ -52,12 +61,31 @@ def sync(
     ),
 ) -> None:
     """Mirror the forums into SQLite."""
+    from .sync import refresh_engagement as run_refresh
     from .sync import repair_coverage as run_repair
     from .sync import sync as run_sync
 
     settings = _settings_or_exit()
     try:
-        with write_lock("sync", settings.db_path):
+        with write_lock("engagement" if refresh_engagement else "sync", settings.db_path):
+            if refresh_engagement:
+                if repair_coverage or apply_repair or max_pages is not None:
+                    console.print(
+                        "error: --refresh-engagement cannot be combined with"
+                        " --repair-coverage, --apply or --max-pages",
+                        style="red",
+                    )
+                    raise typer.Exit(code=1)
+                conn = open_db(settings)
+                refreshed = run_refresh(
+                    settings=settings,
+                    days=days if days is not None else 14,
+                    forum_ids=forum or None,
+                    time_budget_s=budget if budget is not None else 180.0,
+                    conn=conn,
+                )
+                _print(refreshed.as_dict())
+                return
             if repair_coverage:
                 if not forum or len(forum) != 1:
                     _print({"error": "--repair-coverage needs exactly one --forum ID"})
@@ -73,6 +101,9 @@ def sync(
                 time_budget_s=budget,
                 trigger="cli",
             )
+    except ValueError as exc:
+        console.print(f"error: {exc}", style="red")
+        raise typer.Exit(code=1) from None
     except LockBusy as exc:
         _exit_busy(exc)
         return
@@ -136,7 +167,7 @@ def digest(
     if as_json:
         _print(payload)
     else:
-        console.print(render_digest(payload))
+        console.print(render_digest(payload), markup=False, highlight=False)
 
 
 @app.command("global-digest")
@@ -178,7 +209,7 @@ def global_digest(
     if as_json:
         _print(payload)
     else:
-        console.print(render_global_digest(payload))
+        console.print(render_global_digest(payload), markup=False, highlight=False)
 
 
 @app.command("serve-mcp")

@@ -46,6 +46,30 @@ class SyncResult:
         }
 
 
+@dataclass
+class EngagementResult:
+    requests: int = 0
+    topics: int = 0
+    posts_checked: int = 0
+    likes_changed: int = 0
+    accepted_changed: int = 0
+    posts_changed: int = 0
+    partial: bool = False
+    errors: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "requests": self.requests,
+            "topics": self.topics,
+            "posts_checked": self.posts_checked,
+            "likes_changed": self.likes_changed,
+            "accepted_changed": self.accepted_changed,
+            "posts_changed": self.posts_changed,
+            "partial": self.partial,
+            "errors": self.errors,
+        }
+
+
 def _window(
     conn: sqlite3.Connection, category: CategorySettings, lookback_days: int, now: datetime
 ):
@@ -633,6 +657,131 @@ def sync(
             1 if result.partial else 0,
             dumps(result.errors),
             dumps([category.id for category in categories]),
+        ),
+    )
+    return result
+
+
+def refresh_engagement(
+    settings: Settings | None = None,
+    days: int = 14,
+    forum_ids: list[int] | None = None,
+    time_budget_s: float | None = None,
+    client: DiscourseClient | None = None,
+    conn: sqlite3.Connection | None = None,
+    trigger: str = "engagement",
+) -> EngagementResult:
+    """Refresh likes and accepted answers on recent posts (SPEC §1 Engagement refresh).
+
+    This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It never runs as
+    part of a sync and never touches floors, `last_synced_at` or cursors: one `posts.json`
+    call per topic per batch of stored posts from the last `days` days, newest topics first.
+    Only the unchanged-content path (likes, accepted answers, fetched_at) is written, apart
+    from a genuine edit, which goes through the normal edit path and counts in
+    `posts_changed`.
+    """
+    settings = settings or get_settings()
+    if int(days) < 1:
+        raise ValueError("days must be at least 1")
+    conn = conn if conn is not None else open_db(settings)
+    owns_client = client is None
+    client = client or DiscourseClient(settings)
+    result = EngagementResult()
+    started = utcnow()
+    started_iso = to_iso(started)
+    now_iso = started_iso
+    window_days = min(int(days), settings.sync.lookback_days)
+    cutoff = to_iso(started - timedelta(days=window_days))
+    deadline = time.monotonic() + time_budget_s if time_budget_s is not None else None
+    forums = forum_ids or settings.forum_ids()
+
+    clause = ""
+    params: list[Any] = [cutoff]
+    if forums:
+        clause = f" AND t.forum_id IN ({','.join('?' for _ in forums)})"
+        params.extend(forums)
+
+    rows = conn.execute(
+        "SELECT p.id, p.topic_id, p.like_count, p.accepted_answer FROM posts p"
+        " JOIN topics t ON t.id = p.topic_id"
+        " WHERE julianday(p.created_at) >= julianday(?)" + clause + " AND NOT EXISTS"
+        " (SELECT 1 FROM missing_posts m WHERE m.topic_id = p.topic_id AND m.post_id = p.id)"
+        " ORDER BY t.bumped_at DESC, p.topic_id, p.post_number",
+        params,
+    ).fetchall()
+
+    targets: dict[int, list[Any]] = {}
+    for row in rows:
+        targets.setdefault(int(row["topic_id"]), []).append(row)
+
+    batch_size = max(1, settings.forum.posts_batch_size)
+    seen_topics: set[int] = set()
+    try:
+        for topic_id, topic_rows in targets.items():
+            if deadline is not None and time.monotonic() > deadline:
+                result.partial = True
+                break
+            try:
+                stored = {int(row["id"]): row for row in topic_rows}
+                ordered = [int(row["id"]) for row in topic_rows]
+                for index in range(0, len(ordered), batch_size):
+                    if deadline is not None and time.monotonic() > deadline:
+                        result.partial = True
+                        break
+                    batch = ordered[index : index + batch_size]
+                    payload = client.get_posts(topic_id, batch)
+                    seen_topics.add(topic_id)
+                    returned = {
+                        int(post["id"]): post
+                        for post in (payload.get("post_stream") or {}).get("posts") or []
+                    }
+                    for post_id in batch:
+                        post = returned.get(post_id)
+                        if post is None or post.get("deleted_at") or post.get("hidden"):
+                            continue
+                        if int(post.get("post_type", 1)) not in STORED_POST_TYPES:
+                            continue
+                        row = stored[post_id]
+                        likes = _post_like_count(post)
+                        accepted = post.get("accepted_answer")
+                        if likes is not None and likes != int(row["like_count"] or 0):
+                            result.likes_changed += 1
+                        if accepted is not None and (
+                            (1 if accepted else 0) != int(row["accepted_answer"] or 0)
+                        ):
+                            result.accepted_changed += 1
+                        if _upsert_post(conn, topic_id, post, now_iso) == "changed":
+                            result.posts_changed += 1
+                        result.posts_checked += 1
+            except DiscourseError as exc:
+                logger.warning("skipping topic %s: %s", topic_id, exc)
+                result.errors.append(f"topic {topic_id}: {exc}")
+            except Exception as exc:  # noqa: BLE001 - one topic must not stop the refresh
+                result.errors.append(f"topic {topic_id}: {exc!r}")
+            if result.partial:
+                break
+    finally:
+        result.requests = client.request_count
+        result.topics = len(seen_topics)
+        if owns_client:
+            client.close()
+
+    conn.execute(
+        'INSERT INTO sync_runs (started_at, finished_at, "trigger", requests, new_topic_ids,'
+        " updated_topic_ids, posts_new, posts_changed, partial, errors, forum_ids)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            started_iso,
+            utcnow_iso(),
+            trigger,
+            result.requests,
+            dumps([]),
+            dumps([]),
+            0,
+            result.posts_changed,
+            1 if result.partial else 0,
+            dumps(result.errors),
+            dumps(forums),
         ),
     )
     return result

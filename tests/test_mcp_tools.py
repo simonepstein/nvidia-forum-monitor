@@ -778,6 +778,55 @@ def test_sync_now_skips_the_repo_check_when_the_budget_is_gone(
     assert payload["repos"] == []
 
 
+def test_refresh_engagement_tool_updates_likes(settings, conn, router, forum):
+    import hashlib
+
+    from conftest import make_post
+
+    from sparkwatch.lock import write_lock
+
+    post = make_post(2601, 260, 1, "post", extra={"reaction_users_count": 6})
+    conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute(
+        "INSERT INTO topics (id, forum_id, title, created_at, bumped_at, posts_count,"
+        " highest_post_number, relevance_score, first_fetched_at)"
+        " VALUES (260, 723, 't', ?, ?, 1, 1, 0, ?)",
+        (post["created_at"], post["created_at"], post["created_at"]),
+    )
+    conn.execute(
+        "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw, cooked,"
+        " content_hash, like_count, accepted_answer, first_fetched_at, changed_at, fetched_at)"
+        " VALUES (2601, 260, 1, 1, 'alice', ?, ?, ?, ?, 0, 0, ?, ?, ?)",
+        (
+            post["created_at"],
+            post["raw"],
+            post["cooked"],
+            hashlib.sha256(post["raw"].encode()).hexdigest(),
+            PAST,
+            PAST,
+            PAST,
+        ),
+    )
+    forum.add_posts(260, [post])
+    forum.install(router)
+
+    payload = m.refresh_engagement(days=14, forum_id=723)
+
+    assert payload["posts_checked"] == 1
+    assert payload["likes_changed"] == 1
+    assert conn.execute("SELECT like_count FROM posts WHERE id=2601").fetchone()[0] == 6
+
+    with write_lock("engagement", settings.db_path):
+        busy = m.refresh_engagement()
+    assert busy["busy"] is True
+
+
+def test_refresh_engagement_is_described_as_user_requested_only():
+    from sparkwatch import mcp_server as m
+
+    assert "only when the user asks" in m.refresh_engagement.__doc__.lower()
+
+
 def test_topic_overview_and_mark_topic(settings, conn):
     seed(conn)
     overview = m.get_topic_overview(700)

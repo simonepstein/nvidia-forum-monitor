@@ -527,3 +527,47 @@ def test_detail_renders_each_topics_posts_under_that_topic(settings, conn):
     lean = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
     lean_lines = render_global_digest(lean).splitlines()
     assert not [line for line in lean_lines if line.startswith("    · ")]
+
+
+def test_cli_global_digest_prints_forum_markup_verbatim(settings, conn):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    seed_topic(conn, 1, title="GLM on two Sparks", created_at=IN_WINDOW)
+    seed_post(conn, 11, 1, likes=2, raw="[/quote] [bold]GLM 5.3 Flash[/bold] runs at 30 tok/s")
+
+    result = CliRunner().invoke(
+        app,
+        ["global-digest", "--since", SINCE, "--until", UNTIL, "--detail", "--no-advance"],
+    )
+
+    assert result.exit_code == 0
+    assert "[/quote]" in result.stdout
+    assert "[bold]GLM 5.3 Flash[/bold]" in result.stdout
+
+
+def test_knowledge_line_dedupes_source_urls(settings, conn):
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    seed_post(conn, 12, 1)
+    conn.execute(
+        "INSERT INTO recipes (id, model_canonical, quant_format, engine, topology, status,"
+        " reported_at, created_by, created_at)"
+        " VALUES (1, 'glm-5.3-flash', 'nvfp4', 'vllm', 'dual-spark', 'works', ?, 'agent', ?)",
+        (IN_WINDOW, IN_WINDOW),
+    )
+    for post_id, quote in ((11, "q1"), (11, "q2"), (12, "q3")):
+        conn.execute(
+            "INSERT INTO evidence (target_type, target_id, post_id, quote, quote_verified)"
+            " VALUES ('recipe', 1, ?, ?, 1)",
+            (post_id, quote),
+        )
+
+    payload = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+    rendered = render_global_digest(payload)
+    line = next(row for row in rendered.splitlines() if row.startswith("- [recipe]"))
+
+    assert line.count("https://forums.developer.nvidia.com/t/1/11") == 1
+    assert "https://forums.developer.nvidia.com/t/1/12" in line
+    assert len(payload["knowledge"]["items"][0]["urls"]) == 3

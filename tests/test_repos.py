@@ -3,6 +3,7 @@ from __future__ import annotations
 from conftest import add_github_spec
 
 from sparkwatch.repos import check_repos, get_repo, watch_repo
+from sparkwatch.util import dumps, loads
 
 REPO = "vllm-project/vllm"
 BASE = f"/repos/{REPO}"
@@ -32,6 +33,16 @@ def baseline(github, sha: str = SHA1, release: str | None = "v0.11.0", tags=("v0
     else:
         github.add(f"{BASE}/releases/latest", {"message": "Not Found"}, status=404)
     github.add(f"{BASE}/tags", [{"name": tag} for tag in tags], headers={"ETag": '"tags"'})
+
+
+def expire_metadata(conn) -> None:
+    """Make the next check re-fetch metadata, without moving `last_checked_at`."""
+    row = conn.execute(
+        "SELECT id, etags FROM repos WHERE url=?", (f"https://github.com/{REPO}",)
+    ).fetchone()
+    etags = loads(row["etags"], {})
+    etags["meta_checked_at"] = "2025-01-01T00:00:00+00:00"
+    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), row["id"]))
 
 
 def test_watch_repo_baseline_records_head_without_events(settings, conn, router, github):
@@ -160,10 +171,7 @@ def test_archived_repo_creates_event(settings, conn, router, github):
     github.install(router)
     watch_repo(conn, REPO, settings=settings)
 
-    conn.execute(
-        "UPDATE repos SET last_checked_at='2025-01-01T00:00:00+00:00' WHERE url=?",
-        (f"https://github.com/{REPO}",),
-    )
+    expire_metadata(conn)
     github.add(
         BASE,
         {"default_branch": "main", "archived": True, "description": "serving", "pushed_at": PAST},
@@ -222,10 +230,7 @@ def test_renamed_repo_follows_the_redirect(settings, conn, router, github):
     baseline(github)
     github.install(router)
     watch_repo(conn, REPO, settings=settings)
-    conn.execute(
-        "UPDATE repos SET last_checked_at='2025-01-01T00:00:00+00:00' WHERE url=?",
-        (f"https://github.com/{REPO}",),
-    )
+    expire_metadata(conn)
 
     github.add(
         BASE,
@@ -273,10 +278,7 @@ def test_rename_keeps_mentions_and_events(settings, conn, router, github):
         " SELECT id, 9001, 900, url, ? FROM repos WHERE url=?",
         (PAST, f"https://github.com/{REPO}"),
     )
-    conn.execute(
-        "UPDATE repos SET last_checked_at='2025-01-01T00:00:00+00:00' WHERE url=?",
-        (f"https://github.com/{REPO}",),
-    )
+    expire_metadata(conn)
     github.add(
         BASE, None, status=301, headers={"Location": "https://api.github.com/repositories/4243"}
     )
@@ -296,3 +298,95 @@ def test_rename_keeps_mentions_and_events(settings, conn, router, github):
     assert payload is not None
     assert payload["repo"] == "newowner/newname"
     assert payload["mentions"]
+
+
+def _queue_304s(github) -> None:
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(f"{BASE}/tags", None, status=304)
+
+
+def test_metadata_refreshes_once_a_day_not_once_a_check(
+    settings, conn, router, github, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+
+    from sparkwatch import repos as repos_module
+
+    clock = {"now": datetime(2026, 11, 8, 12, 0, tzinfo=UTC)}
+    monkeypatch.setattr(repos_module, "utcnow", lambda: clock["now"])
+
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+    assert github.calls.count(BASE) == 1
+
+    clock["now"] += timedelta(hours=2)
+    _queue_304s(github)
+    check_repos(conn, settings, repo=REPO)
+    assert github.calls.count(BASE) == 1
+
+    clock["now"] += timedelta(hours=23)
+    check_repos(conn, settings, repo=REPO)
+    assert github.calls.count(BASE) == 2
+
+
+def test_metadata_304_counts_as_a_metadata_check(settings, conn, router, github, monkeypatch):
+    from datetime import UTC, datetime
+
+    from sparkwatch import repos as repos_module
+    from sparkwatch.util import dumps, loads
+
+    clock = {"now": datetime(2026, 11, 8, 12, 0, tzinfo=UTC)}
+    monkeypatch.setattr(repos_module, "utcnow", lambda: clock["now"])
+
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    row = conn.execute(
+        "SELECT id, etags FROM repos WHERE url=?", (f"https://github.com/{REPO}",)
+    ).fetchone()
+    etags = loads(row["etags"], {})
+    etags["meta_checked_at"] = "2026-11-01T00:00:00+00:00"
+    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), row["id"]))
+
+    github.add(BASE, None, status=304, headers={"ETag": '"meta"'})
+    _queue_304s(github)
+    before = github.calls.count(BASE)
+
+    check_repos(conn, settings, repo=REPO)
+    assert github.calls.count(BASE) == before + 1
+    etags = loads(
+        conn.execute("SELECT etags FROM repos WHERE id=?", (row["id"],)).fetchone()[0], {}
+    )
+    assert etags["meta_checked_at"] == "2026-11-08T12:00:00+00:00"
+
+    check_repos(conn, settings, repo=REPO)
+    assert github.calls.count(BASE) == before + 1
+
+
+def test_archived_event_is_created_once(settings, conn, router, github, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from sparkwatch import repos as repos_module
+
+    clock = {"now": datetime(2026, 11, 8, 12, 0, tzinfo=UTC)}
+    monkeypatch.setattr(repos_module, "utcnow", lambda: clock["now"])
+
+    baseline(github)
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    github.add(
+        BASE,
+        {"default_branch": "main", "archived": True, "description": "d", "pushed_at": PAST},
+    )
+    _queue_304s(github)
+
+    clock["now"] += timedelta(hours=25)
+    check_repos(conn, settings, repo=REPO)
+    clock["now"] += timedelta(hours=25)
+    check_repos(conn, settings, repo=REPO)
+
+    assert conn.execute("SELECT COUNT(*) FROM repo_events WHERE kind='archived'").fetchone()[0] == 1

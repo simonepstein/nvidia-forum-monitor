@@ -5,10 +5,12 @@ import hashlib
 from conftest import listing, make_post, make_topic, topic_payload
 
 from sparkwatch.discourse import DiscourseClient
-from sparkwatch.sync import sync
+from sparkwatch.sync import refresh_engagement, sync
 from sparkwatch.util import parse_dt, utcnow_iso
 
 GAP_FLOOR = "2026-09-09T12:27:53+00:00"
+SEEDED_AT = "2026-01-01T00:00:00+00:00"
+CHANGED_AT = "2026-01-02T00:00:00+00:00"
 
 
 def build(forum, topics, category: int = 723, more: bool = False) -> None:
@@ -336,3 +338,263 @@ def test_cli_repair_coverage_needs_exactly_one_forum(settings, conn):
     result = CliRunner().invoke(app, ["sync", "--repair-coverage"])
     assert result.exit_code == 1
     assert "exactly one --forum" in result.stdout
+
+
+def _seed_engagement_topic(conn, topic_id: int, posts: list[dict]) -> None:
+    conn.execute("INSERT OR IGNORE INTO forums (id, path, name) VALUES (723, 'p', 'n')")
+    conn.execute(
+        "INSERT INTO topics (id, forum_id, title, created_at, bumped_at, posts_count,"
+        " highest_post_number, relevance_score, first_fetched_at)"
+        " VALUES (?, 723, 'engagement topic', ?, ?, ?, ?, 0, ?)",
+        (
+            topic_id,
+            posts[0]["created_at"],
+            posts[0]["created_at"],
+            len(posts),
+            len(posts),
+            posts[0]["created_at"],
+        ),
+    )
+    for post in posts:
+        conn.execute(
+            "INSERT INTO posts (id, topic_id, post_number, post_type, username, created_at, raw,"
+            " cooked, content_hash, like_count, accepted_answer, first_fetched_at, changed_at,"
+            " fetched_at) VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?)",
+            (
+                post["id"],
+                topic_id,
+                post["post_number"],
+                post["post_type"],
+                post["username"],
+                post["created_at"],
+                post["raw"],
+                post["cooked"],
+                hashlib.sha256(post["raw"].encode()).hexdigest(),
+                SEEDED_AT,
+                CHANGED_AT,
+                SEEDED_AT,
+            ),
+        )
+
+
+def test_refresh_engagement_updates_likes_and_leaves_content_alone(settings, conn, router, forum):
+    posts = [
+        make_post(2001, 200, 1, "first post", extra={"reaction_users_count": 5}),
+        make_post(
+            2002,
+            200,
+            2,
+            "second post",
+            extra={"reaction_users_count": 3, "accepted_answer": True},
+        ),
+        make_post(2003, 200, 3, "third post"),
+    ]
+    _seed_engagement_topic(conn, 200, posts)
+    forum.add_posts(200, posts)
+    forum.install(router)
+
+    floors_before = [tuple(row) for row in conn.execute("SELECT * FROM forums ORDER BY id")]
+    cursors_before = [tuple(row) for row in conn.execute("SELECT * FROM digest_cursors")]
+
+    result = refresh_engagement(
+        settings=settings,
+        conn=conn,
+        client=DiscourseClient(settings),
+        days=14,
+        forum_ids=[723],
+    )
+
+    assert result.requests == 1
+    assert result.topics == 1
+    assert result.posts_checked == 3
+    assert result.likes_changed == 2
+    assert result.accepted_changed == 1
+    assert result.posts_changed == 0
+    assert result.partial is False
+    assert result.errors == []
+    assert forum.post_requests() == [(2001, 2002, 2003)]
+
+    rows = {row["id"]: row for row in conn.execute("SELECT * FROM posts WHERE topic_id=200")}
+    assert rows[2001]["like_count"] == 5
+    assert rows[2002]["like_count"] == 3
+    assert rows[2002]["accepted_answer"] == 1
+    assert rows[2003]["like_count"] == 0
+    assert all(rows[post_id]["changed_at"] == CHANGED_AT for post_id in rows)
+    assert all(rows[post_id]["fetched_at"] != SEEDED_AT for post_id in rows)
+
+    assert [tuple(row) for row in conn.execute("SELECT * FROM forums ORDER BY id")] == floors_before
+    assert [tuple(row) for row in conn.execute("SELECT * FROM digest_cursors")] == cursors_before
+
+    run = conn.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
+    assert run["trigger"] == "engagement"
+    assert run["posts_new"] == 0
+    assert run["requests"] == 1
+    assert run["posts_changed"] == 0
+
+
+def test_refresh_engagement_only_targets_recent_posts(settings, conn, router, forum):
+    posts = [
+        make_post(2101, 210, 1, "recent post", days_ago=1),
+        make_post(2102, 210, 2, "old post", days_ago=30),
+    ]
+    _seed_engagement_topic(conn, 210, posts)
+    forum.add_posts(210, posts)
+    forum.install(router)
+
+    result = refresh_engagement(
+        settings=settings,
+        conn=conn,
+        client=DiscourseClient(settings),
+        days=14,
+        forum_ids=[723],
+    )
+
+    assert forum.post_requests() == [(2101,)]
+    assert result.posts_checked == 1
+
+
+def test_refresh_engagement_skips_missing_posts(settings, conn, router, forum):
+    posts = [make_post(2201, 220, 1, "a"), make_post(2202, 220, 2, "b")]
+    _seed_engagement_topic(conn, 220, posts)
+    conn.execute(
+        "INSERT INTO missing_posts (topic_id, post_id, reason, first_seen_at, last_checked_at)"
+        " VALUES (220, 2202, 'deleted', ?, ?)",
+        (SEEDED_AT, SEEDED_AT),
+    )
+    forum.add_posts(220, posts)
+    forum.install(router)
+
+    result = refresh_engagement(
+        settings=settings,
+        conn=conn,
+        client=DiscourseClient(settings),
+        days=14,
+        forum_ids=[723],
+    )
+
+    assert forum.post_requests() == [(2201,)]
+    assert result.posts_checked == 1
+
+
+def test_refresh_engagement_records_a_genuine_edit(settings, conn, router, forum):
+    original = make_post(2301, 230, 1, "original text")
+    edited = make_post(2301, 230, 1, "edited text", extra={"reaction_users_count": 2})
+    _seed_engagement_topic(conn, 230, [original])
+    forum.add_posts(230, [edited])
+    forum.install(router)
+
+    result = refresh_engagement(
+        settings=settings,
+        conn=conn,
+        client=DiscourseClient(settings),
+        days=14,
+        forum_ids=[723],
+    )
+
+    assert result.posts_changed == 1
+    assert result.likes_changed == 1
+    row = conn.execute(
+        "SELECT raw, content_hash, changed_at, like_count FROM posts WHERE id=2301"
+    ).fetchone()
+    assert row["raw"] == "edited text"
+    assert row["content_hash"] == hashlib.sha256(b"edited text").hexdigest()
+    assert row["changed_at"] != CHANGED_AT
+    assert row["like_count"] == 2
+
+
+def test_refresh_engagement_stops_at_the_budget(settings, conn, router, forum):
+    posts = [make_post(2401, 240, 1, "post")]
+    _seed_engagement_topic(conn, 240, posts)
+    forum.add_posts(240, posts)
+    forum.install(router)
+
+    result = refresh_engagement(
+        settings=settings,
+        conn=conn,
+        client=DiscourseClient(settings),
+        days=14,
+        forum_ids=[723],
+        time_budget_s=0,
+    )
+
+    assert result.partial is True
+    assert result.requests == 0
+    assert forum.calls == []
+
+
+def test_cli_refresh_engagement(settings, conn, router, forum):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    posts = [make_post(2501, 250, 1, "post", extra={"reaction_users_count": 4})]
+    _seed_engagement_topic(conn, 250, posts)
+    forum.add_posts(250, posts)
+    forum.install(router)
+
+    result = CliRunner().invoke(
+        app,
+        ["sync", "--refresh-engagement", "--days", "14", "--forum", "723", "--budget", "60"],
+    )
+
+    assert result.exit_code == 0
+    assert '"posts_checked": 1' in result.stdout
+    assert '"likes_changed": 1' in result.stdout
+    assert '"partial": false' in result.stdout
+
+
+def test_refresh_engagement_rejects_a_zero_day_window(settings, conn):
+    import pytest
+
+    with pytest.raises(ValueError, match="days must be at least 1"):
+        refresh_engagement(settings=settings, conn=conn, days=0)
+
+
+def test_refresh_engagement_continues_after_a_bad_topic(settings, conn, forum):
+    first = [make_post(2701, 270, 1, "a")]
+    second = [make_post(2711, 271, 1, "b", extra={"reaction_users_count": 2})]
+    _seed_engagement_topic(conn, 270, first)
+    _seed_engagement_topic(conn, 271, second)
+
+    class FlakyClient:
+        request_count = 0
+
+        def get_posts(self, topic_id, post_ids):
+            self.request_count += 1
+            if topic_id == 270:
+                raise RuntimeError("boom")
+            return {"post_stream": {"posts": [post for post in second if post["id"] in post_ids]}}
+
+    client = FlakyClient()
+    result = refresh_engagement(
+        settings=settings, conn=conn, client=client, days=14, forum_ids=[723]
+    )
+
+    assert result.requests == 2
+    assert result.topics == 1
+    assert result.posts_checked == 1
+    assert result.errors and "270" in result.errors[0]
+
+
+def test_cli_refresh_engagement_rejects_repair_coverage(settings, conn):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    result = CliRunner().invoke(
+        app, ["sync", "--refresh-engagement", "--repair-coverage", "--forum", "723"]
+    )
+
+    assert result.exit_code == 1
+    assert "cannot be combined" in result.stdout
+
+
+def test_cli_refresh_engagement_rejects_zero_days(settings, conn):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    result = CliRunner().invoke(app, ["sync", "--refresh-engagement", "--days", "0"])
+
+    assert result.exit_code == 1
+    assert "days must be at least 1" in result.stdout

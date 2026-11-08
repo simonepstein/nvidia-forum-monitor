@@ -120,6 +120,18 @@ def _save_etag(conn: sqlite3.Connection, repo_id: int, key: str, etag: str | Non
     conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
 
 
+def _save_meta_checked(conn: sqlite3.Connection, repo_id: int, when_iso: str) -> None:
+    """Record when repo metadata was last fetched, separately from the check time.
+
+    SPEC §4b step 3: metadata is fetched at most once a day, measured from the last metadata
+    fetch, not from `last_checked_at` (which every check moves). A 304 counts as fetched.
+    """
+    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
+    etags = loads(row["etags"], {}) or {}
+    etags["meta_checked_at"] = when_iso
+    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+
+
 def get_or_create_repo(conn: sqlite3.Connection, repo: str) -> Any:
     owner, name = parse_repo(repo)
     url = f"https://github.com/{owner}/{name}"
@@ -277,9 +289,9 @@ def check_repos(
             checked += 1
             try:
                 baseline = row["last_checked_at"] is None
-                last_checked = parse_dt(row["last_checked_at"])
+                meta_checked = parse_dt(_etags(row).get("meta_checked_at"))
 
-                if last_checked is None or last_checked < now - timedelta(days=1):
+                if meta_checked is None or meta_checked < now - timedelta(days=1):
                     meta_etag = _etags(row).get("meta")
                     try:
                         status, response, new_etag = client.get(
@@ -288,13 +300,15 @@ def check_repos(
                     except GitHubNotFound as exc:
                         errors.append(f"{row['owner']}/{row['name']}: {exc}")
                         continue
+                    _save_meta_checked(conn, repo_id, now_iso)
                     if status != 304 and response is not None:
                         meta = response.json()
                         _save_etag(conn, repo_id, "meta", new_etag)
                         _follow_rename(conn, repo_id, row, meta)
                         row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
+                        was_archived = row["archived"]
                         archived = 1 if meta.get("archived") else 0
-                        if row["archived"] and not archived:
+                        if was_archived and not archived:
                             _event(
                                 conn, repo_id, "archived", None, now_iso, title="repo unarchived"
                             )
@@ -310,7 +324,7 @@ def check_repos(
                             ),
                         )
                         row = conn.execute("SELECT * FROM repos WHERE id=?", (repo_id,)).fetchone()
-                        if archived and not baseline:
+                        if archived and not was_archived and not baseline:
                             _event(
                                 conn,
                                 repo_id,
@@ -489,10 +503,21 @@ def _resolve_ref(
     repo: Any,
     ref: str,
 ) -> dict[str, Any]:
+    """Resolve any ref (full or short SHA, tag, branch) through the commits endpoint.
+
+    SPEC §4b step 1: every ref is resolved with `GET /repos/{o}/{n}/commits/{ref}`, so a
+    full SHA is checked too and its subject and date come back. A 404/422 is rejected
+    rather than stored.
+    """
     text = (ref or "").strip()
-    if SHA_RE.match(text):
-        return {"sha": text, "subject": None, "date": None}
-    _status, response, _etag = client.get(f"/repos/{repo['owner']}/{repo['name']}/commits/{text}")
+    try:
+        _status, response, _etag = client.get(
+            f"/repos/{repo['owner']}/{repo['name']}/commits/{text}"
+        )
+    except GitHubNotFound:
+        raise ValueError(
+            f"cannot resolve {text!r} in {repo['owner']}/{repo['name']}: not found"
+        ) from None
     data = response.json() if response is not None else {}
     commit = data.get("commit") or {}
     author = commit.get("author") or {}
@@ -551,6 +576,16 @@ def set_installed(
         "commit_date": resolved["date"],
         "installed_at": installed_at or now,
         "status": status.get("repos", [{}])[0] if status.get("repos") else None,
+        **(
+            {
+                "hint": (
+                    "this repo is not watched, so repo_status() with no repo will not report"
+                    " it; call watch_repo to include it"
+                )
+            }
+            if not row["watch"]
+            else {}
+        ),
     }
 
 

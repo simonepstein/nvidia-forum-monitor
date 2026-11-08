@@ -29,6 +29,7 @@ uv run sparkwatch backfill --days 120  # widen the window; never re-crawls from 
 uv run sparkwatch repos check          # watched repos: head moved? new release or tag?
 uv run sparkwatch sync --repair-coverage --forum 723            # dry run: show the floor change
 uv run sparkwatch sync --repair-coverage --forum 723 --apply    # write it, then re-sync
+uv run sparkwatch sync --refresh-engagement --days 14 --budget 180  # refresh recent likes/answers
 ```
 
 `--repair-coverage` is explicit and per forum: it resets that forum's `listing_floor` to the

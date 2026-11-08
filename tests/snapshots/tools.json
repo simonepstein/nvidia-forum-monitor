@@ -27,6 +27,7 @@
   "model_summary",
   "record_benchmark",
   "record_recipe",
+  "refresh_engagement",
   "repo_events",
   "repo_status",
   "resolve_flag",

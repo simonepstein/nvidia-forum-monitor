@@ -349,20 +349,28 @@ def _watched_repos(conn: sqlite3.Connection, since_iso: str) -> list[dict[str, A
 def _repos_first_linked(
     conn: sqlite3.Connection, since_iso: str, limit: int
 ) -> list[dict[str, Any]]:
-    """One line per repo first linked since the cursor: candidate for watch_repo."""
+    """One line per repo first linked by a new post since the cursor: candidate for watch_repo.
+
+    Mirrors global_digest._window_first_linked: only mentions on posts that are *new* under
+    the digest definition count, so a link found in a backfilled post is not news.
+    """
+    params = window_params(since_iso)
     rows = conn.execute(
-        "SELECT r.owner, r.name, r.url, r.first_seen_at, m.post_id, m.topic_id,"
-        " p.post_number, t.title FROM repos r LEFT JOIN repo_mentions m ON m.repo_id = r.id"
-        " LEFT JOIN posts p ON p.id = m.post_id LEFT JOIN topics t ON t.id = m.topic_id"
-        " WHERE r.first_seen_at >= ? ORDER BY r.first_seen_at DESC LIMIT ?",
-        (since_iso, limit),
+        "SELECT r.id, r.owner, r.name, r.url, r.first_seen_at, COUNT(m.post_id) AS mentions"
+        " FROM repos r LEFT JOIN repo_mentions m ON m.repo_id = r.id"
+        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({NEW_POSTS}))"
+        " WHERE r.first_seen_at >= :since"
+        " GROUP BY r.id HAVING mentions > 0"
+        " ORDER BY r.first_seen_at DESC, r.owner, r.name LIMIT :limit",
+        {**params, "limit": limit},
     ).fetchall()
     return [
         {
             "repo": f"{row['owner']}/{row['name']}",
             "url": row["url"],
             "first_seen_at": row["first_seen_at"],
-            "post_url": _post_url(row["topic_id"], row["post_number"]) if row["topic_id"] else None,
+            "mentions": row["mentions"],
+            "post_url": _first_new_mention_url(conn, row["id"], params),
         }
         for row in rows
     ]
@@ -648,6 +656,19 @@ def _first_mention_url(
         f"SELECT m.post_id FROM {table} m JOIN posts p ON p.id = m.post_id"
         f" WHERE m.{id_column} = ? ORDER BY p.created_at, m.post_id LIMIT 1",
         (model_id,),
+    ).fetchone()
+    return knowledge.post_url(conn, row["post_id"]) if row is not None else None
+
+
+def _first_new_mention_url(
+    conn: sqlite3.Connection, repo_id: int, params: dict[str, str]
+) -> str | None:
+    """The earliest in-window new post that links the repo, using the digest's new rule."""
+    row = conn.execute(
+        "SELECT m.post_id FROM repo_mentions m JOIN posts p ON p.id = m.post_id"
+        f" WHERE m.repo_id = :repo_id AND ({NEW_POSTS})"
+        " ORDER BY p.created_at, m.post_id LIMIT 1",
+        {**params, "repo_id": repo_id},
     ).fetchone()
     return knowledge.post_url(conn, row["post_id"]) if row is not None else None
 
@@ -955,7 +976,10 @@ def render_global_digest(payload: dict[str, Any]) -> str:
     )
     for item in knowledge["items"]:
         urls = item.get("urls") or [source["url"] for source in item.get("sources") or []]
-        lines.append(f"- [{item['kind']}] {item['summary']} — {' '.join(urls) or '(no evidence)'}")
+        unique = list(dict.fromkeys(urls))
+        lines.append(
+            f"- [{item['kind']}] {item['summary']} — {' '.join(unique) or '(no evidence)'}"
+        )
 
     repo_events = payload["repo_events"]
     lines.append(
@@ -1055,7 +1079,10 @@ def render_digest(digest: dict[str, Any]) -> str:
 
     lines.append(f"\n## Repos first linked ({len(sections['repos_first_linked'])})")
     for item in sections["repos_first_linked"]:
-        lines.append(f"- {item['repo']} — {item['url']} ({item['first_seen_at']})")
+        post_url = item.get("post_url") or item["url"]
+        mentions = item.get("mentions") or 1
+        count = f", {mentions} mentions" if mentions > 1 else ""
+        lines.append(f"- {item['repo']} — {post_url} ({item['first_seen_at']}{count})")
 
     lines.append(f"\n## Open flags ({len(sections['open_flags'])})")
     for item in sections["open_flags"]:
