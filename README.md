@@ -49,6 +49,27 @@ Then, in Claude Code: *"catch me up"*, *"what's the best way to serve DeepSeek V
 
 To poke at the tools interactively: `uv run mcp dev src/sparkwatch/mcp_server.py`.
 
+## Workflows
+
+Four workflows are published through four channels, all built from one source
+(`src/sparkwatch/workflows.py`), so an agent finds them whichever channel its client shows:
+
+1. **MCP prompts** — `catch_up`, `serve_model`, `should_i_update`, `frontier`.
+2. **Tools** — `list_workflows()` lists each name with its purpose and arguments;
+   `get_workflow(name, args?)` returns the steps with the arguments filled in. These work
+   even when the client hides prompts.
+3. **Server instructions** — `FastMCP(instructions=…)` names the four workflows and says to
+   call `get_workflow(name)` for the steps. Many clients put this in the model's context.
+4. **Tool descriptions** — `sync_now`, `digest`, `model_summary` and `repo_status` point at
+   the workflow they belong to.
+
+| Workflow | Answers | Arguments |
+|---|---|---|
+| `catch_up` | "catch me up" — sync, digest, read, flag, record | — |
+| `serve_model` | "best way to serve X on two Sparks?" | `model`, `topology` |
+| `should_i_update` | "should I update this repo?" | `repo`, `label` |
+| `frontier` | "strongest models on two Sparks right now?" | `topology` |
+
 ## Run it in the background
 
 ```sh

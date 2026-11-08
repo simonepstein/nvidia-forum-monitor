@@ -51,11 +51,14 @@ from .repos import (
     watch_repo as _watch_repo,
 )
 from .util import parse_dt, utcnow, utcnow_iso
+from .workflows import INSTRUCTIONS
+from .workflows import get_workflow as _get_workflow
+from .workflows import list_workflows as _list_workflows
 
 FORUM_URL = "https://forums.developer.nvidia.com"
 EPOCH = "1970-01-01T00:00:00+00:00"
 
-mcp = FastMCP("sparkwatch")
+mcp = FastMCP("sparkwatch", instructions=INSTRUCTIONS)
 
 TOOLS: list[Any] = []
 
@@ -182,7 +185,7 @@ def sync_now(
     cleanly at the time budget and returns partial=true; call it again to continue. The
     repo check shares what is left of the budget and reports repos_partial=true if it was
     cut short. Returns titles for new and updated topics, plus watched repos whose head
-    moved or that got a release.
+    moved or that got a release. For a full catch-up, call get_workflow('catch_up').
     """
     from .sync import sync as run_sync
 
@@ -248,6 +251,7 @@ def digest(
     (unacknowledged watch sightings and open flags) are open state: they appear whenever
     they are open, so a digest is never empty even when nothing changed. Timing is based on
     when sparkwatch first saw a post, so backfilled posts are reported as a count, not as news.
+    Step 2 of get_workflow('catch_up') is this tool.
     """
     settings = _settings()
     conn = _conn(settings)
@@ -818,7 +822,7 @@ def repo_status(
 
     Answers "anything new since ...?" and "should I update?". Includes commits, releases,
     forum posts mentioning the repo since the install date, and open flags. Omit repo to
-    cover every watched repo.
+    cover every watched repo. Step 1 of get_workflow('should_i_update') is this tool.
     """
     settings = _settings()
     conn = _conn(settings)
@@ -1355,7 +1359,7 @@ def model_summary(model: str) -> dict[str, Any]:
     Returns metadata, aliases, mention counts over 7/30/60 days, active recipes newest first,
     benchmarks, latest research notes, open flags on the model, its recipes and its topics,
     the repos mentioned in the model's topics (watched first, at most 10, with a total) and
-    the topics with the most mentions.
+    the topics with the most mentions. Step 1 of get_workflow('serve_model') is this tool.
     """
     settings = _settings()
     conn = _conn(settings)
@@ -1767,64 +1771,45 @@ def resource_notes() -> str:
 @mcp.prompt(title="catch_up")
 def catch_up() -> str:
     """Catch me up on the DGX Spark forums."""
-    return (
-        "Catch up on the NVIDIA DGX Spark / GB10 forums.\n"
-        "1. Call sync_now, and call it again while it returns partial=true.\n"
-        "2. Call digest to see what changed since your last look.\n"
-        "3. For promising items, read them with get_posts(last_n=...) or get_post.\n"
-        "4. Flag what matters with flag: new models or quants, performance claims, breaking engine"
-        " changes, new recipes, watch sightings.\n"
-        "5. Record clear recipes and benchmarks with record_recipe / record_benchmark, quoting the"
-        " posts verbatim.\n"
-        "6. Reply with a short briefing and a source link for every claim."
-    )
+    return get_workflow("catch_up")["steps"]
 
 
 @mcp.prompt(title="serve_model")
 def serve_model(model: str, topology: str = "dual-spark") -> str:
     """Work out the best way to serve a model on DGX Spark hardware."""
-    return (
-        f"What is the best way to serve {model} on {topology} today?\n"
-        "1. Call model_summary and get_notes first, so you build on earlier conclusions.\n"
-        "2. Call whats_new_for for the model, since the latest note's as_of.\n"
-        "3. Read the newest relevant posts first with get_posts / get_post. Prefer recent reports,"
-        " multiple users and accepted answers. Watch for contradictions and note which engine"
-        " versions were used.\n"
-        "4. Answer with the recommended quant, engine and version, container, launch command and"
-        " flags, expected tok/s, gotchas, alternatives, and a source link and date per claim.\n"
-        "5. Then call record_recipe / record_benchmark with verbatim quotes, and save_note"
-        " (superseding the previous note)."
-    )
+    return get_workflow("serve_model", {"model": model, "topology": topology})["steps"]
 
 
 @mcp.prompt(title="should_i_update")
 def should_i_update(repo: str = "", label: str = "default") -> str:
     """Decide whether to update a watched repo."""
-    target = repo or "all watched repos"
-    return (
-        f"Should I update {target} (install label {label})?\n"
-        "1. Call repo_status.\n"
-        "2. For each repo that is behind, read the commit subjects and release notes. Pick out"
-        " fixes and features relevant to GB10/Spark, your models and your engine; note breaking"
-        " changes, dependency or CUDA bumps, and reverts.\n"
-        "3. Read the forum posts mentioning the repo since the installed date, looking for reports"
-        " that newer commits fix or break things.\n"
-        "4. Recommend one of: update now to <sha or tag>, wait for <reason>, or no relevant changes."
-        " Give the reasoning and links.\n"
-        "5. flag anything urgent, and save_note(subject='update check <repo>')."
-    )
+    return get_workflow("should_i_update", {"repo": repo, "label": label})["steps"]
 
 
 @mcp.prompt(title="frontier")
 def frontier(topology: str = "dual-spark") -> str:
     """Ask what the strongest models on two Sparks are right now."""
-    return (
-        f"What are the strongest models people run on {topology} right now?\n"
-        "1. Call list_watchlist, list_recipes(status='works'), list_benchmarks and get_notes.\n"
-        "2. Fill gaps with find_model_mentions for heavily mentioned models with no recipes yet.\n"
-        "3. Answer with a ranked list and its reasoning, showing quant and benchmark evidence.\n"
-        "4. Save the conclusion with save_note(subject='frontier " + topology + "')."
-    )
+    return get_workflow("frontier", {"topology": topology})["steps"]
+
+
+@tool
+def list_workflows() -> dict[str, Any]:
+    """List the four sparkwatch workflows with their purpose, arguments and usage.
+
+    Use this when you are unsure what to do next; get_workflow(name) returns the steps.
+    """
+    return {"workflows": _list_workflows(), "count": len(_list_workflows())}
+
+
+@tool
+def get_workflow(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return one workflow's step-by-step instructions, with its arguments filled in.
+
+    Workflows: catch_up (sync then digest), serve_model (best way to serve a model),
+    should_i_update (is a watched repo worth updating) and frontier (strongest models).
+    Call this at the start of a task; it is the same text as the MCP prompts.
+    """
+    return _get_workflow(name, args)
 
 
 def main() -> None:

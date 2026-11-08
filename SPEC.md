@@ -644,7 +644,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 - `sparkwatch://notes/latest`
 
 ### Workflows: prompts plus tool and instruction fallbacks (revised 2026-11-08)
-MCP prompts are controlled by the user, and client support varies. Even where a client shows them, the model can't call them. OpenFox, for example, doesn't show them at all. So each workflow below is published through **four channels, all built from a single source** (e.g. `workflows.py`):
+MCP prompts are controlled by the user, and client support varies. Even where a client shows them, the model can't call them. OpenFox, for example, doesn't show them at all. So each workflow below is published through **four channels, all built from a single source** (`workflows.py`):
 1. **MCP prompts**, as below.
 2. **Tools:** `list_workflows()` returns each name with a one-line purpose and its arguments. `get_workflow(name, args?)` returns the step text, with the arguments filled in.
 3. **Server instructions:** `FastMCP(instructions=…)` gets a short paragraph naming the four workflows and saying "call `get_workflow(name)` for the steps". Many clients put this in the model's context.

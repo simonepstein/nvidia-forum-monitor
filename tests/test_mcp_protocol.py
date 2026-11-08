@@ -200,6 +200,83 @@ def test_prompt_renders_workflow(settings):
     assert "GLM 5.3 Flash" in text
 
 
+def test_prompts_and_get_workflow_share_one_source(settings):
+    from sparkwatch import mcp_server as m
+
+    assert m.catch_up() == m.get_workflow("catch_up")["steps"]
+    assert m.frontier() == m.get_workflow("frontier")["steps"]
+    assert m.should_i_update() == m.get_workflow("should_i_update")["steps"]
+    assert (
+        m.serve_model("GLM 5.3 Flash")
+        == m.get_workflow("serve_model", {"model": "GLM 5.3 Flash"})["steps"]
+    )
+
+    served = m.get_workflow("serve_model", {"model": "Qwen4", "topology": "single-spark"})
+    assert served["steps"] == m.serve_model("Qwen4", "single-spark")
+    assert "Qwen4" in served["steps"]
+
+    updates = m.get_workflow("should_i_update", {"repo": "vllm-project/vllm"})
+    assert "vllm-project/vllm" in updates["steps"]
+    assert "all watched repos" in m.get_workflow("should_i_update")["steps"]
+
+
+def test_list_workflows_and_unknown_names(settings):
+    from sparkwatch import mcp_server as m
+
+    listed = m.list_workflows()
+    assert listed["count"] == 4
+    names = {workflow["name"] for workflow in listed["workflows"]}
+    assert names == {"catch_up", "serve_model", "should_i_update", "frontier"}
+    catch_up = next(item for item in listed["workflows"] if item["name"] == "catch_up")
+    assert catch_up["purpose"].startswith("Catch up")
+    assert catch_up["usage"] == "get_workflow('catch_up')"
+
+    with pytest.raises(ValueError, match="unknown workflow"):
+        m.get_workflow("nope")
+    with pytest.raises(ValueError, match="unknown argument"):
+        m.get_workflow("frontier", {"nope": "x"})
+
+
+def test_catch_up_tells_the_agent_to_classify_anticipated_hits(settings):
+    from sparkwatch import mcp_server as m
+
+    steps = m.get_workflow("catch_up")["steps"]
+    assert "rumour or release" in steps
+    assert "flag only releases" in steps
+
+
+def test_server_instructions_name_the_workflows(settings):
+    from sparkwatch.workflows import INSTRUCTIONS
+
+    for name in ("catch_up", "serve_model", "should_i_update", "frontier", "get_workflow"):
+        assert name in INSTRUCTIONS
+
+
+def test_tool_descriptions_point_at_their_workflow(settings):
+    from sparkwatch import mcp_server as m
+
+    assert "get_workflow('catch_up')" in m.sync_now.__doc__
+    assert "get_workflow('catch_up')" in m.digest.__doc__
+    assert "get_workflow('serve_model')" in m.model_summary.__doc__
+    assert "get_workflow('should_i_update')" in m.repo_status.__doc__
+
+
+def test_initialize_reports_workflow_instructions(settings):
+    db_path = settings.db_path
+    seed_db(db_path)
+
+    async def run():
+        async with stdio_client(server_params(db_path)) as (read, write):
+            async with ClientSession(read, write) as session:
+                result = await session.initialize()
+                return result.instructions
+
+    instructions = asyncio.run(run())
+    assert instructions
+    assert "get_workflow" in instructions
+    assert "catch_up" in instructions
+
+
 @pytest.mark.parametrize("name", sorted(EXPECTED_PROMPTS))
 def test_all_prompts_render(settings, name):
     db_path = settings.db_path
