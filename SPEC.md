@@ -550,9 +550,9 @@ This covers watched repos only.
      - If the SHA differs from `head_sha`, create a `head_moved` event with `prev_ref = old`, `ref = new`, the compare URL, and `commits_ahead` from the cached compare (below).
      - Then update `head_sha` and `head_seen_at`.
      - A 404 or 422 means the branch has gone: create a `branch_gone` event.
-  2. **Releases and tags:** `GET /repos/{o}/{n}/releases/latest` creates a `release` event, with the notes cut to 2,000 characters; a 404 means no releases. `GET /repos/{o}/{n}/tags?per_page=10` creates a `tag` event for each new tag.
+  2. **Releases and tags:** `GET /repos/{o}/{n}/releases/latest` creates a `release` event, with the notes cut to 2,000 characters; a 404 means no releases. `GET /repos/{o}/{n}/tags?per_page=10` creates a `tag` event only for a name that wasn't on the previous page: the names are kept in `repos.etags['seen_tags']` (no migration, ISSUES #52), so an ETag change alone creates nothing. A genuinely new tag's `occurred_at` is its commit date, from one `GET /repos/{o}/{n}/commits/{sha}` per new tag; if that isn't available it stays null rather than claiming the check time.
   3. **Repo metadata:** `GET /repos/{o}/{n}`, at most once a day, measured from the last **metadata** fetch (`repos.etags['meta_checked_at']`), not from `last_checked_at`, which every check moves. A 304 on the metadata ETag also counts as fetched. It refreshes `default_branch`, `archived` and `description`. `archived` turning true creates an `archived` event; a repo that stays archived does not repeat the event. It also stores GitHub's numeric `id` and merges rows that share it (§1, Identity); the response's `merged: [{from, to}]` reports any merge.
-- **Baseline:** the first check after `watch_repo` records the current head, latest release and tags. It creates no events.
+- **Baseline:** the first check after `watch_repo` records the current head, latest release and the tag names on the page (`repos.etags['seen_tags']`), and creates no events. A watched row with no recorded tag names — one watched before ISSUES #52 — is treated the same way on its next check.
 
 ### Comparing against what's installed (`repo_status`)
 1. **Recording an install:**
@@ -569,7 +569,7 @@ This covers watched repos only.
      - the digest and `list_installs` use the same names and direction.
    - the commit list: SHA, subject, author, date and URL, with the newest `max_compare_commits` listed and the total always given;
    - a summary of files changed, as the top changed directories with counts;
-   - releases and tags published after the base commit's date, with their notes;
+   - releases and tags published after the base commit's date, with their notes; a tag whose commit date couldn't be fetched sorts and filters by when sparkwatch saw it (`COALESCE(occurred_at, detected_at)`), while its stored `occurred_at` stays null;
    - forum posts that mention this repo since the base date, from `repo_mentions` plus an FTS search for `owner/name`. **People reporting that a new commit breaks or fixes something is the most useful signal here.**
    - any open flags on the repo.
 4. **Large comparisons:** GitHub's compare API lists at most 250 commits. Past that, the tool reports `behind_by` and the newest 50 commits, plus `truncated: true`.

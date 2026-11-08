@@ -768,3 +768,30 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - `occurred_at` should be the tag's commit date if it's worth one request per genuinely new tag; otherwise leave it null rather than claiming now.
 - **Cleanup:** a documented one-off, run by the user after the fix: `DELETE FROM repo_events WHERE repo_id=87 AND kind='tag' AND detected_at='2026-11-08T22:12:13+00:00';` (9 rows).
 - **Test:** two checks whose tag lists differ only in ETag should emit 0 events. Adding one new tag at the head should emit exactly 1.
+
+## #52 fix: tag events keyed on the names already seen (2026-11-08)
+- **`repos.py`:**
+  - `_save_seen_tags()` writes `repos.etags['seen_tags']`, the names listed by the last tags page, on every non-304 tags response. No migration; `_etags()` is now typed `dict[str, Any]` because the value is a list.
+  - A `tag` event is emitted only for a name absent from `seen_tags`. `latest_tag` still records `tags[0]`.
+  - If `seen_tags` is missing — the `watch_repo` baseline, or a row watched before this fix — the check records the names and emits nothing. Repo 87 therefore does not re-emit its 9 tags on its next check.
+  - `_tag_commit_date()` spends one `GET /repos/{o}/{n}/commits/{sha}` per genuinely new tag (the `commit.sha` from the tags payload, else the tag name) and returns `commit.committer.date`, then `commit.author.date`. A 404, any `GitHubError` (including `RateLimitStop`), or a payload without a date gives `null`; the event is still created. No tag is new → no extra request.
+  - `repo_status` now filters and orders its `releases` by `COALESCE(occurred_at, detected_at)`, so a tag with an unknown commit date still shows since the install; its stored `occurred_at` stays `null`.
+- **Tests (395 passed, 1 skipped; ruff check and format clean):**
+  - ETag-only change with the same three names → `changed: []`, 0 tag events, `seen_tags` refreshed.
+  - One new tag at the head → exactly 1 event, `occurred_at` from the mocked commit, exactly one `/commits/<new sha>` call and none for the older tags.
+  - A new tag whose commit lookup 404s → 1 event with `occurred_at: null`.
+  - A row with `latest_tag` but no `seen_tags` (the repo 87 shape) → 0 events, 10 names recorded.
+  - The baseline test now also asserts `etags['seen_tags'] == ['v0.11.0']`.
+  - `repo_status` lists a tag with `occurred_at` NULL when it was detected after the install date.
+- **Rehearsal (on `data/sparkwatch.db.backup-52`, a `sqlite3.backup()` copy; live DB untouched):**
+  - `repos check --repo eugr/spark-vllm-docker` → 3 requests, `auth: token`, `changed: []`. The tags ETag matched, so nothing was written.
+  - With the copy's tags ETag removed, the next check fetched all 10 names → `changed: []`, `seen_tags` = the 10 `staging-current-*` names, tag events still 9.
+- **#51 review (c0b7757), read at 041cf50:**
+  - The `.env` support is sound. `load_dotenv(path, override=False)` runs from `get_settings()`, so both the CLI and the MCP server pick it up before `GitHubClient` reads `GITHUB_TOKEN`; the lazy `from dotenv import …` keeps the dependency soft; the autouse `_no_env_file` fixture stops a real `.env` leaking into the suite; `auth` comes from `client.token`, so no secret reaches the payload. The `.env` in the worktree is the user's own.
+  - Noted, not changed: `_merge_by_github_id` unions etags with the winner's values winning, so a survivor with a stale `seen_tags` can emit one tag after a merge. Same class as #52, harmless while tags only come from the page of 10.
+- **What to test (user, on the live DB):**
+  1. `SELECT COUNT(*) FROM repo_events WHERE repo_id=87 AND kind='tag' AND detected_at='2026-11-08T22:12:13+00:00';` → **9**.
+  2. `DELETE FROM repo_events WHERE repo_id=87 AND kind='tag' AND detected_at='2026-11-08T22:12:13+00:00';` → **9 rows deleted**. Then the same `SELECT` returns 0 and `repo_status --repo eugr/spark-vllm-docker` no longer lists those 9 tags. (Not run here; live writes stay with the user.)
+  3. `uv run sparkwatch repos check --repo eugr/spark-vllm-docker` → `changed: []`, `auth: token`, and `repos.etags['seen_tags']` holds the 10 current names.
+  4. `uv run sparkwatch repos check` → no `tag` entries in `changed` for repos whose tags page only changed ETag.
+  5. Optionally `check_repos_now` from the MCP session gives the same result.

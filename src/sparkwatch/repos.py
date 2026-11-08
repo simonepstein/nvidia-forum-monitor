@@ -106,7 +106,7 @@ class GitHubClient:
         return response.status_code, response, response.headers.get("ETag")
 
 
-def _etags(repo: Any) -> dict[str, str]:
+def _etags(repo: Any) -> dict[str, Any]:
     return loads(repo["etags"], {}) or {}
 
 
@@ -118,6 +118,50 @@ def _save_etag(conn: sqlite3.Connection, repo_id: int, key: str, etag: str | Non
     else:
         etags.pop(key, None)
     conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+
+
+def _save_seen_tags(conn: sqlite3.Connection, repo_id: int, names: list[str]) -> None:
+    """Record the tag names listed by the last tags page, so the next check can diff.
+
+    ISSUES #52: `latest_tag` alone says nothing about the rest of the page, so any
+    non-304 tags response (an ETag change is enough) reported every listed tag as new.
+    The names live in `repos.etags['seen_tags']`, like `meta_checked_at`, so no migration.
+    """
+    row = conn.execute("SELECT etags FROM repos WHERE id=?", (repo_id,)).fetchone()
+    etags = loads(row["etags"], {}) or {}
+    etags["seen_tags"] = list(names)
+    conn.execute("UPDATE repos SET etags=? WHERE id=?", (dumps(etags), repo_id))
+
+
+def _tag_commit_date(client: GitHubClient, repo: Any, tag: dict[str, Any]) -> str | None:
+    """The date of a genuinely new tag's commit, from one extra request per new tag.
+
+    Returns None rather than claiming the check time when the date isn't available
+    (a 404, an API error, the rate-limit floor, or a payload without a date).
+    """
+    ref = (tag.get("commit") or {}).get("sha") or tag.get("name")
+    if not ref:
+        return None
+    try:
+        _status, response, _etag = client.get(
+            f"/repos/{repo['owner']}/{repo['name']}/commits/{ref}"
+        )
+    except GitHubError:
+        return None
+    if response is None:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    commit = payload.get("commit") if isinstance(payload, dict) else None
+    if not isinstance(commit, dict):
+        return None
+    for who in ("committer", "author"):
+        date = (commit.get(who) or {}).get("date")
+        if date:
+            return date
+    return None
 
 
 def _save_meta_checked(conn: sqlite3.Connection, repo_id: int, when_iso: str) -> None:
@@ -627,23 +671,28 @@ def check_repos(
                     response = None
                     status = 404
                 if status != 304 and response is not None:
-                    tags = [tag.get("name") for tag in response.json() if tag.get("name")]
+                    entries = [item for item in response.json() if item.get("name")]
+                    tags = [item["name"] for item in entries]
+                    seen = _etags(row).get("seen_tags")
                     _save_etag(conn, repo_id, "tags", new_etag)
-                    known = row["latest_tag"]
-                    new_tags = [tag for tag in tags if tag != known]
-                    if not baseline:
-                        for tag in new_tags:
+                    _save_seen_tags(conn, repo_id, tags)
+                    if isinstance(seen, list) and not baseline:
+                        for item in entries:
+                            if item["name"] in seen:
+                                continue
                             _event(
                                 conn,
                                 repo_id,
                                 "tag",
-                                tag,
+                                item["name"],
                                 now_iso,
-                                title=tag,
-                                url=f"{row['url']}/releases/tag/{tag}",
-                                occurred_at=now_iso,
+                                title=item["name"],
+                                url=f"{row['url']}/releases/tag/{item['name']}",
+                                occurred_at=_tag_commit_date(client, row, item),
                             )
-                            changed.append({"repo": f"{row['owner']}/{row['name']}", "tag": tag})
+                            changed.append(
+                                {"repo": f"{row['owner']}/{row['name']}", "tag": item["name"]}
+                            )
                     if tags:
                         conn.execute("UPDATE repos SET latest_tag=? WHERE id=?", (tags[0], repo_id))
 
@@ -967,8 +1016,8 @@ def repo_status(
             release_rows = conn.execute(
                 "SELECT kind, ref, title, body_excerpt, url, occurred_at FROM repo_events"
                 " WHERE repo_id=? AND kind IN ('release','tag')"
-                + (" AND occurred_at >= ?" if base_date else "")
-                + " ORDER BY occurred_at DESC",
+                + (" AND COALESCE(occurred_at, detected_at) >= ?" if base_date else "")
+                + " ORDER BY COALESCE(occurred_at, detected_at) DESC",
                 (row["id"], base_date) if base_date else (row["id"],),
             ).fetchall()
             entry["releases"] = [dict(release) for release in release_rows]

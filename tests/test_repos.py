@@ -58,6 +58,7 @@ def test_watch_repo_baseline_records_head_without_events(settings, conn, router,
         "SELECT * FROM repos WHERE url=?", (f"https://github.com/{REPO}",)
     ).fetchone()
     assert row["latest_release_tag"] == "v0.11.0"
+    assert loads(row["etags"], {})["seen_tags"] == ["v0.11.0"]
     assert row["last_checked_at"] is not None
 
 
@@ -632,3 +633,110 @@ def test_repos_check_reports_auth_mode_without_the_token(settings, conn, monkeyp
     result = check_repos(conn, settings)
     assert result["auth"] == auth
     assert "ghp_dummy" not in dumps(result)
+
+
+def repo_etags(conn) -> dict:
+    row = conn.execute(
+        "SELECT etags FROM repos WHERE url=?", (f"https://github.com/{REPO}",)
+    ).fetchone()
+    return loads(row["etags"], {})
+
+
+def tag_events(conn) -> list:
+    return conn.execute("SELECT * FROM repo_events WHERE kind='tag' ORDER BY id").fetchall()
+
+
+def test_tags_etag_change_alone_creates_no_events(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0", "v0.10.0", "v0.9.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        [{"name": "v0.11.0"}, {"name": "v0.10.0"}, {"name": "v0.9.0"}],
+        headers={"ETag": '"tags-rotated"'},
+    )
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == []
+    assert tag_events(conn) == []
+    assert repo_etags(conn)["seen_tags"] == ["v0.11.0", "v0.10.0", "v0.9.0"]
+
+
+def test_one_new_tag_at_the_head_creates_exactly_one_event(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0", "v0.10.0"))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        [
+            {"name": "v0.12.0", "commit": {"sha": SHA2}},
+            {"name": "v0.11.0", "commit": {"sha": SHA1}},
+            {"name": "v0.10.0", "commit": {"sha": "c" * 40}},
+        ],
+        headers={"ETag": '"tags-new"'},
+    )
+    github.add(
+        f"{BASE}/commits/{SHA2}",
+        {"commit": {"committer": {"date": "2026-02-02T03:04:05+00:00"}}},
+    )
+    check_repos(conn, settings, repo=REPO)
+
+    events = tag_events(conn)
+    assert [event["ref"] for event in events] == ["v0.12.0"]
+    assert events[0]["occurred_at"] == "2026-02-02T03:04:05+00:00"
+    assert github.calls.count(f"{BASE}/commits/{SHA2}") == 1
+    assert github.calls.count(f"{BASE}/commits/{SHA1}") == 0
+    assert github.calls.count(f"{BASE}/commits/{'c' * 40}") == 0
+    assert repo_etags(conn)["seen_tags"] == ["v0.12.0", "v0.11.0", "v0.10.0"]
+
+
+def test_a_new_tag_without_a_commit_date_leaves_occurred_at_null(settings, conn, router, github):
+    baseline(github, tags=("v0.11.0",))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        [{"name": "v0.12.0"}, {"name": "v0.11.0"}],
+        headers={"ETag": '"tags-again"'},
+    )
+    check_repos(conn, settings, repo=REPO)
+
+    events = tag_events(conn)
+    assert [event["ref"] for event in events] == ["v0.12.0"]
+    assert events[0]["occurred_at"] is None
+
+
+def test_a_row_without_seen_tags_treats_the_tags_page_as_a_baseline(settings, conn, router, github):
+    baseline(github, tags=("staging-current-1790687448",))
+    github.install(router)
+    watch_repo(conn, REPO, settings=settings)
+
+    etags = repo_etags(conn)
+    etags.pop("seen_tags", None)
+    conn.execute(
+        "UPDATE repos SET etags=? WHERE url=?",
+        (dumps(etags), f"https://github.com/{REPO}"),
+    )
+
+    github.add(f"{BASE}/commits/main", None, status=304)
+    github.add(f"{BASE}/releases/latest", None, status=304)
+    github.add(
+        f"{BASE}/tags",
+        [{"name": f"staging-current-{n}"} for n in range(9)]
+        + [{"name": "staging-current-1790687448"}],
+        headers={"ETag": '"tags-after-upgrade"'},
+    )
+    payload = check_repos(conn, settings, repo=REPO)
+
+    assert payload["changed"] == []
+    assert tag_events(conn) == []
+    assert len(repo_etags(conn)["seen_tags"]) == 10

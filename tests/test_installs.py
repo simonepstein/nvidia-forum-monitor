@@ -146,6 +146,24 @@ def test_repo_status_reports_commits_releases_and_mentions(settings, conn, route
     assert entry["forum_mentions"][0]["post_id"] == 9001
 
 
+def test_repo_status_lists_a_tag_with_no_occurred_at_since_the_install(
+    settings, conn, router, github
+):
+    prepare(settings, conn, router, github)
+    github.add(f"{BASE}/compare/{OLD}...{HEAD}", COMPARE)
+    set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
+
+    conn.execute(
+        "INSERT INTO repo_events (repo_id, kind, ref, title, occurred_at, detected_at)"
+        " SELECT id, 'tag', 'v0.12.0', 'v0.12.0', NULL, ? FROM repos WHERE url=?",
+        ("2026-02-02T00:00:00+00:00", f"https://github.com/{REPO}"),
+    )
+
+    entry = repo_status(conn, settings, repo=REPO)["repos"][0]
+    assert [release["ref"] for release in entry["releases"]] == ["v0.12.0"]
+    assert entry["releases"][0]["occurred_at"] is None
+
+
 def test_repo_status_and_digest_agree_on_direction(settings, conn, router, github):
     from sparkwatch.digest import build_digest
 
