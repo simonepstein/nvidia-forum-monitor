@@ -95,6 +95,7 @@ src/sparkwatch/
   normalize.py   # model/quant/engine/benchmark canonicalisation
   fit.py         # memory fit estimate (an advisory warning on recipes)
   evidence.py    # verify_quote(), shared by recipes and benchmarks
+  knowledge.py   # flag target URLs and note sources (ISSUES #36)
   repos.py       # GitHub monitoring of watched repos + compare against installed SHAs
   digest.py      # builds the "since last time" digest
   lock.py        # fcntl lock on data/sparkwatch.lock for write jobs (sync, repos check, triage)

@@ -5,6 +5,7 @@ import sqlite3
 from datetime import timedelta
 from typing import Any
 
+from . import knowledge
 from .config import Settings, get_settings
 from .util import parse_dt, to_iso, utcnow_iso
 
@@ -363,7 +364,10 @@ def _open_flags(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         "SELECT id, target_type, target_id, label, priority, reason, created_at FROM flags"
         " WHERE resolved_at IS NULL ORDER BY priority, created_at DESC"
     ).fetchall()
-    return [{**dict(row), "reason": _snippet(row["reason"], FLAG_REASON_CHARS)} for row in rows]
+    return [
+        {**flag, "reason": _snippet(flag["reason"], FLAG_REASON_CHARS)}
+        for flag in knowledge.flags_payload(conn, rows)
+    ]
 
 
 def build_digest(
@@ -502,9 +506,10 @@ def render_digest(digest: dict[str, Any]) -> str:
 
     lines.append(f"\n## Open flags ({len(sections['open_flags'])})")
     for item in sections["open_flags"]:
+        where = item.get("url") or item.get("model") or "(target missing)"
         lines.append(
             f"- [P{item['priority']}] {item['label']} on {item['target_type']}"
-            f" {item['target_id']}: {item['reason']}"
+            f" {item['target_id']} — {where}: {item['reason']}"
         )
 
     if digest["backfilled"]["posts"]:

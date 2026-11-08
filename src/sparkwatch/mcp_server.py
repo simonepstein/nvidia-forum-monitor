@@ -9,7 +9,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
-from . import evidence, fit, normalize
+from . import evidence, fit, knowledge, normalize
 from . import watch as watch_mod
 from .config import Settings, describe_validation_error, get_settings
 from .db import open_db
@@ -143,7 +143,7 @@ def _flag_rows(conn: sqlite3.Connection, open_only: bool = True) -> list[dict[st
     rows = conn.execute(
         f"SELECT * FROM flags{clause} ORDER BY priority, created_at DESC"
     ).fetchall()
-    return [dict(row) for row in rows]
+    return knowledge.flags_payload(conn, rows)
 
 
 def _recipe_row(conn: sqlite3.Connection, recipe_id: int) -> dict[str, Any] | None:
@@ -701,13 +701,13 @@ def get_topic_overview(topic_id: int) -> dict[str, Any]:
                 (topic_id,),
             )
         ],
-        "flags": [
-            dict(row)
-            for row in conn.execute(
+        "flags": knowledge.flags_payload(
+            conn,
+            conn.execute(
                 "SELECT * FROM flags WHERE target_type='topic' AND target_id=?",
                 (str(topic_id),),
-            )
-        ],
+            ).fetchall(),
+        ),
     }
 
 
@@ -1326,6 +1326,7 @@ def _compact_note(row: dict[str, Any]) -> dict[str, Any]:
         "subject": row.get("subject"),
         "as_of": row.get("as_of"),
         "body": _snippet(row.get("body"), NOTE_BODY_CHARS),
+        "sources": row.get("sources") or [],
     }
 
 
@@ -1564,7 +1565,7 @@ def get_notes(
     rows = conn.execute(
         f"SELECT * FROM research_notes{where} ORDER BY created_at DESC LIMIT 50", params
     ).fetchall()
-    return {"count": len(rows), "notes": [dict(row) for row in rows]}
+    return {"count": len(rows), "notes": [knowledge.note_payload(conn, row) for row in rows]}
 
 
 @tool
@@ -1837,7 +1838,7 @@ def resource_notes() -> str:
     rows = conn.execute(
         "SELECT * FROM research_notes WHERE superseded_by IS NULL ORDER BY created_at DESC LIMIT 20"
     ).fetchall()
-    return json.dumps([dict(row) for row in rows], default=str)
+    return json.dumps([knowledge.note_payload(conn, row) for row in rows], default=str)
 
 
 # --------------------------------------------------------------------------
