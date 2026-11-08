@@ -864,3 +864,32 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 - **Change:** `repos._event` normalises `occurred_at` with `to_iso(parse_dt(...))` for every event kind, so release `published_at` and tag commit dates are stored as `YYYY-MM-DDTHH:MM:SS+00:00`. An unparseable value is stored as null, not verbatim.
 - **Test:** `test_github_z_dates_are_stored_in_the_canonical_format`, with a `…Z` release and a `…Z` tag commit date. It fails without the fix and passes with it. Full suite: 401 passed, 1 skipped. ruff is clean.
 - **No data repair needed:** the live `repo_events.occurred_at` has no `Z` values.
+
+---
+
+## Deferred: simplify the MCP tool surface (TODO, only once usage is evidenced)
+Recorded 2026-11-08 at the user's request. **Don't act on this until there's evidence from real agent sessions.**
+
+**Proposal:** go from 43 tools to about 28, with no loss of capability.
+- **Merge overlapping reads:**
+  - `get_post` into `get_posts`;
+  - `find_model_mentions`, `whats_new_for` and `model_summary` into one model view;
+  - `repo_events` into `get_repo`, and `list_installs` into `repo_status`;
+  - `add_watch` and `update_watch` into one upsert.
+- **Leave simple `list_*` lookups to `sql_query`** where an agent already uses it.
+- **Optionally, hide the knowledge-curation tools behind a config switch:** recipes, benchmarks, `review_proposed`, `set_review`, and the flag lifecycle. Only do this if they stay nearly empty; on 2026-11-08 there were 3 recipes, 0 benchmarks, 2 flags and 5 notes.
+- **Keep `review_proposed`/`set_review` if Run B goes ahead**, because triage proposes recipes through them.
+
+**Evidence to gather first:** tool-call counts from Claude Code session traces, over a few weeks of normal use (`catch_up`, `/blogpost`, model questions):
+```sh
+cat ~/.claude/projects/-home-simon-dev-nvidia-forum-monitor/*.jsonl \
+  | grep -o '"name":"mcp__sparkwatch__[a-z_]*"' | sort | uniq -c | sort -rn
+```
+Also look for wrong-tool picks: an agent calling three model tools for one question, or `sql_query` used for something a tool already does.
+
+**Baseline (2026-11-08, 5 sessions, mostly testing, so biased):**
+- Most used: `get_posts` 71, `global_digest` 20, `model_summary` 18, `get_post` 18, `get_workflow` 17. Then `list_recipes`, `list_benchmarks` and `get_topic_overview` at 15 each.
+- `whats_new_for`, `find_model_mentions`, `search_posts` and `set_installed` at 12 each; `sql_query` 11.
+- 29 of the 43 tools were called at least once.
+
+**Decide with fresh numbers.** Tools that are never called become candidates for removal or hiding. Overlapping tools that are called together become candidates for merging.
