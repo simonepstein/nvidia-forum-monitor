@@ -245,6 +245,40 @@ Notes:
 
 ---
 
+## P1/P2 fix: title matches are notifications (2026-11-08 17:15, `fix/run-a-issues` @ 6a28e85 + working tree)
+
+#34 and #35 are fixed. Title matches are kept as notifications, but they now go to watch **activity**; they never raise the sighting alert and never count as mentions.
+
+- **Where a hit matched** is recorded on `watch_hits.matched_in` (`title` | `body`), with `matched_text` from the same match. One matcher, `watch._match`, checks the body first and is shared by `match_post`, `rematch_watch` and `rematch_all`; both rematch paths run with `is_new=False`, so changing a regex can never raise a sighting.
+- **Sighting (#34):** a release raises the alert only from a **post body**, or from the **OP** (`post_number = 1`) of a **newly stored topic** whose title matches. A reply that only matches the topic title is thread activity, so a thread titled "Qwen4 is out" can no longer reopen the alert. After an ack, only a post **created after** it re-arms the alert. An edit raises nothing (now a documented choice in SPEC §1, not a gap).
+- **Thread activity (#35):** the digest's `watchlist_activity[].threads` and `find_model_mentions.threads` report title-only hits per topic with ordinary (start-of-post) snippets. Every reply is counted — the digest head line carries `replies` and `threads_total`, e.g. `GLM 5.3 Flash (tracking): 21 new mention(s), 31 new replies in 3 threads (+1 more)` — while `threads` lists at most 2 topics with their 2 newest replies. `model_summary` gains `threads` (3 at most) with `body_posts` / `title_posts`.
+- **Mention counts are body-only:** `model_summary.mentions` and `top_topics`, `find_model_mentions.total_posts`, `list_watchlist.hits_7d` / `hits_30d` (beside new `replies_7d` / `replies_30d` and `latest_reply`), `get_topic_overview.watch_hits[].count` (beside `replies` and `latest_reply`).
+- **Migration 5** adds `matched_in` and backfills it **in one transaction** (a callable migration step, because `executescript` would commit the ALTER on its own). A crash leaves v4 and the next open retries. Run B triage moves to migration 6 (SPEC §6).
+- **Tests:** 306 passed, 1 skipped. Ruff clean.
+- **Rehearsal:** `/tmp/swcopy4/sparkwatch.db` is a genuine **v4** copy of the live data (3,640 hits, taken 16:29). Migrating it produced exactly the numbers below.
+- **Note:** by the time a fresh copy was taken, the live DB was **already v5** — a process using the new code had opened it after the edits (any `open_db` migrates). Its post-state matches the rehearsal exactly, and a one-page `sync --forum 723` afterwards changed nothing.
+
+### What to test
+
+| # | Check | Expected |
+|---|---|---|
+| 1 | `PRAGMA user_version` | `5` |
+| 2 | `select matched_in, count(*) from watch_hits group by 1` | `body\|1142`, `title\|2498` |
+| 3 | `select count(*) from watch_hits` | `3640` (plus any later posts) |
+| 4 | Qwen4 split: `select h.matched_in, count(*) from watch_hits h join watchlist w on w.id=h.watch_id where w.label='Qwen4' group by 1` | `body\|39`, `title\|41` |
+| 5 | `select count(*) from watch_hits where matched_in='body' and matched_text is null` | `0` |
+| 6 | Qwen4 alert after the migration and a sync: `select sighting_post_id, sighting_acked_at from watchlist where label='Qwen4'` | `NULL` / `2026-11-08T13:28:37+00:00` |
+| 7 | `uv run sparkwatch digest --since 2026-11-01 --no-advance --limit 6` | Qwen4: `9 new mention(s), 12 new replies in 1 thread`, then `thread Qwen4 — …/t/388002: 12 new replies`; GLM: `31 new replies in 3 threads (+1 more)`, listed under the thread, not the mentions |
+| 8 | `uv run sparkwatch digest --no-advance --json \| wc -c` (default cursor) | ~8.5 KB, still under the 10 KB budget |
+| 9 | `model_summary("GLM 5.3 Flash").top_topics[0].topic_id` | `381350` (158 body mentions), with `mentions` body-only (`~17 / 124 / 372` for 7/30/60 days) |
+| 10 | `model_summary("Qwen4").mentions` (body-only) and its `threads` | `{7d: 9, 30d: 14, 60d: 37}`; threads show 383964 (`body_posts 2` / `title_posts 29`) and 388002 (`2` / `12`) |
+| 11 | `list_watchlist` for GLM | `hits_7d 17`, `hits_30d 124`, `replies_7d 30`, `replies_30d 206` |
+| 12 | `get_topic_overview(383964)` watch hits for Qwen4 | `count 2` (body) beside `replies 29` (title) |
+| 13 | Migration atomicity (offline): `uv run pytest -q tests/test_db.py -k migration_five` | passes: a failure inside the backfill leaves `user_version = 4` and no `matched_in` column |
+
+
+---
+
 ## #34/#35 re-test (2026-11-08 17:35, `fix/run-a-issues` @ dbd3d08)
 Verified independently:
 - Recomputing title versus body from the stored posts agrees with `matched_in` on all 3,640 hits (0 disagreements), and `matched_text` matches the body text. Body 1,142 / title 2,498.
