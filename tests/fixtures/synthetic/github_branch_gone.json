@@ -1,0 +1,6 @@
+{
+  "description": "GitHub 404 for a branch that has gone away.",
+  "status": 404,
+  "body": {"message": "Not Found", "documentation_url": "https://docs.github.com/rest"},
+  "headers": {}
+}

@@ -297,7 +297,7 @@ def search_posts(
     since: str | None = None,
     username: str | None = None,
     order: str = "rank",
-    limit: int = 20,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Full-text search the mirrored forum posts (FTS5, porter stemming).
 
@@ -353,7 +353,9 @@ def search_posts(
 
 
 @tool
-def find_model_mentions(model: str, since: str | None = None, limit: int = 20) -> dict[str, Any]:
+def find_model_mentions(
+    model: str, since: str | None = None, limit: int | None = None
+) -> dict[str, Any]:
     """Find every post that mentions a model, grouped by topic, newest first.
 
     Use this when recipes are missing for a model people keep talking about.
@@ -403,7 +405,7 @@ def list_topics(
     since: str | None = None,
     relevant_only: bool = False,
     order: str = "bumped",
-    limit: int = 20,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List topics, ordered by bump time, relevance, likes or creation date."""
     settings = _settings()
@@ -662,7 +664,7 @@ def get_post(post_id: int, with_parent: bool = True, with_replies: bool = True) 
 
 @tool
 def list_repos(
-    watched: bool | None = None, order: str = "mentions", limit: int = 20
+    watched: bool | None = None, order: str = "mentions", limit: int | None = None
 ) -> dict[str, Any]:
     """List GitHub repos linked from forum posts, with mention counts.
 
@@ -719,7 +721,7 @@ def check_repos_now(repo: str | None = None) -> dict[str, Any]:
 
 
 @tool
-def list_hf_models(limit: int = 20) -> dict[str, Any]:
+def list_hf_models(limit: int | None = None) -> dict[str, Any]:
     """List Hugging Face repos linked from posts, with mention counts.
 
     HF is recorded only and never polled: the forum is the curator for new models.
@@ -1028,7 +1030,7 @@ def list_recipes(
     since: str | None = None,
     include_superseded: bool = False,
     review: str = "accepted",
-    limit: int = 20,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List recorded recipes, newest first, each with its evidence URLs.
 
@@ -1072,7 +1074,7 @@ def list_benchmarks(
     model: str | None = None,
     benchmark: str | None = None,
     quant: str | None = None,
-    limit: int = 20,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List recorded benchmark results."""
     settings = _settings()

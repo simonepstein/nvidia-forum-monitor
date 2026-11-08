@@ -4,7 +4,7 @@ import time
 
 import httpx
 import pytest
-from conftest import listing, make_post, make_topic
+from conftest import listing, make_post, make_topic, synthetic
 
 from sparkwatch.discourse import (
     DiscourseClient,
@@ -46,7 +46,7 @@ def test_rate_limiter_spaces_requests():
 
 def test_429_honours_retry_after(settings, router, forum):
     forum.add_topic({"id": 13, "title": "t", "post_stream": {"posts": [], "stream": []}})
-    forum.topic_status[13] = [429, 200]
+    forum.add_topic_responses(13, synthetic("errors_429.json")["responses"])
     forum.install(router)
     client = DiscourseClient(settings)
     started = time.monotonic()
@@ -59,7 +59,7 @@ def test_429_honours_retry_after(settings, router, forum):
 
 def test_5xx_retries_then_raises(settings, router, forum):
     settings.forum.max_retries = 1
-    forum.topic_status[14] = [500]
+    forum.add_topic_responses(14, synthetic("errors_500.json")["responses"])
     forum.install(router)
     client = DiscourseClient(settings)
     with pytest.raises(RetryableError):
@@ -68,8 +68,8 @@ def test_5xx_retries_then_raises(settings, router, forum):
 
 
 def test_404_and_403_are_not_retried(settings, router, forum):
-    forum.topic_status[15] = [404]
-    forum.topic_status[16] = [403]
+    forum.add_topic_responses(15, synthetic("errors_404.json")["responses"])
+    forum.add_topic_responses(16, synthetic("errors_403.json")["responses"])
     forum.install(router)
     client = DiscourseClient(settings)
     with pytest.raises(NotFoundError):

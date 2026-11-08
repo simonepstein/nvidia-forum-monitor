@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -14,6 +15,8 @@ from .discourse import DiscourseClient, DiscourseError, ForbiddenError, NotFound
 from .util import dumps, parse_dt, to_iso, utcnow, utcnow_iso
 
 STORED_POST_TYPES = {1, 2}
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -436,8 +439,10 @@ def sync(
                         conn, client, settings, topic_id, floor, backfill, result, started, deadline
                     )
                 except (NotFoundError, ForbiddenError) as exc:
+                    logger.warning("skipping topic %s: %s", topic_id, exc)
                     result.errors.append(f"topic {topic_id}: {exc}")
                 except DiscourseError as exc:
+                    logger.warning("skipping topic %s: %s", topic_id, exc)
                     result.errors.append(f"topic {topic_id}: {exc}")
                 except Exception as exc:  # noqa: BLE001 - one topic must not stop the sync
                     result.errors.append(f"topic {topic_id}: {exc!r}")

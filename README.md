@@ -61,5 +61,9 @@ a lock, so an overlapping `sync_now` returns `{"busy": true, ...}` instead of bl
 - `uv run ruff check` and `uv run ruff format`.
 - `uv run python scripts/record_fixtures.py` — re-record the live sample (run once; not part of the suite).
 - `uv run python tests/evals/build_db.py` then `uv run python tests/evals/run.py` — manual, agent-driven evals.
+  - With `claude` on PATH it drives `claude -p` against the frozen database.
+  - With any other agent (OpenFox, or by hand), drive the tools yourself and then verify with
+    `uv run python tests/evals/run.py --check-only --answers tests/evals/answers.openfox.json`.
+  - `tests/evals/pause2_report.md` records a full checkpoint run done this way.
 
 Contributor and agent guidance is in [CLAUDE.md](CLAUDE.md).

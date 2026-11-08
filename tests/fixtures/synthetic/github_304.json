@@ -1,0 +1,5 @@
+{
+  "description": "GitHub conditional request that has not changed: 304 Not Modified.",
+  "status": 304,
+  "headers": {"ETag": "\"etag-unchanged\""}
+}

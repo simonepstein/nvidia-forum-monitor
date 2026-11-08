@@ -1,0 +1,13 @@
+{
+  "description": "Rate limited once: 429 with Retry-After, then the real answer.",
+  "responses": [
+    {
+      "status": 429,
+      "body": {"error": "rate limited", "errors": ["Slow down."]},
+      "headers": {"Retry-After": "1"}
+    },
+    {
+      "status": 200
+    }
+  ]
+}

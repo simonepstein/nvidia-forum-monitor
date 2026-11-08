@@ -1,0 +1,10 @@
+{
+  "description": "A deleted or private topic: the API answers 404.",
+  "responses": [
+    {
+      "status": 404,
+      "body": {"error": "not found", "errors": ["The requested topic does not exist."]},
+      "headers": {}
+    }
+  ]
+}

@@ -159,14 +159,19 @@ def listing(topics: list[dict[str, Any]], more: bool = False) -> dict[str, Any]:
 
 
 class ForumMock:
-    """A tiny stand-in for the Discourse JSON API, driven by recorded fixtures."""
+    """A tiny stand-in for the Discourse JSON API, driven by recorded fixtures.
+
+    Error scenarios come from tests/fixtures/synthetic/: a list of response specs, served
+    in order and repeating the last one.
+    """
 
     def __init__(self) -> None:
         self.pages: dict[int, list[dict[str, Any]]] = {}
         self.topics: dict[int, dict[str, Any]] = {}
         self.posts: dict[int, dict[int, dict[str, Any]]] = {}
-        self.topic_status: dict[int, list[int]] = {}
-        self.posts_status: dict[int, list[int]] = {}
+        self.topic_responses: dict[int, list[dict[str, Any]]] = {}
+        self.posts_responses: dict[int, list[dict[str, Any]]] = {}
+        self.counters: dict[tuple[str, int], int] = {}
         self.calls: list[tuple[str, int, Any]] = []
 
     def add_page(self, category_id: int, payload: dict[str, Any]) -> None:
@@ -184,10 +189,28 @@ class ForumMock:
         for post in posts:
             store[int(post["id"])] = post
 
+    def add_topic_responses(self, topic_id: int, specs: list[dict[str, Any]]) -> None:
+        self.topic_responses.setdefault(int(topic_id), []).extend(specs)
+
+    def add_posts_responses(self, topic_id: int, specs: list[dict[str, Any]]) -> None:
+        self.posts_responses.setdefault(int(topic_id), []).extend(specs)
+
     def install(self, router: respx.Router) -> None:
         router.get(url__regex=r".*/c/.+\.json.*").mock(side_effect=self._listing)
         router.get(url__regex=r".*/t/\d+\.json.*").mock(side_effect=self._topic)
         router.get(url__regex=r".*/t/\d+/posts\.json.*").mock(side_effect=self._posts)
+
+    def _spec(self, key: tuple[str, int], specs: list[dict[str, Any]]) -> dict[str, Any]:
+        index = self.counters.get(key, 0)
+        spec = specs[min(index, len(specs) - 1)]
+        self.counters[key] = index + 1
+        return spec
+
+    @staticmethod
+    def _error_response(spec: dict[str, Any]) -> httpx.Response:
+        status = int(spec["status"])
+        body = spec.get("body") or {"error": status}
+        return httpx.Response(status, json=body, headers=spec.get("headers") or {})
 
     def _listing(self, request: httpx.Request) -> httpx.Response:
         category_id = int(str(request.url.path).rsplit("/", 1)[-1].removesuffix(".json"))
@@ -201,12 +224,11 @@ class ForumMock:
     def _topic(self, request: httpx.Request) -> httpx.Response:
         topic_id = int(re.search(r"/t/(\d+)\.json", str(request.url)).group(1))
         self.calls.append(("topic", topic_id, None))
-        queued = self.topic_status.get(topic_id)
-        if queued:
-            status = queued.pop(0) if len(queued) > 1 else queued[0]
-            if status >= 400:
-                headers = {"Retry-After": "1"} if status == 429 else {}
-                return httpx.Response(status, json={"error": status}, headers=headers)
+        specs = self.topic_responses.get(topic_id)
+        if specs:
+            spec = self._spec(("topic", topic_id), specs)
+            if int(spec["status"]) >= 400:
+                return self._error_response(spec)
         payload = self.topics.get(topic_id)
         if payload is None:
             return httpx.Response(404, json={"error": "not found"})
@@ -216,17 +238,29 @@ class ForumMock:
         topic_id = int(re.search(r"/t/(\d+)/posts\.json", str(request.url)).group(1))
         requested = [int(value) for value in request.url.params.get_list("post_ids[]")]
         self.calls.append(("posts", topic_id, tuple(requested)))
-        queued = self.posts_status.get(topic_id)
-        if queued:
-            status = queued.pop(0) if len(queued) > 1 else queued[0]
-            if status >= 400:
-                return httpx.Response(status, json={"error": status})
+        specs = self.posts_responses.get(topic_id)
+        if specs:
+            spec = self._spec(("posts", topic_id), specs)
+            if int(spec["status"]) >= 400:
+                return self._error_response(spec)
         store = self.posts.get(topic_id, {})
         payload = {"post_stream": {"posts": [store[pid] for pid in requested if pid in store]}}
         return httpx.Response(200, json=payload)
 
     def post_requests(self) -> list[tuple[int, ...]]:
         return [call[2] for call in self.calls if call[0] == "posts"]
+
+
+def add_github_spec(github: GitHubMock, path: str, name: str, times: int = 1) -> None:
+    """Queue a synthetic GitHub response (tests/fixtures/synthetic/<name>) for a path."""
+    spec = synthetic(name)
+    for _ in range(times):
+        github.add(
+            path,
+            spec.get("body"),
+            status=int(spec["status"]),
+            headers=spec.get("headers") or {},
+        )
 
 
 class GitHubMock:

@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import time
 
-from conftest import listing, make_post, make_topic, topic_payload
+from conftest import (
+    fixture,
+    iso_days_ago,
+    listing,
+    make_post,
+    make_topic,
+    synthetic,
+    topic_payload,
+    topic_stub,
+)
 
 from sparkwatch.discourse import DiscourseClient
 from sparkwatch.sync import sync
@@ -15,26 +24,32 @@ def topic_with_stream(topic, posts, stream):
 
 
 def test_deleted_post_is_tombstoned_and_not_requested_again(settings, conn, router, forum):
-    topic = make_topic(201, bumped_days_ago=2, posts_count=3, highest_post_number=3)
-    posts = [make_post(2011, 201, 1, "op"), make_post(2013, 201, 3, "third")]
-    forum.add_page(723, listing([topic]))
-    forum.add_topic(topic_with_stream(topic, posts, [2011, 2012, 2013]), posts)
+    payload = synthetic("topic_deleted_post.json")
+    topic_id = int(payload["id"])
+    deleted_id = int(payload["synthetic_deleted_post_id"])
+    batch = synthetic("posts_deleted_post.json")["post_stream"]["posts"]
+    stub = topic_stub(721, topic_id)
+    stub["bumped_at"] = iso_days_ago(2)
+    forum.add_page(721, listing([stub]))
+    forum.add_topic(payload, batch)
     forum.install(router)
     client = DiscourseClient(settings)
 
-    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
-    row = conn.execute("SELECT * FROM missing_posts WHERE topic_id=201 AND post_id=2012").fetchone()
+    sync(settings=settings, conn=conn, client=client, forum_ids=[721])
+    row = conn.execute(
+        "SELECT * FROM missing_posts WHERE topic_id=? AND post_id=?", (topic_id, deleted_id)
+    ).fetchone()
     assert row is not None
     assert row["reason"] == "absent_from_batch"
 
     forum.calls.clear()
-    bumped = make_topic(201, bumped_days_ago=1, posts_count=3, highest_post_number=3)
-    forum.pages[723] = [listing([bumped])]
-    forum.add_topic(topic_with_stream(bumped, posts, [2011, 2012, 2013]), posts)
-    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    bumped = dict(stub)
+    bumped["bumped_at"] = iso_days_ago(1)
+    forum.pages[721] = [listing([bumped])]
+    sync(settings=settings, conn=conn, client=client, forum_ids=[721])
 
-    requested = [post_id for batch in forum.post_requests() for post_id in batch]
-    assert 2012 not in requested
+    requested = [post_id for batch_ids in forum.post_requests() for post_id in batch_ids]
+    assert deleted_id not in requested
 
 
 def test_backfill_rechecks_tombstones_and_restores_returning_posts(settings, conn, router, forum):
@@ -73,7 +88,7 @@ def test_404_topic_is_skipped_and_sync_continues(settings, conn, router, forum):
     forum.add_topic(
         topic_payload(good, [make_post(2041, 204, 1, "fine")]), [make_post(2041, 204, 1, "fine")]
     )
-    forum.topic_status[203] = [404]
+    forum.add_topic_responses(203, synthetic("errors_404.json")["responses"])
     forum.install(router)
 
     result = sync(settings=settings, conn=conn, client=DiscourseClient(settings), forum_ids=[723])
@@ -84,7 +99,7 @@ def test_404_topic_is_skipped_and_sync_continues(settings, conn, router, forum):
 def test_403_topic_is_skipped(settings, conn, router, forum):
     bad = make_topic(205, bumped_days_ago=2)
     forum.add_page(723, listing([bad]))
-    forum.topic_status[205] = [403]
+    forum.add_topic_responses(205, synthetic("errors_403.json")["responses"])
     forum.install(router)
 
     result = sync(settings=settings, conn=conn, client=DiscourseClient(settings), forum_ids=[723])
@@ -96,7 +111,7 @@ def test_429_then_success(settings, conn, router, forum):
     posts = [make_post(2061, 206, 1, "rate limited once")]
     forum.add_page(723, listing([topic]))
     forum.add_topic(topic_payload(topic, posts), posts)
-    forum.topic_status[206] = [429, 200]
+    forum.add_topic_responses(206, synthetic("errors_429.json")["responses"])
     forum.install(router)
     client = DiscourseClient(settings)
 
@@ -115,7 +130,7 @@ def test_persistent_5xx_fails_only_that_topic(settings, conn, router, forum):
     forum.add_topic(
         topic_payload(good, [make_post(2081, 208, 1, "ok")]), [make_post(2081, 208, 1, "ok")]
     )
-    forum.topic_status[207] = [503]
+    forum.add_topic_responses(207, synthetic("errors_500.json")["responses"])
     forum.install(router)
 
     result = sync(settings=settings, conn=conn, client=DiscourseClient(settings), forum_ids=[723])
@@ -124,28 +139,30 @@ def test_persistent_5xx_fails_only_that_topic(settings, conn, router, forum):
 
 
 def test_midthread_edit_inside_window_is_caught(settings, conn, router, forum):
-    topic = make_topic(209, bumped_days_ago=2, posts_count=3, highest_post_number=3)
-    posts = [
-        make_post(2091, 209, 1, "op"),
-        make_post(2092, 209, 2, "middle post about exl3", days_ago=2),
-        make_post(2093, 209, 3, "last post"),
-    ]
-    forum.add_page(723, listing([topic]))
-    forum.add_topic(topic_payload(topic, posts), posts)
+    topic_id = 388371
+    original = fixture("posts_388371_0.json")["post_stream"]["posts"]
+    edited = synthetic("posts_midthread_edit.json")["post_stream"]["posts"]
+    stub = topic_stub(721, topic_id)
+    stub["bumped_at"] = iso_days_ago(2)
+    forum.add_page(721, listing([stub]))
+    forum.add_topic(topic_payload(stub, original), original)
     forum.install(router)
     client = DiscourseClient(settings)
-    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    sync(settings=settings, conn=conn, client=client, forum_ids=[721])
 
-    edited = make_post(2092, 209, 2, "middle post about fp8 instead", days_ago=2, version=2)
-    bumped = make_topic(209, bumped_days_ago=1, posts_count=3, highest_post_number=3)
-    forum.pages[723] = [listing([bumped])]
-    forum.add_topic(
-        topic_payload(bumped, [posts[0], edited, posts[2]]), [posts[0], edited, posts[2]]
-    )
-    result = sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    edited_id = int(edited[1]["id"])
+    before = conn.execute("SELECT raw FROM posts WHERE id=?", (edited_id,)).fetchone()["raw"]
+    assert "fp8 on the second Spark" not in before
 
+    bumped = dict(stub)
+    bumped["bumped_at"] = iso_days_ago(1)
+    forum.pages[721] = [listing([bumped])]
+    forum.add_topic(topic_payload(bumped, edited), edited)
+    result = sync(settings=settings, conn=conn, client=client, forum_ids=[721])
+
+    after = conn.execute("SELECT raw FROM posts WHERE id=?", (edited_id,)).fetchone()["raw"]
     assert result.posts_changed == 1
-    assert "fp8 instead" in conn.execute("SELECT raw FROM posts WHERE id=2092").fetchone()[0]
+    assert "fp8 on the second Spark" in after
 
 
 def test_edit_older_than_refetch_window_is_not_caught(settings, conn, router, forum):
@@ -172,6 +189,36 @@ def test_edit_older_than_refetch_window_is_not_caught(settings, conn, router, fo
 
     assert result.posts_changed == 0
     assert "nvfp4" in conn.execute("SELECT raw FROM posts WHERE id=2102").fetchone()[0]
+
+
+def test_tombstone_is_rechecked_after_thirty_days(settings, conn, router, forum):
+    topic = make_topic(212, bumped_days_ago=2, posts_count=2, highest_post_number=2)
+    posts = [make_post(2121, 212, 1, "op")]
+    forum.add_page(723, listing([topic]))
+    forum.add_topic(topic_with_stream(topic, posts, [2121, 2122]), posts)
+    forum.install(router)
+    client = DiscourseClient(settings)
+
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+    assert conn.execute("SELECT COUNT(*) FROM missing_posts WHERE post_id=2122").fetchone()[0] == 1
+
+    conn.execute(
+        "UPDATE missing_posts SET last_checked_at=? WHERE topic_id=212 AND post_id=2122",
+        (iso_days_ago(40),),
+    )
+    forum.calls.clear()
+    bumped = make_topic(212, bumped_days_ago=1, posts_count=2, highest_post_number=2)
+    forum.pages[723] = [listing([bumped])]
+    forum.add_topic(topic_with_stream(bumped, posts, [2121, 2122]), posts)
+    sync(settings=settings, conn=conn, client=client, forum_ids=[723])
+
+    requested = [post_id for batch in forum.post_requests() for post_id in batch]
+    assert 2122 in requested
+    refreshed = conn.execute(
+        "SELECT last_checked_at FROM missing_posts WHERE topic_id=212 AND post_id=2122"
+    ).fetchone()
+    assert refreshed is not None
+    assert refreshed["last_checked_at"] > iso_days_ago(1)
 
 
 def test_deleted_and_hidden_posts_are_tombstoned(settings, conn, router, forum):

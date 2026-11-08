@@ -1,0 +1,10 @@
+{
+  "description": "A topic the anonymous user may not read: the API answers 403.",
+  "responses": [
+    {
+      "status": 403,
+      "body": {"error": "forbidden", "errors": ["You are not permitted to view the requested resource."]},
+      "headers": {}
+    }
+  ]
+}

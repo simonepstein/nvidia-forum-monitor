@@ -197,7 +197,9 @@ enabled = false                  # needs BRAVE_API_KEY
      - normally the cutoff is `last_synced_at`;
      - on the first run or during a backfill, it is the floor.
    - Topics bumped before the floor are not upserted.
-3. **Queue topics:** a topic is queued if it is new, if `highest_post_number` went up, if `bumped_at` changed, or if this is a backfill.
+3. **Queue topics:** a topic is queued if it is new, if `highest_post_number` went up, if `bumped_at` changed, if this is a backfill, or if `topics.posts_complete` is still 0.
+   - `posts_complete` is set to 1 when a topic's fetch ran to its natural end (every target batch older than the floor was skipped), and left at 0 when the time budget interrupted it.
+   - That is what makes a partial run resume: the topic is not re-queued once it is complete, and posts outside the window never force a re-fetch.
 4. **Fetch each queued topic:**
    1. Call `get_topic`, which gives the first 20 posts plus `stream`.
    2. **Target IDs** = IDs in `stream` that aren't stored yet, plus stored posts created within the last `refetch_recent_days`. IDs in `missing_posts` are excluded, unless their re-check is due (see below).
@@ -262,6 +264,7 @@ CREATE TABLE topics (
   posts_count INTEGER, highest_post_number INTEGER, views INTEGER, like_count INTEGER,
   pinned INTEGER DEFAULT 0, has_accepted_answer INTEGER DEFAULT 0,
   relevance_score REAL DEFAULT 0, relevance_override INTEGER,   -- NULL auto, 1 force-relevant, 0 force-irrelevant
+  posts_complete INTEGER NOT NULL DEFAULT 0,   -- migration 2: 0 = fetch was interrupted, 1 = ran to its natural end
   first_fetched_at TEXT, fetched_at TEXT);
 CREATE TABLE posts (
   id INTEGER PRIMARY KEY, topic_id INTEGER NOT NULL REFERENCES topics(id),
@@ -411,7 +414,7 @@ match_regex = 'qwen[\s._-]*4(?![\d.])'
 These are deterministic helpers, used by the agent write tools and later by triage.
 
 ### Model names
-1. Look up the alias in `model_aliases`, lowercased, with `-`, `_`, spaces and `.` collapsed.
+1. Look up the alias in `model_aliases`, lowercased, with `-`, `_` and spaces collapsed to `-`. Dots are preserved in canonical names because they carry version numbers (`glm-5.3-flash`); a second lookup with dots also collapsed (`glm-5-3-flash`) is tried before giving up, which is what makes `GLM 5.3 Flash` and `glm_5_3_flash` resolve to the same model.
 2. If there's no match, strip quant or format suffixes (`-fp8`, `-nvfp4`, `-awq`, `-gguf`, `-instruct`, …) and try again.
 3. If there's still no match, use the cleaned string as written. The write tool's response reports it as a new canonical name, so the agent can add an alias if it's really a variant.
 
@@ -627,7 +630,8 @@ MCP prompt templates encode the two main workflows. They're short and instructio
 
 ## 6. Run B: local-LLM triage (`triage.py`, `llm.py`), phase 2
 **Purpose:** lower agent token use and pre-flag items without supervision. Everything works without it.
-- **Migration 2:**
+- **Migration 2 (Run A):** `ALTER TABLE topics ADD COLUMN posts_complete INTEGER NOT NULL DEFAULT 0;` — the sync resume marker above.
+- **Migration 3 (Run B):**
   - `post_tags(post_id PK, content_hash, models JSON, has_perf INT, has_benchmark INT, has_recipe INT, is_question INT, is_solution INT, summary TEXT, triage_model, prompt_version, tagged_at)`
   - `triage_runs`
 - **`sparkwatch triage`:**
@@ -654,7 +658,7 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - GitHub requests are anonymous; no token is needed.
   - It saves a small live sample to `tests/fixtures/`:
     - one listing page from each category;
-    - 3 topics with their `posts.json` batches. One is long: topic **381350**, which has about 956 posts, so about 20 batch requests.
+    - 3 topics with their `posts.json` batches. One is long: topic **381350**, which has about 956 posts and so would need about 20 batch requests. The recorder keeps the newest 3 batches of it (and the full `stream`), because the tests need the pagination shape, not the whole thread.
     - GitHub responses for one repo: commit SHA, releases/latest, tags, metadata, a compare between two SHAs, and commits?until=. Use a small repo linked from the recorded posts if there is one, otherwise `vllm-project/vllm`.
   - Fixtures are committed. It's all public forum content, but trim each topic to the posts the tests actually need, so the repo doesn't carry large JSON files. Keep the full `stream` array, so the pagination logic is still exercised.
   - The recorder is never run as part of the test suite.
@@ -754,6 +758,7 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - a second call is served from `compare_cache`, with no compare request;
   - `since=<date>` resolves to the right base commit.
 - `sql_query` rejects `DELETE`, multiple statements and `PRAGMA`.
+- Evals check cited URLs too: every recipe evidence row must map to a real post, the answer must contain a forum post URL, and it must cite the evidence URLs.
 - Discourse edge cases:
   - a deleted post in `stream` is skipped without an error and recorded in `missing_posts`;
     - later syncs don't request it again;
@@ -790,4 +795,5 @@ MCP prompt templates encode the two main workflows. They're short and instructio
   - a note saved;
   - the cited post URLs.
 - The runner drives Claude Code headless (`claude -p`) with only the sparkwatch MCP server enabled. It then checks the database and the answer text against the expected facts.
+- Any other agent can drive the same cases: register the server with `SPARKWATCH_GENERAL__DB_PATH` pointing at `tests/evals/frozen.db`, run the workflows by hand, then verify with `run.py --check-only --answers <file>`, which skips the agent run and checks the database plus the supplied answers. `tests/evals/pause2_report.md` records a checkpoint run done that way.
 - Use it after changing tool descriptions or prompts, to catch regressions in how the agent uses the tools. It isn't run in CI because it needs API access.

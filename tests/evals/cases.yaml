@@ -24,8 +24,11 @@ cases:
         recipe_topology: "dual-spark"
         notes_min: 1
         evidence_verified: true
+        evidence_post_urls: true
       answer_contains:
         - "GLM"
+      answer_has_forum_url: true
+      answer_cites_evidence_urls: true
 
   - name: frontier_saves_note
     prompt: "Use the frontier prompt: what are the strongest models people run on two Sparks right now?"

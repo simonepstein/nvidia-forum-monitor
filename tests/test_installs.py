@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from sparkwatch.repos import clear_installed, list_installs, repo_status, set_installed, watch_repo
+from conftest import synthetic
+
+from sparkwatch.repos import (
+    clear_installed,
+    list_installs,
+    repo_status,
+    set_installed,
+    watch_repo,
+)
 
 REPO = "vllm-project/vllm"
 BASE = f"/repos/{REPO}"
@@ -126,9 +134,7 @@ def test_since_date_resolves_to_base_commit(settings, conn, router, github):
 
 def test_large_compare_is_truncated(settings, conn, router, github):
     prepare(settings, conn, router, github)
-    large = dict(COMPARE)
-    large["ahead_by"] = 412
-    large["total_commits"] = 412
+    large = synthetic("github_compare_large.json")
     github.add(f"{BASE}/compare/{OLD}...{HEAD}", large)
     set_installed(conn, REPO, OLD, installed_at=PAST, settings=settings)
 

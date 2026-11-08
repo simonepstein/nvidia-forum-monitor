@@ -84,24 +84,49 @@ def strip_quant_suffixes(value: str) -> str:
         current = stripped
 
 
-def canonical_model(conn: sqlite3.Connection, raw: str) -> tuple[str, bool]:
-    key = clean_model_key(raw)
+def loose_key(value: str) -> str:
+    return re.sub(r"[\s._-]+", "-", (value or "").strip().lower()).strip("-")
+
+
+def _alias_lookup(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute("SELECT canonical FROM model_aliases WHERE alias=?", (key,)).fetchone()
     if row is not None:
-        return row["canonical"], False
+        return row["canonical"]
+    loose = loose_key(key)
+    for alias, canonical in conn.execute("SELECT alias, canonical FROM model_aliases"):
+        if loose_key(alias) == loose:
+            return canonical
+    return None
+
+
+def _model_lookup(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT canonical FROM models WHERE canonical=?", (key,)).fetchone()
+    if row is not None:
+        return row["canonical"]
+    loose = loose_key(key)
+    for (canonical,) in conn.execute("SELECT canonical FROM models"):
+        if loose_key(canonical) == loose:
+            return canonical
+    return None
+
+
+def canonical_model(conn: sqlite3.Connection, raw: str) -> tuple[str, bool]:
+    key = clean_model_key(raw)
+
+    canonical = _alias_lookup(conn, key)
+    if canonical is not None:
+        return canonical, False
 
     stripped = strip_quant_suffixes(key)
     if stripped != key:
-        row = conn.execute(
-            "SELECT canonical FROM model_aliases WHERE alias=?", (stripped,)
-        ).fetchone()
-        if row is not None:
-            return row["canonical"], False
+        canonical = _alias_lookup(conn, stripped)
+        if canonical is not None:
+            return canonical, False
         key = stripped
 
-    row = conn.execute("SELECT canonical FROM models WHERE canonical=?", (key,)).fetchone()
-    if row is not None:
-        return row["canonical"], False
+    canonical = _model_lookup(conn, key)
+    if canonical is not None:
+        return canonical, False
     return key, True
 
 

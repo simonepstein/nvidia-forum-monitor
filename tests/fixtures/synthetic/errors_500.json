@@ -1,0 +1,10 @@
+{
+  "description": "A 5xx that persists past max_retries, so only this topic fails.",
+  "responses": [
+    {
+      "status": 500,
+      "body": {"error": "internal server error"},
+      "headers": {}
+    }
+  ]
+}

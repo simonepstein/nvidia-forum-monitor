@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from conftest import add_github_spec
+
 from sparkwatch.repos import check_repos, watch_repo
 
 REPO = "vllm-project/vllm"
@@ -104,9 +106,9 @@ def test_unchanged_repo_returns_304_and_no_events(settings, conn, router, github
     github.install(router)
     watch_repo(conn, REPO, settings=settings)
 
-    github.add(f"{BASE}/commits/main", None, status=304)
-    github.add(f"{BASE}/releases/latest", None, status=304)
-    github.add(f"{BASE}/tags", None, status=304)
+    add_github_spec(github, f"{BASE}/commits/main", "github_304.json")
+    add_github_spec(github, f"{BASE}/releases/latest", "github_304.json")
+    add_github_spec(github, f"{BASE}/tags", "github_304.json")
     check_repos(conn, settings, repo=REPO)
 
     assert conn.execute("SELECT COUNT(*) FROM repo_events").fetchone()[0] == 0
@@ -118,7 +120,7 @@ def test_branch_gone_creates_event(settings, conn, router, github):
     github.install(router)
     watch_repo(conn, REPO, settings=settings)
 
-    github.add(f"{BASE}/commits/main", {"message": "Not Found"}, status=404)
+    add_github_spec(github, f"{BASE}/commits/main", "github_branch_gone.json")
     github.add(f"{BASE}/releases/latest", None, status=304)
     github.add(f"{BASE}/tags", None, status=304)
     check_repos(conn, settings, repo=REPO)
@@ -166,9 +168,9 @@ def test_archived_repo_creates_event(settings, conn, router, github):
         BASE,
         {"default_branch": "main", "archived": True, "description": "serving", "pushed_at": PAST},
     )
-    github.add(f"{BASE}/commits/main", None, status=304)
-    github.add(f"{BASE}/releases/latest", None, status=304)
-    github.add(f"{BASE}/tags", None, status=304)
+    add_github_spec(github, f"{BASE}/commits/main", "github_304.json")
+    add_github_spec(github, f"{BASE}/releases/latest", "github_304.json")
+    add_github_spec(github, f"{BASE}/tags", "github_304.json")
     check_repos(conn, settings, repo=REPO)
 
     assert conn.execute("SELECT COUNT(*) FROM repo_events WHERE kind='archived'").fetchone()[0] == 1
