@@ -905,7 +905,7 @@ def global_digest(
     return payload
 
 
-def _render_global_topic(item: dict[str, Any]) -> str:
+def _render_global_topic(item: dict[str, Any]) -> list[str]:
     counts = (
         f"{item['new_posts']} new posts by {item['posters']} posters,"
         f" {item['likes']} likes, factor {item['factor']:.2f} (base {item['base']:.2f})"
@@ -914,7 +914,11 @@ def _render_global_topic(item: dict[str, Any]) -> str:
     lines = [f"- {item['score']:.2f} {item['title']} — {item['url']}", f"  {counts}"]
     if terms:
         lines.append(f"  terms: {terms}")
-    return "\n".join(lines)
+    for post in item["top_posts"]:
+        lines.append(
+            f"    · {post['likes']} likes {post['url']} {post['date']} — {post['snippet']}"
+        )
+    return lines
 
 
 def _capped_header(shown: int, total: int) -> str:
@@ -930,12 +934,8 @@ def render_global_digest(payload: dict[str, Any]) -> str:
     lines.append(
         f"\n## Hot topics ({_capped_header(len(payload['hot_topics']), payload['hot_topics_total'])})"
     )
-    lines.extend(_render_global_topic(item) for item in payload["hot_topics"])
     for item in payload["hot_topics"]:
-        for post in item["top_posts"]:
-            lines.append(
-                f"  · {post['likes']} likes {post['url']} {post['date']} — {post['snippet']}"
-            )
+        lines.extend(_render_global_topic(item))
 
     unanswered = payload["unanswered"]
     lines.append(f"\n## Unanswered ({_capped_header(len(unanswered['top']), unanswered['count'])})")

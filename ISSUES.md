@@ -430,3 +430,21 @@ Ran on the live DB, read-only, except for one mark on a `.backup` copy. Live req
 - **Observed:** the ten topic blocks print first. Then all twenty `· N likes …/t/<topic>/<n>` lines follow as one block (lines 34–53), so you have to match each URL's topic id by eye.
 - **Expected:** two indented post lines under each topic's `terms:` line, which is what the fix summary described.
 - **Cause:** in `digest.py:render_global_digest` (around line 933), the `for item in payload["hot_topics"]: for post in item["top_posts"]` loop runs after `lines.extend(_render_global_topic(...))`. It should be inside `_render_global_topic`, or run per item. The JSON is correct.
+
+## #40 fix: `global-digest --detail` nests each topic's posts under that topic (2026-11-08 19:26, `fix/run-a-issues` @ a33e807 + working tree)
+
+Rendering only. `global_digest()` and its JSON payload are untouched.
+
+- **Repro.** `uv run sparkwatch global-digest --since 2026-11-01 --no-advance --detail` printed the ten topic blocks, then all twenty `· N likes …/t/<topic>/<n>` lines as one trailing block (lines 34–53).
+- **Cause.** `render_global_digest()` extended the topic blocks from `_render_global_topic()` and then ran a second `for item in payload["hot_topics"]: for post in item["top_posts"]` loop afterwards, so every post line landed at the end instead of inside its topic.
+- **Fix.** `_render_global_topic(item)` now returns `list[str]`: the heading, the counts line, `terms:` when any term is non-zero, then one `    · {likes} likes {url} {date} — {snippet}` line per `top_posts` entry. The posts are indented 4 spaces, one level under the 2-space counts and terms lines. `render_global_digest()` runs a single loop, `for item in payload["hot_topics"]: lines.extend(_render_global_topic(item))`, and the separate post loop is gone.
+- **Test.** `tests/test_global_digest.py::test_detail_renders_each_topics_posts_under_that_topic`: two topics (relevance 40 and 20) with two liked posts each. It asserts the four post lines in full (likes-desc within each topic), the order counts → `terms:` → posts under the first heading, the first topic's second post before the second heading, and the second topic's posts after it. A lean payload renders no post lines. Full suite: **345 passed, 1 skipped**. Ruff check and format are clean, and `test_cli_global_digest_renders_text_and_json` still passes.
+- **Payload unchanged.** `--json` for `--since 2026-11-01 --until 2026-11-08T15:09:10+00:00 --no-advance` is byte-identical to the `a33e807` build (13,970 bytes; `cmp` clean).
+- **Live check (read-only, `--no-advance`).** With `--detail` there are 20 post lines, all inside `## Hot topics (10/86)` (the last is line 115, and `## Unanswered` starts at 121), each topic's two lines directly under its `terms:` line. Without `--detail` there are 0 post lines. The rest of the text is unchanged: `Unanswered (3/9)`, `First linked (5/64)`, `Recorded knowledge (5/5)`, `Watched repo events (0/0)`, `backfilled: 8591 posts in 399 topics`, and `76 more hot topic(s): raise --limit (cap 25) to see them`.
+
+### What to test
+
+1. `uv run sparkwatch global-digest --since 2026-11-01 --no-advance --detail` → each topic's two `· N likes …` lines sit under that topic's `terms:` line and before the next `- <score> …` heading; 20 post lines in total, none after the last topic.
+2. The same command without `--detail` → no `·` post lines.
+3. `uv run sparkwatch global-digest --since 2026-11-01 --until 2026-11-08T15:09:10+00:00 --no-advance --json` → identical bytes to the `a33e807` build.
+4. `uv run pytest -q` → 345 passed, 1 skipped; `uv run ruff check` and `uv run ruff format --check` clean.

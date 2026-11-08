@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from sparkwatch import digest as digest_module
-from sparkwatch.digest import global_digest
+from sparkwatch.digest import global_digest, render_global_digest
 
 SINCE = "2026-01-01T00:00:00+00:00"
 UNTIL = "2026-02-01T00:00:00+00:00"
@@ -492,3 +492,37 @@ def test_repo_events_are_capped_with_a_total(settings, conn):
 
     assert payload["repo_events"]["count"] == 7
     assert len(payload["repo_events"]["top"]) == 5
+
+
+def test_detail_renders_each_topics_posts_under_that_topic(settings, conn):
+    seed_topic(conn, 1, title="GLM on two Sparks", relevance=40.0)
+    seed_post(conn, 11, 1, likes=1, raw="quiet", username="alice")
+    seed_post(conn, 12, 1, likes=5, raw="loud", username="bob")
+    seed_topic(conn, 2, title="DeepSeek on two Sparks", relevance=20.0)
+    seed_post(conn, 21, 2, likes=2, raw="calm", username="carol")
+    seed_post(conn, 22, 2, likes=4, raw="brash", username="dave")
+
+    detailed = global_digest(conn, settings, since=SINCE, until=UNTIL, detail=True, advance=False)
+    lines = render_global_digest(detailed).splitlines()
+
+    first_heading = next(
+        i for i, line in enumerate(lines) if line.startswith("- ") and "GLM" in line
+    )
+    second_heading = next(
+        i for i, line in enumerate(lines) if line.startswith("- ") and "DeepSeek" in line
+    )
+    post_lines = [(i, line) for i, line in enumerate(lines) if "·" in line]
+
+    assert [line for _index, line in post_lines] == [
+        f"    · 5 likes https://forums.developer.nvidia.com/t/1/12 {IN_WINDOW} — loud",
+        f"    · 1 likes https://forums.developer.nvidia.com/t/1/11 {IN_WINDOW} — quiet",
+        f"    · 4 likes https://forums.developer.nvidia.com/t/2/22 {IN_WINDOW} — brash",
+        f"    · 2 likes https://forums.developer.nvidia.com/t/2/21 {IN_WINDOW} — calm",
+    ]
+    assert lines[first_heading + 1].strip().startswith("2 new posts by 2 posters")
+    assert lines[first_heading + 2].strip().startswith("terms: ")
+    assert first_heading + 2 < post_lines[0][0]
+    assert post_lines[1][0] < second_heading < post_lines[2][0]
+
+    lean = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+    assert "·" not in render_global_digest(lean)
