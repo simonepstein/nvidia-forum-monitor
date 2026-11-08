@@ -562,3 +562,61 @@ def test_set_installed_resolves_the_id_and_merges_an_alias(settings, conn, route
     assert payload["repo"] == NEW_REPO
     assert conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0] == 1
     assert conn.execute("SELECT repo_id FROM repo_installs").fetchone()[0] == 1
+
+
+def test_two_watched_rows_sharing_an_id_merge_without_a_repo_filter(settings, conn, router, github):
+    seed_repo(conn, 1, NEW_REPO, watch=1, github_id=GITHUB_ID, first_seen=PAST)
+    seed_repo(
+        conn, 2, OLD_REPO, watch=1, github_id=GITHUB_ID, first_seen="2026-02-01T00:00:00+00:00"
+    )
+    serve_metadata(
+        github,
+        NEW_REPO,
+        {"id": GITHUB_ID, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    serve_metadata(
+        github,
+        OLD_REPO,
+        {"id": GITHUB_ID, "full_name": NEW_REPO, "default_branch": "main", "archived": False},
+    )
+    github.install(router)
+
+    payload = check_repos(conn, settings)
+
+    assert payload["merged"] == [{"from": 2, "to": 1}]
+    assert payload["checked"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM repos").fetchone()[0] == 1
+
+
+def test_set_installed_records_the_metadata_check(settings, conn, router, github):
+    seed_repo(conn, 1, NEW_REPO, watch=1)
+    github.add(
+        f"/repos/{NEW_REPO}",
+        {
+            "id": GITHUB_ID,
+            "full_name": NEW_REPO,
+            "default_branch": "main",
+            "archived": False,
+            "description": "d",
+        },
+        headers={"ETag": '"meta"'},
+    )
+    github.add(
+        f"/repos/{NEW_REPO}/commits/{SHA1}",
+        {"sha": SHA1, "commit": {"message": "head", "author": {"date": PAST}}},
+    )
+    github.add(f"/repos/{NEW_REPO}/commits/main", SHA1, headers={"ETag": '"h"'})
+    github.install(router)
+
+    set_installed(conn, NEW_REPO, SHA1, installed_at=PAST, settings=settings)
+
+    row = conn.execute("SELECT description, etags FROM repos WHERE id=1").fetchone()
+    etags = loads(row["etags"], {})
+    assert row["description"] == "d"
+    assert etags["github_id"] == GITHUB_ID
+    assert etags["meta"] == '"meta"'
+    assert etags["meta_checked_at"]
+
+    before = github.calls.count(f"/repos/{NEW_REPO}")
+    check_repos(conn, settings, repo=NEW_REPO)
+    assert github.calls.count(f"/repos/{NEW_REPO}") == before

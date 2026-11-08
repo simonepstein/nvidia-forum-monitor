@@ -228,15 +228,17 @@ def sync_now(
 def refresh_engagement(
     days: int = 14,
     forum_id: int | None = None,
-    time_budget_s: int | None = None,
+    time_budget_s: int | None = 180,
 ) -> dict[str, Any]:
     """Refresh like counts and accepted answers on recent posts.
 
     Use this ONLY when the user asks to refresh likes or accepted answers, for example
     "refresh the engagement on the last two weeks of posts". Never call it as part of
     catch_up, sync_now or any other workflow: it is an explicit, budgeted re-fetch that
-    makes about one request per active topic. It writes only like_count, accepted_answer
-    and fetched_at, and never moves floors or cursors.
+    makes about one request per active topic. `time_budget_s` defaults to 180 seconds, as
+    the CLI does, so a call never runs unbounded; raise it deliberately for a longer run.
+    It writes only like_count, accepted_answer and fetched_at, and never moves floors or
+    cursors. The result echoes the effective `days` and `since` cutoff.
     """
     from .sync import refresh_engagement as run_refresh
 

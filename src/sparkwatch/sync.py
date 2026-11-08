@@ -56,9 +56,14 @@ class EngagementResult:
     posts_changed: int = 0
     partial: bool = False
     errors: list[str] = field(default_factory=list)
+    days: int = 0
+    since: str | None = None
+    hint: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
+            "days": self.days,
+            "since": self.since,
             "requests": self.requests,
             "topics": self.topics,
             "posts_checked": self.posts_checked,
@@ -68,6 +73,9 @@ class EngagementResult:
             "partial": self.partial,
             "errors": self.errors,
         }
+        if self.hint:
+            payload["hint"] = self.hint
+        return payload
 
 
 def _window(
@@ -681,7 +689,8 @@ def refresh_engagement(
     `posts_changed`.
     """
     settings = settings or get_settings()
-    if int(days) < 1:
+    requested_days = int(days)
+    if requested_days < 1:
         raise ValueError("days must be at least 1")
     conn = conn if conn is not None else open_db(settings)
     owns_client = client is None
@@ -690,8 +699,15 @@ def refresh_engagement(
     started = utcnow()
     started_iso = to_iso(started)
     now_iso = started_iso
-    window_days = min(int(days), settings.sync.lookback_days)
+    window_days = min(requested_days, settings.sync.lookback_days)
     cutoff = to_iso(started - timedelta(days=window_days))
+    result.days = window_days
+    result.since = cutoff
+    if window_days < requested_days:
+        result.hint = (
+            f"days capped to {window_days}: the mirror's lookback is"
+            f" {settings.sync.lookback_days} days; backfill to widen it"
+        )
     deadline = time.monotonic() + time_budget_s if time_budget_s is not None else None
     forums = forum_ids or settings.forum_ids()
 

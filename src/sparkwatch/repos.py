@@ -235,11 +235,17 @@ def _merge_repos(conn: sqlite3.Connection, winner_id: int, loser_id: int) -> int
     return winner_id
 
 
-def _merge_by_github_id(conn: sqlite3.Connection, repo_id: int, github_id: int) -> int:
+def _merge_by_github_id(
+    conn: sqlite3.Connection,
+    repo_id: int,
+    github_id: int,
+    merged: list[dict[str, int]] | None = None,
+) -> int:
     """Merge every row that shares a GitHub id, returning the surviving row's id.
 
     The watched row wins, then the older `first_seen_at`, then the lower id, so a repo keeps
-    the row the user flagged and the row that has been in the mirror longest.
+    the row the user flagged and the row that has been in the mirror longest. Each fold is
+    appended to `merged` as `{from, to}`, whichever side the caller was looking at.
     """
     matches = [
         row
@@ -252,6 +258,8 @@ def _merge_by_github_id(conn: sqlite3.Connection, repo_id: int, github_id: int) 
     winner_id = matches[0]["id"]
     for loser in matches[1:]:
         _merge_repos(conn, winner_id, loser["id"])
+        if merged is not None:
+            merged.append({"from": loser["id"], "to": winner_id})
     return winner_id
 
 
@@ -260,10 +268,12 @@ def _resolve_github_id(conn: sqlite3.Connection, client: GitHubClient, row: Any)
 
     SPEC §4b: discovery stores repos from post links, so an unwatched row has no id until it
     is touched. `set_installed` resolves it here, once, so a stale alias is merged into the
-    watched row instead of keeping its own mentions.
+    watched row instead of keeping its own mentions. The response is recorded as that day's
+    metadata check (fields, `meta_checked_at` and the ETag), so the next `check_repos` does
+    not repeat the request.
     """
     try:
-        _status, response, _etag = client.get(f"/repos/{row['owner']}/{row['name']}")
+        _status, response, etag = client.get(f"/repos/{row['owner']}/{row['name']}")
     except GitHubError:
         return row
     if response is None:
@@ -279,6 +289,18 @@ def _resolve_github_id(conn: sqlite3.Connection, client: GitHubClient, row: Any)
     _save_github_id(conn, repo_id, github_id)
     repo_id = _merge_by_github_id(conn, repo_id, github_id)
     _follow_rename(conn, repo_id, _repo_row(conn, repo_id), meta)
+    conn.execute(
+        "UPDATE repos SET description=?, default_branch=?, archived=?, pushed_at=? WHERE id=?",
+        (
+            meta.get("description"),
+            meta.get("default_branch"),
+            1 if meta.get("archived") else 0,
+            meta.get("pushed_at"),
+            repo_id,
+        ),
+    )
+    _save_meta_checked(conn, repo_id, utcnow_iso())
+    _save_etag(conn, repo_id, "meta", etag)
     return _repo_row(conn, repo_id)
 
 
@@ -428,6 +450,7 @@ def check_repos(
     changed: list[dict[str, Any]] = []
     errors: list[str] = []
     merged: list[dict[str, int]] = []
+    removed: set[int] = set()
     stopped = False
     checked = 0
 
@@ -439,6 +462,11 @@ def check_repos(
     try:
         for row in rows:
             repo_id = row["id"]
+            if repo_id in removed:
+                continue
+            row = _repo_row(conn, repo_id)
+            if row is None:
+                continue
             if deadline is not None and time.monotonic() > deadline:
                 stopped = True
                 break
@@ -465,9 +493,9 @@ def check_repos(
                         github_id = meta.get("id") if isinstance(meta, dict) else None
                         if isinstance(github_id, int):
                             _save_github_id(conn, repo_id, github_id)
-                            survivor = _merge_by_github_id(conn, repo_id, github_id)
+                            survivor = _merge_by_github_id(conn, repo_id, github_id, merged)
+                            removed.update(item["from"] for item in merged)
                             if survivor != repo_id:
-                                merged.append({"from": repo_id, "to": survivor})
                                 repo_id = survivor
                                 row = _repo_row(conn, repo_id)
                                 baseline = row["last_checked_at"] is None

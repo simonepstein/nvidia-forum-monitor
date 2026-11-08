@@ -864,6 +864,16 @@ def test_refresh_engagement_is_described_as_user_requested_only():
     assert "only when the user asks" in m.refresh_engagement.__doc__.lower()
 
 
+def test_refresh_engagement_defaults_to_the_cli_time_budget():
+    import inspect
+
+    from sparkwatch import mcp_server as m
+
+    default = inspect.signature(m.refresh_engagement).parameters["time_budget_s"].default
+    assert default == 180
+    assert "budget" in m.refresh_engagement.__doc__.lower()
+
+
 def test_topic_overview_and_mark_topic(settings, conn):
     seed(conn)
     overview = m.get_topic_overview(700)

@@ -268,13 +268,14 @@ This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It correct
   - it takes the `lock.py` write lock and returns `busy` like `sync`;
   - when `time_budget_s` runs out, it stops after the current batch with `partial=true`;
   - it's safe to re-run.
-- **Result:** `{requests, topics, posts_checked, likes_changed, accepted_changed, posts_changed, partial, errors}`, It also writes a `sync_runs` row with `trigger='engagement'` and `posts_new=0`, so request totals stay auditable (no migration needed).
+- **Result:** `{days, since, requests, topics, posts_checked, likes_changed, accepted_changed, posts_changed, partial, errors}` (plus `hint` when `days` was capped), It also writes a `sync_runs` row with `trigger='engagement'` and `posts_new=0`, so request totals stay auditable (no migration needed).
+  - `days` and `since` are the **effective** window, so a request for more days than the mirror holds says so instead of looking identical to the capped run; the `hint` names the `lookback_days` cap.
 - **Never automatic:**
   - not on the timer, not inside `sync`, `sync_now` or `catch_up`;
   - `days` is capped at `lookback_days` and must be at least 1; a value below 1 is rejected with a clear error;
   - a larger refresh is a deliberate, separate run.
 - **CLI:** `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]`. It cannot be combined with `--repair-coverage`, `--apply` or `--max-pages`, and `--budget` defaults to 180 s so it never runs unbounded.
-- **MCP:** `refresh_engagement(days=14, forum_id=None, time_budget_s=None)`, calling the same function (the user runs sparkwatch from an MCP client on a laptop, so maintenance goes through MCP too). Its description says to use it **only when the user asks** to refresh likes or accepted answers, never as part of `catch_up` or any other workflow.
+- **MCP:** `refresh_engagement(days=14, forum_id=None, time_budget_s=180)`, calling the same function (the user runs sparkwatch from an MCP client on a laptop, so maintenance goes through MCP too). Its description says to use it **only when the user asks** to refresh likes or accepted answers, never as part of `catch_up` or any other workflow. `time_budget_s` defaults to 180 s, as the CLI does, so an agent call never runs unbounded; pass a larger value deliberately for a longer run.
 
 `sparkwatch backfill --days D` is `sync(lookback_days=D)`. You never need to start from scratch.
 
@@ -288,7 +289,7 @@ This is regex only.
   - Skip `gist.github.com` URLs entirely; they aren't repos.
   - When GitHub answers a repo request with `301 Moved Permanently`, follow it, and update the repo's `url`, `owner` and `name` to the new canonical names.
   - **Identity (added 2026-11-08, ISSUES #49):** a metadata response also carries GitHub's numeric repository `id`, which is stored in `repos.etags['github_id']` (like `meta_checked_at`, so no migration). Two rows that resolve to the same id are one repo under two old names: they are merged into the watched row (else the older `first_seen_at`, else the lower row id), moving `repo_mentions`, `repo_installs`, `repo_events` and `compare_cache`, retargeting repo `flags` at the survivor, and deleting the other row. A rename whose canonical name is already held by a row with a *different* id is refused, as before.
-    - An unwatched row has no id until it is touched, so the merge happens on the next metadata fetch: `watch_repo` (its baseline check), `repos check --repo <alias>` on the stale name, or `set_installed`, which resolves the id with one metadata request when it is missing.
+    - An unwatched row has no id until it is touched, so the merge happens on the next metadata fetch: `watch_repo` (its baseline check), `repos check --repo <alias>` on the stale name, or `set_installed`, which resolves the id with one metadata request when it is missing and records that response as the day's metadata check (fields, `meta_checked_at`, ETag).
 - **Hugging Face:** `huggingface\.co/([\w.-]+)/([\w.-]+)`. Skip first path segments `datasets|spaces|docs|blog|papers`.
   - HF links are **recorded only**, so the agent can see which quant repo a recipe uses.
   - HF is never polled. **The forum is the curator for new models.**
@@ -596,7 +597,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 
 ### Keeping up to date
 - `sync_now(forum_id?, include_repos=True, time_budget_s=90)`: runs `sync()` in the server process, then `check_repos()` within the time that's left. It returns the `SyncResult`, with titles for new and updated topics, plus a list of watched repos whose head moved or that got a release. If it returns `partial: true`, the agent calls it again.
-- `refresh_engagement(days=14, forum_id?, time_budget_s?)`: the explicit engagement refresh in §1. **Use it only when the user asks** to refresh likes or accepted answers; never as part of `catch_up`, `sync_now` or another workflow.
+- `refresh_engagement(days=14, forum_id?, time_budget_s=180)`: the explicit engagement refresh in §1. **Use it only when the user asks** to refresh likes or accepted answers; never as part of `catch_up`, `sync_now` or another workflow.
 - `digest(since="cursor", cursor="default", relevant_only=False, limit=6, advance=True)`. This is the "since I last asked" view. `since` is `"cursor"` or an ISO date.
   - **Sections, in order:**
     1. Unacknowledged **watch sightings**, i.e. first sightings of an anticipated model.

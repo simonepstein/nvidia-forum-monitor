@@ -644,6 +644,36 @@ def test_written_basis_first_linked_counts_backfilled_mentions(settings, conn):
     )
 
 
+def test_written_basis_honours_the_forum_filter(settings, conn):
+    seed_topic(conn, 1, forum_id=721)
+    seed_post(conn, 11, 1, created_at=IN_WINDOW, first_fetched_at=LATER_FETCH)
+    seed_topic(conn, 2, forum_id=723)
+    seed_post(conn, 21, 2, created_at=IN_WINDOW, first_fetched_at=LATER_FETCH)
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, first_seen_at) VALUES"
+        " (1, 'a', 'one', 'https://github.com/a/one', ?),"
+        " (2, 'b', 'two', 'https://github.com/b/two', ?)",
+        (LATER_FETCH, LATER_FETCH),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (1, 11, 1, 'https://github.com/a/one', ?),"
+        " (2, 21, 2, 'https://github.com/b/two', ?)",
+        (IN_WINDOW, IN_WINDOW),
+    )
+
+    written = global_digest(
+        conn, settings, since=SINCE, until=UNTIL, basis="written", forum_id=721, advance=False
+    )
+    seen = global_digest(conn, settings, since=SINCE, until=UNTIL, forum_id=721, advance=False)
+
+    assert written["hot_topics_total"] == 1
+    assert written["hot_topics"][0]["forum_id"] == 721
+    assert [item["name"] for item in written["first_linked"]["top"]] == ["a/one"]
+    assert seen["hot_topics_total"] == 0
+    assert seen["first_linked"]["count"] == 0
+
+
 def test_written_basis_pages_with_the_same_basis(settings, conn):
     for topic_id in (1, 2, 3):
         seed_topic(conn, topic_id)

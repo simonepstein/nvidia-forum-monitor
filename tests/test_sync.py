@@ -412,6 +412,9 @@ def test_refresh_engagement_updates_likes_and_leaves_content_alone(settings, con
     assert result.posts_changed == 0
     assert result.partial is False
     assert result.errors == []
+    assert result.days == 14
+    assert result.since is not None
+    assert result.hint is None
     assert forum.post_requests() == [(2001, 2002, 2003)]
 
     rows = {row["id"]: row for row in conn.execute("SELECT * FROM posts WHERE topic_id=200")}
@@ -548,6 +551,19 @@ def test_refresh_engagement_rejects_a_zero_day_window(settings, conn):
 
     with pytest.raises(ValueError, match="days must be at least 1"):
         refresh_engagement(settings=settings, conn=conn, days=0)
+
+
+def test_refresh_engagement_echoes_a_capped_window(settings, conn):
+    result = refresh_engagement(settings=settings, conn=conn, days=120)
+
+    assert settings.sync.lookback_days == 60
+    assert result.days == 60
+    assert result.since is not None
+    assert "capped to 60" in (result.hint or "")
+    payload = result.as_dict()
+    assert payload["days"] == 60
+    assert payload["since"] == result.since
+    assert "hint" in payload
 
 
 def test_refresh_engagement_continues_after_a_bad_topic(settings, conn, forum):

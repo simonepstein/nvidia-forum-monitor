@@ -701,11 +701,16 @@ def _window_first_linked(
     forum_clause = " AND t.forum_id = :forum_id" if forum_id is not None else ""
     # A written-basis report lists what the window's posts link, whether or not the repo was
     # recorded then; the seen basis additionally wants a repo first recorded in the window.
+    # Both start a WHERE, so `forum_clause` (an AND) always has something to bind to.
     where = (
-        " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until" if basis == "seen" else ""
+        " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until"
+        if basis == "seen"
+        else " WHERE 1"
     )
     hf_where = (
-        " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until" if basis == "seen" else ""
+        " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until"
+        if basis == "seen"
+        else " WHERE 1"
     )
     values = dict(params)
     if forum_id is not None:
