@@ -220,6 +220,11 @@ enabled = false                  # needs BRAVE_API_KEY
    1. Call `get_topic`, which gives the first 20 posts plus `stream`.
    2. **Target IDs** = IDs in `stream` that aren't stored yet, plus stored posts created within the last `refetch_recent_days`. IDs in `missing_posts` are excluded, unless their re-check is due (see below).
    3. Fetch target batches **from newest to oldest**, and stop once a whole batch is older than the floor. The OP is always kept.
+      - **The floor limits fetching, not storage (decided 2026-11-08, ISSUES #41).** A batch's age is only known once it has been fetched, so the batch that triggers the stop is stored like any other. Each new reply in a long-running topic can therefore add about one batch of posts older than the floor.
+        - This is accepted: those posts are history for that thread.
+        - They are classed as backfilled and never reported as news.
+        - They cost at most one extra request per reply.
+        - Don't discard or prune them.
    4. Upsert posts with `content_hash = sha256(raw)`.
    5. **Tombstones:** a requested ID that `posts.json` doesn't return is upserted into `missing_posts` with `reason='absent_from_batch'`.
       - If a batch fails with 403, record `forbidden`. If the post is returned with `deleted_at` set or `hidden` true, record `deleted` or `hidden`.
@@ -244,6 +249,32 @@ enabled = false                  # needs BRAVE_API_KEY
 - errors.
 
 **Callers:** the CLI `sparkwatch sync`, the MCP tool `sync_now`, and an optional systemd timer (`deploy/`) that runs `sparkwatch sync && sparkwatch repos check` every 2 hours. All of them take `lock.py`'s lock.
+
+### Engagement refresh: `refresh_engagement(days=14, forum_ids=None, time_budget_s=None)` (added 2026-11-08, ISSUES #47)
+This is the explicit, budgeted re-fetch that §1 "Post likes" allows. It corrects `like_count` and `accepted_answer` on recent posts whose topics haven't been bumped since the #39 fix, or whose likes came in after their last fetch.
+- **Scope:**
+  - stored posts with `created_at >= now - days` (default 14), in the given forums (default both);
+  - deleted posts and `missing_posts` IDs are skipped.
+- **Requests:**
+  - one `posts.json` call per topic per 50 target IDs, newest topics first;
+  - no listing calls and no `get_topic` calls;
+  - the same client, pacing (1 request per second) and retry rules as `sync`;
+  - expect about 1 request per active topic, e.g. about 90 for 14 days today.
+- **Writes:**
+  - only the unchanged-content path from §1 "Post likes": `like_count`, `accepted_answer`, `fetched_at`;
+  - if a returned post's content hash differs, it's upserted as a normal edit and counted in `posts_changed`;
+  - it never inserts posts it didn't ask for, never touches `listing_floor`, `last_synced_at` or `backfill_floor`, and runs no watch matching for unchanged posts.
+- **Locking and budget:**
+  - it takes the `lock.py` write lock and returns `busy` like `sync`;
+  - when `time_budget_s` runs out, it stops after the current batch with `partial=true`;
+  - it's safe to re-run.
+- **Result:** `{requests, topics, posts_checked, likes_changed, accepted_changed, posts_changed, partial, errors}`, It also writes a `sync_runs` row with `trigger='engagement'` and `posts_new=0`, so request totals stay auditable (no migration needed).
+- **Never automatic:**
+  - not on the timer, not inside `sync`, `sync_now` or `catch_up`;
+  - `days` is capped at `lookback_days`;
+  - a larger refresh is a deliberate, separate run.
+- **CLI:** `sparkwatch sync --refresh-engagement [--days N] [--forum ID] [--budget S]`.
+- **MCP:** none in Run A. It's an operator task, not an agent one.
 
 `sparkwatch backfill --days D` is `sync(lookback_days=D)`. You never need to start from scratch.
 
@@ -897,6 +928,13 @@ MCP prompt templates encode the main workflows. They're short and instructional.
      - No backfilled post is counted.
      - Every `url` resolves to a stored topic or post.
      - The `'default'` cursor is unchanged.
+
+**Run A follow-ups (2026-11-08, ISSUES #42–#47):** fixes from the post-#40 testing run, plus `refresh_engagement` (§1 Engagement refresh). No migration is needed, unless #45 chooses a column.
+- **Acceptance for #47:** first rehearse on a `.backup` copy, then run `sparkwatch sync --refresh-engagement --days 14 --budget 180` live.
+  - Report the request count (about 1 per active topic).
+  - Expect `posts_changed` to be 0, apart from genuine edits.
+  - `listing_floor`, `last_synced_at` and the digest cursors are unchanged.
+  - `sum(like_count>0)` rises across many topics, not just 384438.
 
 **Enhancement, after `global_digest` has been in use (ISSUES #38):** `save_newsletter`, the `'newsletter'` cursor and the `newsletter` workflow through all four channels (§5 Newsletter).
 - **Acceptance:** one real `newsletter` run in an MCP client. The issue is saved with sources, and `unresolved_links` is empty. The `'newsletter'` cursor moves, while `'global'` and `'default'` are unchanged.

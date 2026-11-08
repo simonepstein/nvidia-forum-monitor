@@ -448,3 +448,91 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
 2. The same command without `--detail` → no `·` post lines.
 3. `uv run sparkwatch global-digest --since 2026-11-01 --until 2026-11-08T15:09:10+00:00 --no-advance --json` → identical bytes to the `a33e807` build.
 4. `uv run pytest -q` → 345 passed, 1 skipped; `uv run ruff check` and `uv run ruff format --check` clean.
+
+## #40 re-test (2026-11-08, `fix/run-a-issues` @ 24b1142)
+
+**Passed.**
+- 345 passed, 1 skipped. ruff check and ruff format are clean.
+- With `--detail` at a fixed `until`, there are 20 post lines, each indented 4 spaces under its own topic. A script check found 0 lines misplaced and none after the last topic.
+- `--limit 3 --detail` gives 6 post lines.
+- Without `--detail` there are no post lines. The only ` · ` lines are recipe lines in the Recorded knowledge section.
+- The `--detail --json` output from worktrees at a33e807 and at HEAD, run against the same DB, is byte-identical (22,042 B).
+- The digest cursors are unchanged.
+
+### #41 (spec gap, not a bug): the spec doesn't say what happens to pre-floor posts in old topics
+- **Observed (sync run 25, 2026-11-08 19:27):**
+  - Topic 365302 (created 2026-04-01, 365 posts) got one new post.
+  - The sync stored 93 posts from May 2026, before `backfill_floor` (2026-09-09).
+  - 284 of the topic's 311 stored posts now predate the floor.
+- **Why:** §1 step 4.3 says to stop "once a whole batch is older than the floor". A batch's age is only known after it's been fetched, so the batch that triggers the stop is stored anyway. Each bump of an old topic therefore brings in about one more pre-floor batch.
+- **The implementation follows the spec as written.** What the spec leaves undefined is whether the floor is a hard boundary on what's *stored*, or only a limit on how much is *fetched*.
+- **Resolved (SPEC §1 step 4.3):** the floor limits fetching, not storage. Pre-floor posts stored this way are accepted as thread history and are not pruned. No code change.
+
+### #42 (P2): CLI text output passes forum text through rich markup: BBCode gets eaten, and a stray closing tag crashes the command
+- **Repro:** `uv run sparkwatch global-digest --since 2026-11-01 --until 2026-11-08T19:40:40+00:00 --detail --no-advance`, then look at the line for /t/382733/335.
+  - The JSON snippet is `[quote="azampatti, post:331, topic:382733"] \`git pull && ./setup.sh.\` [/quote] Many thanks…`.
+  - The text output shows `—  \`git pull && ./setup.sh.\`  Many thanks…`. The quote tags have silently disappeared, which is why there are double spaces.
+- **Crash path:** `Console().print("stray [/quote] closing tag")` raises `rich.errors.MarkupError: closing tag '[/quote]' … doesn't match any open tag`.
+  - `_snippet_around`, which the `digest` watch-hit snippets use, starts mid-post, so it can begin after a `[quote=…]` or `[details=…]` opener and still contain the `[/quote]`. Snippet truncation can produce the same thing.
+  - That would crash `sparkwatch digest` / `global-digest` with a traceback.
+  - Forum text such as `[bold]` or `[red]` would also be applied as styling.
+- **Cause:** `cli.py:139` and `cli.py:181` call `console.print(render_…(payload))` with markup enabled.
+- **Fix:** print the rendered text with `markup=False` (and `highlight=False`), or `rich.markup.escape()` the forum-sourced fields. Add a test that renders a snippet containing `[/quote]` and `[bold]`, and checks they come out verbatim.
+- **Note:** the `&amp;&amp;` seen in one terminal paste comes from the paste path, not sparkwatch. The DB `raw`, the JSON and a re-run all show `&&`.
+
+### #43 (P3): a recipe line in Recorded knowledge repeats a URL when two evidence quotes come from the same post
+- **Observed:** `glm-5.3-flash · other · other · dual-spark · works — …/t/386738/1 …/t/386738/1`. Recipe 2 has two evidence rows, both from post 1877754.
+- **Fix:** dedupe source URLs by post in the CLI line. The JSON `sources` can keep both, since they're distinct quotes.
+
+### #44 (P2): `digest` "Repos first linked" reports backfilled links as news, and lists a repo once per mention
+- **Repro:** `uv run sparkwatch digest` (cursor 'default' at 13:28:40).
+  - Six repos are listed, all dated `2026-11-08T15:57:36`, and `deepseek-ai/deepseek-harness` appears twice.
+- **Evidence:**
+  - Every `repo_mentions` row dated 15:57:36 points to a post created 2026-08-07 to 2026-08-21, first fetched at 15:57:25. That's the one-off 721 gap-closing sync in the P1/P2 re-test.
+  - deepseek-harness (repo 410) has two mentions, posts 1850462 and 1851362, both in topic 372268.
+- **Cause:** in `digest.py:_repos_first_linked` (around line 349):
+  - The query filters on `repos.first_seen_at >= since`, which is when sparkwatch discovered the repo, not when the forum post linking it was written. Links in backfilled posts therefore count as new. That goes against the digest rule that backfills aren't news; CLAUDE.md says the digest "keys on when sparkwatch *saw* a change, not on post `created_at`, so backfills aren't reported as news", and the "new" definition requires `created_at >= since-24h`.
+  - It `LEFT JOIN`s `repo_mentions` with no grouping, so it returns one row per mention, despite the docstring "One line per repo". `LIMIT` is applied to those mention rows.
+- **Expected:** do what `global_digest._window_first_linked` already does after the polish pass, which counts only real in-window links. That is: a repo whose earliest mention is in a post that's *new* under the digest definition, one line per repo, with the earliest such post as `post_url`. Links found only in backfilled posts go in the `backfilled` count, or are left out.
+- **Test:** add a fixture repo linked only from a backfilled post, which should be absent, and one linked twice from new posts, which should appear once.
+
+### #45 (P2): repo metadata (renames, archived, default branch) never refreshes when `repos check` runs more often than once a day
+- **Observed:**
+  - The watched repo 69 is still `gilesco/glm-5.3-flash-exl3-2x-gb10-tensorfold-v1.1-testing`.
+  - GitHub returns `301` for that name. `/repositories/1424520842` gives `full_name = gilesco/GLM-5.3-Flash-EXL3-2x-GB10-TensorFold-ZIG`.
+  - `repos check` at 19:46 made 4 requests: head, compare, tags and so on, but no metadata request.
+  - There's no URL clash: the new name is `…-tensorfold-zig`, while row 71 is the different repo `…-zig-testing`.
+- **Cause:** `repos.py:282` fetches metadata only `if last_checked < now - 1 day`. But `repos.py:438` sets `last_checked_at = now` on *every* check.
+  - So after the baseline, metadata is fetched again only when the gap between two checks exceeds 24 h.
+  - On the scheduled 2-hourly run it never is. Renames (#25), `archived` and `default_branch` changes are never picked up.
+  - A changed default branch would leave the head check on the wrong branch.
+  - #25 passed earlier only because the scratch test forced the metadata check.
+- **Expected:** SPEC §4b step 3 says "at most once a day". That should be measured from the last *metadata* fetch, not the last check.
+- **Fix:** track the metadata fetch time separately.
+  - Option 1: an `etags`-JSON key like `meta_checked_at`, which needs no migration.
+  - Option 2: a new column. That needs a migration, and Run B's triage is planned as migration 6, so coordinate the number.
+  - A 304 on the metadata ETag should also count as checked.
+- **Test:** check a repo twice 2 h apart, then again 25 h after the first. Metadata should be requested on the 1st and 3rd checks only, even though `last_checked_at` moved on the 2nd.
+
+### #46 (P3): `set_installed` with a full SHA skips resolution, so the response has no commit subject or date and the SHA is never checked
+- **Repro (2026-11-08 19:57, `fix/run-a-issues` @ 24b1142):** `set_installed(repo="hacibeyoglu/deepseek-v4.1-flash-tensorfold-spark", ref="f98a3f4f9bc9de396ba1ad678876cda27aaea95f")`. The repo was not watched at the time.
+- **Observed:**
+  - The response has `"subject": null, "commit_date": null`.
+  - The install row has `branch: null`, and the status reports `"branch": "HEAD"` until the repo is watched.
+  - Status `identical` turned out to be correct: after `watch_repo`, `main` head = f98a3f4.
+- **Expected:** SPEC §MCP tools says the response "confirms the resolved SHA, the commit subject and date". SPEC §4b step 1 says every `ref` is resolved via `GET /repos/{o}/{n}/commits/{ref}`.
+- **Cause:** `repos.py:493`. `_resolve_ref` returns early when `SHA_RE` matches, so a 40-char SHA never hits the commits endpoint.
+  - A mistyped or nonexistent full SHA is stored as-is, and is only noticed later as a compare error.
+- **Fix:** always call `commits/{ref}`, which is one request; a full SHA can use the cache. Reject a 404/422 with a clear error instead of storing it.
+- **Test:** add a respx case in which a full SHA returns subject and date, and a missing SHA raises an error rather than inserting a row.
+- **Related, worth a line in the response:** `set_installed` on an unwatched repo works, but `repo_status()` with no `repo` only covers watched repos, so that install is never reported. Add a `hint` suggesting `watch_repo` when `repos.watch=0`.
+
+### #47 (feature, Run A): `sync --refresh-engagement`, an explicit, budgeted refresh of likes and accepted answers on recent posts
+- **Why:** after #39, likes are only correct for posts re-fetched in topics bumped since the fix (60 of 9,215 posts so far).
+  - `global_digest` currently favours topics that happened to be re-fetched. 384438 is #3 purely on likes, while 386125 and 381350 show 0.
+  - A full resync would be about 600 requests, mostly for history nothing uses.
+- **Spec:** SPEC §1 "Engagement refresh" (added 2026-11-08), and the build plan "Run A follow-ups":
+  - one `posts.json` call per topic for posts from the last N days (default 14);
+  - it writes only `like_count`, `accepted_answer` and `fetched_at`;
+  - it never moves floors or cursors, and is never automatic.
+- **Acceptance:** first rehearse on a copy, then run `--days 14 --budget 180` live. That's about 90 requests, with `posts_changed` 0 and likes present across many topics.
