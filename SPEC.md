@@ -507,6 +507,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - dates on everything;
   - text truncated to `max_chars`, with `truncated: true` and a `next` argument set the agent can pass back to continue.
 - `limit` defaults to `mcp.default_limit` and is capped at `max_limit`.
+  - Two tools keep literal defaults on purpose: `digest` caps each section at 30 and `sql_query` returns at most 200 rows. Those are per-call shape decisions, not list defaults, so `mcp.default_limit` does not apply to them.
 - **Tool descriptions are written for the agent.** Each one says when to use the tool. For example: "Call `get_notes` and `list_recipes` before researching a model, so you build on earlier conclusions."
 - Writes are short transactions. Long jobs (sync, repos check) take the lock. If it's already held, they return `{"busy": true, "job": ..., "started_at": ...}` rather than blocking.
 
