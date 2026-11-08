@@ -42,6 +42,10 @@ dual_spark_usable_gb = 240
 single_spark_usable_gb = 120
 kv_overhead_frac = 0.10
 
+[global_digest]                  # hotness score, §5 "Hot topics: global_digest"
+weights = { posts = 1.0, posters = 1.5, likes = 1.0, new_topic = 1.0, accepted = 1.0, staff = 0.5 }
+relevance_cap = 40.0             # relevance_score at or above this gets the maximum factor, 1.5
+
 [repos]
 max_compare_commits = 50
 max_compare_pages = 3

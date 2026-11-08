@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from datetime import timedelta
 from typing import Any
@@ -422,6 +423,522 @@ def build_digest(
             (cursor, built_at),
         )
     return digest
+
+
+# --------------------------------------------------------------------------
+# Hot topics: global_digest (SPEC §5, ISSUES #37)
+# --------------------------------------------------------------------------
+
+GLOBAL_LIMIT_CAP = 25
+GLOBAL_SNIPPET_CHARS = 160
+GLOBAL_UNANSWERED_SNIPPET_CHARS = 120
+GLOBAL_TOP_POSTS = 2
+GLOBAL_FLAGS_PER_TOPIC = 3
+GLOBAL_UNANSWERED = 3
+GLOBAL_FIRST_LINKED = 5
+GLOBAL_KNOWLEDGE_ITEMS = 5
+
+GLOBAL_POSTS = (
+    "julianday(p.first_fetched_at) >= julianday(:since)"
+    " AND julianday(p.first_fetched_at) < julianday(:until)"
+    " AND julianday(p.created_at) >= julianday(:grace)"
+    " AND julianday(p.created_at) < julianday(:until)"
+)
+GLOBAL_BACKFILLED = (
+    "julianday(p.first_fetched_at) >= julianday(:since)"
+    " AND julianday(p.first_fetched_at) < julianday(:until)"
+    " AND julianday(p.created_at) < julianday(:grace)"
+)
+
+
+def _global_window(since_iso: str, until_iso: str) -> dict[str, str]:
+    return {"since": since_iso, "until": until_iso, "grace": grace_floor(since_iso)}
+
+
+def _stamp(value: str | None) -> float:
+    moment = parse_dt(value)
+    return moment.timestamp() if moment is not None else 0.0
+
+
+def _hotness(row: Any, settings: Settings, since_iso: str, until_iso: str) -> dict[str, Any]:
+    """Score one topic from its window aggregates (SPEC §5, Hotness score).
+
+    `components` are the weighted terms already multiplied by the relevance factor, so they
+    add up to `score`; `base` is the pre-factor total and `factor` is reported alongside.
+    """
+    from . import filters
+
+    weights = settings.global_digest.weights
+    cap = float(settings.global_digest.relevance_cap) or 1.0
+    relevant = filters.is_relevant(row)
+    relevance = float(row["relevance_score"] or 0.0)
+    factor = 0.5 if not relevant else 0.5 + min(relevance, cap) / cap
+    created = row["created_at"]
+    is_new = created is not None and since_iso <= created < until_iso
+    terms = {
+        "posts": weights.get("posts", 1.0) * math.log1p(row["new_posts"]),
+        "posters": weights.get("posters", 1.5) * math.log1p(row["posters"]),
+        "likes": weights.get("likes", 1.0) * math.log1p(row["likes"] or 0),
+        "new_topic": weights.get("new_topic", 1.0) * (1.0 if is_new else 0.0),
+        "accepted": weights.get("accepted", 1.0) * (1.0 if row["accepted"] else 0.0),
+        "staff": weights.get("staff", 0.5) * (1.0 if row["staff"] else 0.0),
+    }
+    components = {key: round(value * factor, 3) for key, value in terms.items()}
+    return {
+        "is_new_topic": is_new,
+        "relevant": relevant,
+        "factor": round(factor, 4),
+        "base": round(sum(terms.values()), 3),
+        "components": components,
+        "score": round(sum(components.values()), 3),
+    }
+
+
+def _global_aggregates(
+    conn: sqlite3.Connection,
+    params: dict[str, Any],
+    forum_id: int | None,
+) -> list[Any]:
+    sql = (
+        "SELECT t.id AS topic_id, t.forum_id, t.title, t.created_at, t.relevance_score,"
+        " t.relevance_override, COUNT(p.id) AS new_posts,"
+        " COUNT(DISTINCT p.username) AS posters, COALESCE(SUM(p.like_count), 0) AS likes,"
+        " MAX(CASE WHEN p.accepted_answer = 1 THEN 1 ELSE 0 END) AS accepted,"
+        " MAX(CASE WHEN p.staff = 1 THEN 1 ELSE 0 END) AS staff,"
+        " MAX(p.created_at) AS newest_post"
+        f" FROM topics t JOIN posts p ON p.topic_id = t.id WHERE ({GLOBAL_POSTS})"
+    )
+    values = dict(params)
+    if forum_id is not None:
+        sql += " AND t.forum_id = :forum_id"
+        values["forum_id"] = forum_id
+    sql += " GROUP BY t.id"
+    return conn.execute(sql, values).fetchall()
+
+
+def _topic_top_posts(
+    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT p.id, p.post_number, p.username, p.created_at, p.raw, p.like_count"
+        f" FROM posts p WHERE p.topic_id = :topic_id AND ({GLOBAL_POSTS})"
+        " ORDER BY p.like_count DESC, julianday(p.created_at) DESC, p.id DESC LIMIT :n",
+        {**params, "topic_id": topic_id, "n": GLOBAL_TOP_POSTS},
+    ).fetchall()
+    return [
+        {
+            "post_id": row["id"],
+            "url": _post_url(topic_id, row["post_number"]),
+            "date": row["created_at"],
+            "author": row["username"],
+            "likes": row["like_count"] or 0,
+            "snippet": _snippet(row["raw"], GLOBAL_SNIPPET_CHARS),
+        }
+        for row in rows
+    ]
+
+
+def _topic_watch_labels(
+    conn: sqlite3.Connection, params: dict[str, Any], topic_id: int
+) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT w.label FROM watch_hits h JOIN watchlist w ON w.id = h.watch_id"
+        " JOIN posts p ON p.id = h.post_id"
+        f" WHERE h.topic_id = :topic_id AND h.matched_in = 'body' AND ({GLOBAL_POSTS})"
+        " ORDER BY w.label",
+        {**params, "topic_id": topic_id},
+    ).fetchall()
+    return [row["label"] for row in rows]
+
+
+def _topic_flags(conn: sqlite3.Connection, topic_id: int) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM flags WHERE resolved_at IS NULL AND ("
+        " (target_type = 'topic' AND target_id = :target)"
+        " OR (target_type = 'post' AND target_id IN"
+        "   (SELECT CAST(id AS TEXT) FROM posts WHERE topic_id = :topic_id)))"
+        " ORDER BY priority, created_at DESC LIMIT :n",
+        {"target": str(topic_id), "topic_id": topic_id, "n": GLOBAL_FLAGS_PER_TOPIC},
+    ).fetchall()
+    return [
+        {
+            "id": flag["id"],
+            "label": flag["label"],
+            "url": knowledge.flag_payload(conn, flag)["url"],
+        }
+        for flag in rows
+    ]
+
+
+def _hot_topic(
+    conn: sqlite3.Connection,
+    row: Any,
+    settings: Settings,
+    params: dict[str, Any],
+    detail: bool,
+) -> dict[str, Any]:
+    topic_id = int(row["topic_id"])
+    hotness = _hotness(row, settings, params["since"], params["until"])
+    return {
+        "topic_id": topic_id,
+        "forum_id": row["forum_id"],
+        "title": row["title"],
+        "url": _topic_url(topic_id),
+        "created_at": row["created_at"],
+        "is_new_topic": hotness["is_new_topic"],
+        "relevance_score": row["relevance_score"],
+        "relevant": hotness["relevant"],
+        "new_posts": row["new_posts"],
+        "posters": row["posters"],
+        "likes": row["likes"] or 0,
+        "accepted_answer": bool(row["accepted"]),
+        "staff": bool(row["staff"]),
+        "base": hotness["base"],
+        "factor": hotness["factor"],
+        "score": hotness["score"],
+        "components": hotness["components"],
+        "top_posts": _topic_top_posts(conn, params, topic_id) if detail else [],
+        "watch_labels": _topic_watch_labels(conn, params, topic_id),
+        "flags": _topic_flags(conn, topic_id),
+    }
+
+
+def _unanswered(
+    conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
+) -> dict[str, Any]:
+    """New topics in the window with no replies: often questions worth surfacing."""
+    clause = ""
+    values = dict(params)
+    if forum_id is not None:
+        clause = " AND t.forum_id = :forum_id"
+        values["forum_id"] = forum_id
+    where = (
+        " WHERE julianday(t.created_at) >= julianday(:since)"
+        " AND julianday(t.created_at) < julianday(:until)"
+        " AND (SELECT COUNT(*) FROM posts p WHERE p.topic_id = t.id) <= 1" + clause
+    )
+    count = conn.execute(f"SELECT COUNT(*) AS n FROM topics t{where}", values).fetchone()["n"]
+    rows = conn.execute(
+        "SELECT t.id, t.title, t.created_at, t.relevance_score,"
+        " (SELECT p.raw FROM posts p WHERE p.topic_id = t.id"
+        "  ORDER BY p.post_number LIMIT 1) AS op_raw"
+        f" FROM topics t{where}"
+        " ORDER BY t.relevance_score DESC, julianday(t.created_at) DESC LIMIT :n",
+        {**values, "n": GLOBAL_UNANSWERED},
+    ).fetchall()
+    return {
+        "count": count,
+        "top": [
+            {
+                "topic_id": row["id"],
+                "title": row["title"],
+                "url": _topic_url(row["id"]),
+                "date": row["created_at"],
+                "snippet": _snippet(row["op_raw"], GLOBAL_UNANSWERED_SNIPPET_CHARS),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _first_post_url(conn: sqlite3.Connection, repo_id: int) -> str | None:
+    row = conn.execute(
+        "SELECT m.post_id FROM repo_mentions m WHERE m.repo_id = ?"
+        " ORDER BY m.mentioned_at IS NULL, m.mentioned_at, m.post_id LIMIT 1",
+        (repo_id,),
+    ).fetchone()
+    return knowledge.post_url(conn, row["post_id"]) if row is not None else None
+
+
+def _window_first_linked(
+    conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
+) -> dict[str, Any]:
+    """Repos and HF models first linked anywhere in the window, by mention count."""
+    forum_clause = " AND t.forum_id = :forum_id" if forum_id is not None else ""
+    values = dict(params)
+    if forum_id is not None:
+        values["forum_id"] = forum_id
+    repos = conn.execute(
+        "SELECT r.id, r.owner, r.name, r.url, r.first_seen_at, COUNT(m.post_id) AS mentions"
+        " FROM repos r LEFT JOIN repo_mentions m ON m.repo_id = r.id"
+        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({GLOBAL_POSTS}))"
+        " LEFT JOIN topics t ON t.id = m.topic_id"
+        " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until"
+        + forum_clause
+        + " GROUP BY r.id ORDER BY mentions DESC, r.first_seen_at DESC",
+        values,
+    ).fetchall()
+    hf = conn.execute(
+        "SELECT h.id, h.repo_id, h.first_seen_at, COUNT(m.post_id) AS mentions"
+        " FROM hf_models h LEFT JOIN hf_mentions m ON m.hf_model_id = h.id"
+        f" AND EXISTS (SELECT 1 FROM posts p WHERE p.id = m.post_id AND ({GLOBAL_POSTS}))"
+        " LEFT JOIN topics t ON t.id = m.topic_id"
+        " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until"
+        + forum_clause
+        + " GROUP BY h.id ORDER BY mentions DESC, h.first_seen_at DESC",
+        values,
+    ).fetchall()
+    items = [
+        {
+            "type": "repo",
+            "name": f"{row['owner']}/{row['name']}",
+            "url": row["url"],
+            "mentions": row["mentions"],
+            "first_post_url": _first_post_url(conn, row["id"]),
+        }
+        for row in repos
+    ]
+    items.extend(
+        {
+            "type": "hf_model",
+            "name": row["repo_id"],
+            "url": f"https://huggingface.co/{row['repo_id']}",
+            "mentions": row["mentions"],
+            "first_post_url": None,
+        }
+        for row in hf
+    )
+    items.sort(key=lambda item: (-item["mentions"], item["name"]))
+    return {"count": len(items), "top": items[:GLOBAL_FIRST_LINKED]}
+
+
+def _evidence_urls(conn: sqlite3.Connection, kind: str, target_id: int) -> list[str]:
+    rows = conn.execute(
+        "SELECT post_id FROM evidence WHERE target_type = ? AND target_id = ? ORDER BY id",
+        (kind, target_id),
+    ).fetchall()
+    return [url for url in (knowledge.post_url(conn, row["post_id"]) for row in rows) if url]
+
+
+def _window_knowledge(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str, Any]:
+    """Recipes, benchmarks and notes the agent recorded in the window, with evidence URLs."""
+    items: list[dict[str, Any]] = []
+    for row in conn.execute(
+        "SELECT id, model_canonical, quant_format, engine, topology, status, created_at"
+        " FROM recipes WHERE created_at >= :since AND created_at < :until"
+        " ORDER BY created_at DESC",
+        params,
+    ):
+        items.append(
+            {
+                "kind": "recipe",
+                "id": row["id"],
+                "model": row["model_canonical"],
+                "summary": " · ".join(
+                    part
+                    for part in (
+                        row["model_canonical"],
+                        row["quant_format"],
+                        row["engine"],
+                        row["topology"],
+                        row["status"],
+                    )
+                    if part
+                ),
+                "date": row["created_at"],
+                "urls": _evidence_urls(conn, "recipe", row["id"]),
+            }
+        )
+    for row in conn.execute(
+        "SELECT id, model_canonical, benchmark, score, score_unit, created_at"
+        " FROM benchmark_results WHERE created_at >= :since AND created_at < :until"
+        " ORDER BY created_at DESC",
+        params,
+    ):
+        unit = f" {row['score_unit']}" if row["score_unit"] else ""
+        items.append(
+            {
+                "kind": "benchmark",
+                "id": row["id"],
+                "model": row["model_canonical"],
+                "summary": f"{row['model_canonical']} · {row['benchmark']} {row['score']}{unit}",
+                "date": row["created_at"],
+                "urls": _evidence_urls(conn, "benchmark", row["id"]),
+            }
+        )
+    for row in conn.execute(
+        "SELECT id, subject, model_canonical, created_at FROM research_notes"
+        " WHERE created_at >= :since AND created_at < :until"
+        " AND lower(subject) NOT LIKE 'newsletter %'"
+        " ORDER BY created_at DESC",
+        params,
+    ):
+        items.append(
+            {
+                "kind": "note",
+                "id": row["id"],
+                "model": row["model_canonical"],
+                "summary": row["subject"],
+                "date": row["created_at"],
+                "urls": [source["url"] for source in knowledge.note_sources(conn, row["id"])],
+            }
+        )
+    items.sort(key=lambda item: item["date"], reverse=True)
+    return {"count": len(items), "items": items[:GLOBAL_KNOWLEDGE_ITEMS]}
+
+
+def _window_repo_events(
+    conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT e.kind, e.ref, e.title, e.url, e.detected_at, r.owner, r.name"
+        " FROM repo_events e JOIN repos r ON r.id = e.repo_id"
+        " WHERE r.watch = 1 AND e.kind IN ('release', 'tag')"
+        " AND e.detected_at >= :since AND e.detected_at < :until"
+        " ORDER BY e.detected_at DESC",
+        params,
+    ).fetchall()
+    return [
+        {
+            "repo": f"{row['owner']}/{row['name']}",
+            "kind": row["kind"],
+            "ref": row["ref"],
+            "title": row["title"],
+            "url": row["url"],
+            "date": row["detected_at"],
+        }
+        for row in rows
+    ]
+
+
+def global_digest(
+    conn: sqlite3.Connection,
+    settings: Settings | None = None,
+    since: str = "cursor",
+    until: str | None = None,
+    cursor: str = "global",
+    forum_id: int | None = None,
+    limit: int = 10,
+    relevant_only: bool = False,
+    detail: bool = False,
+    advance: bool = True,
+    next: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """ "What is the forum talking about": hot topics across both forums, deterministically.
+
+    The window is `[since, until)`. Only posts sparkwatch first saw in the window count, and
+    they must have been written in it (24-hour grace); backfilled posts are a count, and edits
+    are not counted. `until` is echoed back, so the same `since`/`until` gives the same
+    ranking. Its cursor (`'global'`) is separate from the digest's `'default'`.
+
+    `detail=True` adds each topic's 2 most-liked new posts with snippets; the default stays
+    lean so ten topics still fit the 10 KB response budget.
+    """
+    settings = settings or get_settings()
+    if next:
+        since = str(next.get("since") or since)
+        until = str(next.get("until") or until or "")
+        offset = int(next.get("offset") or 0)
+    else:
+        offset = 0
+    since_iso = resolve_since(conn, since, cursor)
+    until_iso = to_iso(parse_dt(until)) if until else utcnow_iso()
+    params = _global_window(since_iso, until_iso)
+    cap = max(1, min(int(limit), GLOBAL_LIMIT_CAP))
+
+    ranked = []
+    for row in _global_aggregates(conn, params, forum_id):
+        hotness = _hotness(row, settings, since_iso, until_iso)
+        if relevant_only and not hotness["relevant"]:
+            continue
+        ranked.append((hotness["score"], row["newest_post"], int(row["topic_id"]), row))
+    ranked.sort(key=lambda item: (-item[0], -_stamp(item[1]), item[2]))
+
+    page = ranked[offset : offset + cap]
+    hot_topics = [
+        _hot_topic(conn, row, settings, params, detail) for _score, _new, _id, row in page
+    ]
+    next_token = None
+    if offset + len(page) < len(ranked):
+        next_token = {"since": since_iso, "until": until_iso, "offset": offset + len(page)}
+
+    backfilled = conn.execute(
+        f"SELECT COUNT(*) AS posts, COUNT(DISTINCT p.topic_id) AS topics FROM posts p"
+        f" WHERE ({GLOBAL_BACKFILLED})",
+        params,
+    ).fetchone()
+
+    payload: dict[str, Any] = {
+        "since": since_iso,
+        "until": until_iso,
+        "cursor": cursor,
+        "weights": settings.global_digest.weights,
+        "hot_topics": hot_topics,
+        "hot_topics_total": len(ranked),
+        "unanswered": _unanswered(conn, params, forum_id),
+        "first_linked": _window_first_linked(conn, params, forum_id),
+        "knowledge": _window_knowledge(conn, params),
+        "repo_events": _window_repo_events(conn, params, forum_id),
+        "backfilled": {"posts": backfilled["posts"], "topics": backfilled["topics"]},
+    }
+    if next_token is not None:
+        payload["next"] = next_token
+
+    if advance and next is None:
+        current = conn.execute(
+            "SELECT last_seen_at FROM digest_cursors WHERE name=?", (cursor,)
+        ).fetchone()
+        if current is None or until_iso >= current["last_seen_at"]:
+            conn.execute(
+                "INSERT INTO digest_cursors (name, last_seen_at) VALUES (?, ?)"
+                " ON CONFLICT(name) DO UPDATE SET last_seen_at=excluded.last_seen_at",
+                (cursor, until_iso),
+            )
+    return payload
+
+
+def _render_global_topic(item: dict[str, Any]) -> str:
+    parts = ", ".join(f"{key} {value}" for key, value in item["components"].items())
+    return (
+        f"- {item['score']:.2f} {item['title']} — {item['url']}\n"
+        f"  {item['new_posts']} posts, {item['posters']} posters, {item['likes']} likes,"
+        f" factor {item['factor']:.2f} (base {item['base']:.2f}): {parts}"
+    )
+
+
+def render_global_digest(payload: dict[str, Any]) -> str:
+    """Readable CLI rendering: one line per hot topic, then the extra sections."""
+    lines = [
+        f"sparkwatch global-digest — {payload['since']} → {payload['until']}"
+        f" (cursor {payload['cursor']})"
+    ]
+    lines.append(f"\n## Hot topics ({len(payload['hot_topics'])}/{payload['hot_topics_total']})")
+    lines.extend(_render_global_topic(item) for item in payload["hot_topics"])
+    for item in payload["hot_topics"]:
+        for post in item["top_posts"]:
+            lines.append(
+                f"  · {post['likes']} likes {post['url']} {post['date']} — {post['snippet']}"
+            )
+
+    unanswered = payload["unanswered"]
+    lines.append(f"\n## Unanswered ({unanswered['count']})")
+    for item in unanswered["top"]:
+        lines.append(f"- {item['title']} — {item['url']} ({item['date']})")
+
+    first_linked = payload["first_linked"]
+    lines.append(f"\n## First linked ({first_linked['count']})")
+    for item in first_linked["top"]:
+        lines.append(f"- {item['name']} — {item['url']} ({item['mentions']} mentions)")
+
+    knowledge = payload["knowledge"]
+    lines.append(f"\n## Recorded knowledge ({knowledge['count']})")
+    for item in knowledge["items"]:
+        urls = " ".join(item["urls"]) or "(no evidence)"
+        lines.append(f"- [{item['kind']}] {item['summary']} — {urls}")
+
+    lines.append(f"\n## Watched repo events ({len(payload['repo_events'])})")
+    for item in payload["repo_events"]:
+        lines.append(f"- {item['repo']} {item['kind']} {item['ref']} — {item['url']}")
+
+    if payload["backfilled"]["posts"]:
+        lines.append(
+            f"\nbackfilled: {payload['backfilled']['posts']} posts"
+            f" in {payload['backfilled']['topics']} topics"
+        )
+    if "next" in payload:
+        token = payload["next"]
+        lines.append(f"\nmore hot topics: pass next={json.dumps(token)}")
+    return "\n".join(lines)
 
 
 def _render_sighting(item: dict[str, Any]) -> str:

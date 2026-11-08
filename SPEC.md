@@ -593,11 +593,11 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
 ### Hot topics: `global_digest` (added 2026-11-08, ISSUES #37)
 `digest` answers "what changed for *me*": the watchlist, my repos, my flags. `global_digest` answers "what is the forum talking about": hot topics across both categories, ranked by a deterministic score, whether or not they touch the watchlist. It needs no LLM and is useful on its own. The newsletter (next subsection, ISSUES #38) is a later enhancement built on it.
 
-- `global_digest(since="cursor", until?, cursor="global", forum_id?, limit=10, relevant_only=False, advance=True, next?)`
+- `global_digest(since="cursor", until?, cursor="global", forum_id?, limit=10, relevant_only=False, detail=False, advance=True, next?)`
   - **Window:** `[since, until)`. `since` is `"cursor"` (read from `digest_cursors[cursor]`; the epoch if it's unset) or an ISO date. `until` defaults to the build time and is echoed back, so a newsletter can name its exact period and a rerun with the same `since`/`until` against the same DB returns the same ranking.
   - **Posts counted:** only *new* posts in the window, using the digest's definitions (§5 `digest`, Timing): `first_fetched_at >= since`, `first_fetched_at < until`, `created_at >= since - 24h` and `created_at < until`. Backfilled posts are never hot; they appear as one `backfilled: {posts, topics}` count. Edits are not counted.
   - **Cursor:** its own cursor (`'global'`), separate from `digest`'s `'default'`, so asking "what's hot?" never consumes the user's catch-up and vice versa. With `advance=True` (the default, as for `digest`), the cursor moves to `until`. Pass `advance=False` to look without moving it.
-  - **Hotness score**, per topic with at least one new post. Every component is returned, so the agent can explain the ranking:
+  - **Hotness score**, per topic with at least one new post. Every component is returned — as the term already multiplied by the factor — with `base` and `factor` alongside, so the agent can explain the ranking and the components add up to `score`:
     ```
     base  = w.posts   · ln(1 + new_posts)
           + w.posters · ln(1 + distinct new posters)
@@ -610,23 +610,22 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
     - The relevance factor ranges from 0.5 to 1.5, so a busy but off-topic thread (shipping, RMA) ranks below a smaller dual-Spark one without being hidden. A topic marked irrelevant (`mark_topic(relevant=False)`) gets the minimum factor, 0.5, and `relevant: false`. With `relevant_only=True`, topics that `filters` judges irrelevant are left out, as in `digest`.
     - **Ties:** score desc, then newest new post desc, then `topic_id`.
     - **Weights** come from `[global_digest]` in config (below).
-    - **Known limits:** the likes term depends on ISSUES #39 (posts' `like_count` is stored as 0 today). Until that's fixed, the term is 0 for every topic and the ranking still works from the other terms. Once fixed, `posts.like_count` is the value as of the last fetch, so likes that arrive after a post was fetched are only seen when `refetch_recent_days` re-fetches it. `topics.views` is a snapshot and is **not** used. A view-delta term would need a `topic_stats` snapshot table, which is deferred to Run C.
-  - **Response** (compact JSON, the default response well under 10 KB):
-    - `since`, `until`, `cursor`, `weights`.
+    - **Known limits:** `posts.like_count` is the value as of the last fetch, so likes that arrive after a post was fetched are only seen when `refetch_recent_days` re-fetches it (ISSUES #39). `topics.views` is a snapshot and is **not** used. A view-delta term would need a `topic_stats` snapshot table, which is deferred to Run C.
+  - **Response** (compact JSON, the default response under 10 KB):
+    - `since`, `until`, `cursor`, `weights`, `hot_topics_total`.
     - `hot_topics[]` (at most `limit`, cap 25), each with:
       - `topic_id`, `forum_id`, `title`, `url`, `created_at`, `is_new_topic`, `relevance_score`, `relevant`;
-      - `new_posts`, `posters`, `likes`, `accepted_answer`, `staff`, `score`, `components` (each term's contribution);
-      - `top_posts`: the 2 most-liked new posts (ties go to the newest), each with `post_id`, `url`, `date`, `author`, `likes` and a 160-character snippet from the start of the post;
+      - `new_posts`, `posters`, `likes`, `accepted_answer`, `staff`, `base`, `factor`, `score`, `components` (each weighted term **already multiplied by `factor`**, so they add up to `score`; `base` is the pre-factor total);
+      - `top_posts`: with `detail=True`, the 2 most-liked new posts (ties go to the newest), each with `post_id`, `url`, `date`, `author`, `likes` and a 160-character snippet from the start of the post; `[]` otherwise. The default is lean so ten topics fit the 10 KB budget — read a thread with `get_posts`;
       - `watch_labels`: labels with a body mention among the new posts;
-      - `first_linked`: up to 3 repos or HF models first linked from this topic's new posts, each with `url`;
       - `flags`: open flags on the topic or its posts, each with `id`, `label` and `url`.
     - `unanswered`: new topics in the window with no replies, as `{count, top: [3]}` by relevance, each with `url`, `date` and an OP snippet. These are often questions worth surfacing.
     - `first_linked`: repos and HF models first linked anywhere in the window, as `{count, top: [5]}` by mention count, each with `url` and its first post's `url`.
-    - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), one line each with their evidence `url`s. Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
+    - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), at most 5 lines each with their evidence `url`s. Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
     - `repo_events`: releases and tags of watched repos in the window, with `url`.
     - `backfilled: {posts, topics}`.
-    - `next`: when more hot topics remain, an argument set to pass back for the next page.
-- **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--forum ID] [--limit N] [--json]` runs the same library function, with readable text by default.
+    - `next`: when more hot topics remain, an argument set (`since`, `until`, `offset`) to pass back for the next page.
+- **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--forum ID] [--limit N] [--relevant-only] [--detail] [--no-advance] [--json]` runs the same library function, with readable text by default.
 
 ### Newsletter (enhancement, ISSUES #38; build after `global_digest` has been in use)
 A regular "what's hot on the Spark forums" issue, written by the agent from `global_digest`. It adds one tool and one workflow, and no migration.

@@ -13,6 +13,7 @@
   "get_repo",
   "get_topic_overview",
   "get_workflow",
+  "global_digest",
   "list_benchmarks",
   "list_flags",
   "list_hf_models",

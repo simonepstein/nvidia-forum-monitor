@@ -105,6 +105,21 @@ def test_list_tools_matches_snapshot(settings, tmp_path):
     for optional in ("last_n", "max_chars", "next", "since", "username"):
         assert optional in get_posts["properties"]
 
+    global_digest = tools["global_digest"].inputSchema
+    assert global_digest.get("required", []) == []
+    for optional in (
+        "since",
+        "until",
+        "cursor",
+        "forum_id",
+        "limit",
+        "relevant_only",
+        "detail",
+        "advance",
+        "next",
+    ):
+        assert optional in global_digest["properties"]
+
     record_recipe = tools["record_recipe"].inputSchema
     assert set(record_recipe["required"]) == {"model", "topology", "status"}
     assert "evidence" in record_recipe["properties"]

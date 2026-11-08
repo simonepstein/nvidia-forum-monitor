@@ -139,6 +139,44 @@ def digest(
         console.print(render_digest(payload))
 
 
+@app.command("global-digest")
+def global_digest(
+    since: str = typer.Option("cursor", "--since"),
+    until: str | None = typer.Option(None, "--until"),
+    cursor: str = typer.Option("global", "--cursor"),
+    forum: int | None = typer.Option(None, "--forum", help="category id"),
+    limit: int = typer.Option(10, "--limit"),
+    relevant_only: bool = typer.Option(False, "--relevant-only"),
+    detail: bool = typer.Option(
+        False, "--detail", help="include each topic's 2 most-liked new posts"
+    ),
+    no_advance: bool = typer.Option(False, "--no-advance"),
+    as_json: bool = typer.Option(False, "--json", help="print the JSON the MCP tool returns"),
+) -> None:
+    """Show the forum's hot topics, ranked across both categories."""
+    from .digest import global_digest as build_global_digest
+    from .digest import render_global_digest
+
+    settings = _settings_or_exit()
+    conn = open_db(settings)
+    payload = build_global_digest(
+        conn,
+        settings,
+        since=since,
+        until=until,
+        cursor=cursor,
+        forum_id=forum,
+        limit=limit,
+        relevant_only=relevant_only,
+        detail=detail,
+        advance=not no_advance,
+    )
+    if as_json:
+        _print(payload)
+    else:
+        console.print(render_global_digest(payload))
+
+
 @app.command("serve-mcp")
 def serve_mcp() -> None:
     """Serve the MCP interface over stdio."""

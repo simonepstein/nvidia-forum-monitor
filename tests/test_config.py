@@ -23,6 +23,9 @@ def test_toml_values_are_loaded(settings):
     assert settings.hardware.single_spark_usable_gb == 120
     assert settings.mcp.default_limit == 20
     assert settings.mcp.max_limit == 200
+    assert settings.global_digest.weights["posters"] == 1.5
+    assert settings.global_digest.weights["staff"] == 0.5
+    assert settings.global_digest.relevance_cap == 40.0
     assert settings.mcp.max_chars == 40000
     assert settings.forum_ids() == [721, 723]
     assert settings.relevance.weights["watch"] == 4.0

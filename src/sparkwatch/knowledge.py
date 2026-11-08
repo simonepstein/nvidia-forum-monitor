@@ -25,6 +25,12 @@ def _post_target(conn: sqlite3.Connection, post_id: int) -> dict[str, Any] | Non
     return {"url": _post_url(row["topic_id"], row["post_number"]), "title": row["title"]}
 
 
+def post_url(conn: sqlite3.Connection, post_id: int) -> str | None:
+    """A stored post's forum URL, or None when the post is not in the mirror."""
+    target = _post_target(conn, post_id)
+    return target["url"] if target is not None else None
+
+
 def flag_target(conn: sqlite3.Connection, target_type: str, target_id: Any) -> dict[str, Any]:
     """The `url` (and title or model name) for a flag's target, per SPEC §5 Knowledge.
 

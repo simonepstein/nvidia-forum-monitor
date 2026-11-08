@@ -8,6 +8,7 @@ It is a local data layer behind an MCP server:
 
 - **Forum mirror.** Incremental, polite sync of the [DGX Spark / GB10](https://forums.developer.nvidia.com/c/accelerated-computing/dgx-spark-gb10/dgx-spark-gb10/721) and [Projects](https://forums.developer.nvidia.com/c/accelerated-computing/dgx-spark-gb10/dgx-spark-gb10-projects/723) categories into SQLite, with full-text search. It uses Discourse's JSON API, so no browser is needed.
 - **"Since I last asked" digest.** Shows new and updated threads, mentions of watchlist models, and first sightings of anticipated releases. It also carries open state — unacknowledged sightings and open flags — so a digest is never empty even when nothing changed.
+- **Hot topics.** `global_digest` ranks what the whole forum is talking about across both categories by a deterministic score, with every term of the score returned, plus unanswered questions, repos and models first linked, and what the agent recorded in the window. It has its own cursor, so it never consumes your catch-up.
 - **Agent memory.** Recipes (model, quant, engine, topology, tok/s, setup, gotchas), benchmarks, research notes and flags are written back by the agent. Every one cites the forum posts it came from, and the quoted text is checked against those posts.
 - **Watched repos.** GitHub repos found in posts can be watched. sparkwatch tracks whether the branch has moved, new releases and tags, and how far your installed SHA is behind, so you know when to update your serving stack.
 
@@ -21,6 +22,8 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/):
 uv sync
 uv run sparkwatch sync                 # mirror the last 60 days (configurable in config.toml)
 uv run sparkwatch digest               # what's new since the last digest
+uv run sparkwatch global-digest        # what's hot across both categories, ranked
+uv run sparkwatch global-digest --since 2026-11-01 --detail   # with the top posts
 uv run sparkwatch sync --forum 723 --max-pages 1     # a small, polite live run
 uv run sparkwatch backfill --days 120  # widen the window; never re-crawls from scratch
 uv run sparkwatch repos check          # watched repos: head moved? new release or tag?

@@ -23,6 +23,7 @@ from .digest import (
     watch_activity,
     window_params,
 )
+from .digest import global_digest as build_global_digest
 from .lock import LockBusy, write_lock
 from .repos import (
     check_repos,
@@ -269,6 +270,48 @@ def digest(
         relevant_only=relevant_only,
         limit=_limit(limit, settings),
         advance=advance,
+    )
+
+
+@tool
+def global_digest(
+    since: str = "cursor",
+    until: str | None = None,
+    cursor: str = "global",
+    forum_id: int | None = None,
+    limit: int = 10,
+    relevant_only: bool = False,
+    detail: bool = False,
+    advance: bool = True,
+    next: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Show what the whole forum is talking about: hot topics across both categories.
+
+    Use this when the question is not about your watchlist — "what's hot?", "what are people
+    struggling with?", or as the basis for a summary. Topics are ranked by a deterministic
+    score; every term is returned in `components`, already multiplied by the topic's
+    relevance `factor`, with the pre-factor `base` alongside, so the ranking can be explained.
+    Only posts sparkwatch first saw and that were written in `[since, until)` count: backfilled
+    posts are a count and edits are not counted. `until` defaults to now and is echoed back, so
+    the same `since`/`until` gives the same ranking. Its cursor is `'global'`, separate from
+    `digest`'s `'default'`; pass `advance=False` to look without moving it, and pass `next`
+    back for the next page of hot topics. The default response is lean; `detail=True` adds each
+    topic's 2 most-liked new posts with snippets, and `get_posts` reads a thread in full.
+    """
+    settings = _settings()
+    conn = _conn(settings)
+    return build_global_digest(
+        conn,
+        settings,
+        since=since,
+        until=until,
+        cursor=cursor,
+        forum_id=forum_id,
+        limit=limit,
+        relevant_only=relevant_only,
+        detail=detail,
+        advance=advance,
+        next=next,
     )
 
 

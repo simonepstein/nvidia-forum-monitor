@@ -95,6 +95,18 @@ class McpSettings(BaseModel):
     max_chars: int = 40000
 
 
+class GlobalDigestSettings(BaseModel):
+    weights: dict[str, float] = {
+        "posts": 1.0,
+        "posters": 1.5,
+        "likes": 1.0,
+        "new_topic": 1.0,
+        "accepted": 1.0,
+        "staff": 0.5,
+    }
+    relevance_cap: float = 40.0
+
+
 class LlmSettings(BaseModel):
     base_url: str = "http://localhost:8000/v1"
     model: str = "local-model"
@@ -123,6 +135,7 @@ class Settings(BaseSettings):
     hardware: HardwareSettings = HardwareSettings()
     repos: RepoSettings = RepoSettings()
     mcp: McpSettings = McpSettings()
+    global_digest: GlobalDigestSettings = GlobalDigestSettings()
     llm: LlmSettings = LlmSettings()
     websearch: WebSearchSettings = WebSearchSettings()
 
