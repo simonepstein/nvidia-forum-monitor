@@ -333,3 +333,14 @@ Verified independently:
 `global_digest` dry run on the live DB (default weights, since 2026-11-01; computed by hand from the SPEC formula): 85 active topics. The top 3 are the DeepSeek V4.1 EXL3 2×Spark thread (11.2), the GLM megathread (10.7) and "DGX Spark repeatedly rebooting after most recent update" (9.4, relevance factor 1.0). Sensible, with the likes term at 0 because of #39.
 
 **SPEC:** #36, #37, #38 and #39 are specified in the 2026-11-08 SPEC revision (§1 Post likes, §5 Hot topics, §5 Newsletter, §5 Knowledge flags and notes, config `[global_digest]`, build plan "Run A addendum", Verification).
+
+## #39 fix: post likes (2026-11-08 17:55, `fix/run-a-issues` @ 6e1b401 + working tree)
+
+Fixed as specified in SPEC §1 "Post likes".
+
+- **Parsing.** `sync._post_like_count()` reads `reaction_users_count`, then `actions_summary[id=2].count`, then the sum of `reactions[].count`. An older Discourse's dict-shaped `reactions` (`{"like_count": 4}`) is still read, and a plain `like_count` is the last resort; otherwise 0. `accepted_answer` is read from the post as before.
+- **Unchanged re-fetches.** The `"same"` branch now updates `like_count`, `accepted_answer` and `fetched_at`. `content_hash`, `changed_at`, `raw` and `cooked` are untouched, and the outcome stays `"same"`, so `posts_changed` is 0 and the post is never reported as edited.
+- **No new fetching.** Target selection is unchanged: only posts from the last `refetch_recent_days` in topics that were bumped, plus the OP and due tombstone re-checks. Older posts keep `like_count = 0` until their topic is active again; that is expected, and there is no automatic history re-fetch.
+- **Tests:** `tests/test_post_likes.py`, 6 tests: the three parse orders, the legacy dict shape, zero, and an unchanged re-fetch that raises likes 1 → 7 and sets `accepted_answer` with `posts_changed = 0`, an unchanged `changed_at`, and no edit in the digest. Full suite: 312 passed, 1 skipped. Ruff clean.
+- **Live rehearsal** on a `.backup` copy, then live: `sparkwatch sync --forum 721 --max-pages 1 --budget 120` (5 requests, one listing page — not a full 721 sync). Result: `requests 5, posts_new 3, posts_changed 0, partial false`. Topic 384438 was re-fetched, so 9 of its recent posts now carry likes (max 5); every other stored post stays 0. Spot check: post 1868123 stores `like_count = 5`, and the API returns `reaction_users_count: 5`.
+- **Live counts:** `select count(*), sum(like_count>0) from posts` → `9120|9`. Edits: `select count(*) from posts where changed_at >= <sync start> and first_fetched_at < <sync start>` → `0`.

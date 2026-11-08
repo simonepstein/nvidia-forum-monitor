@@ -254,16 +254,37 @@ def _tombstone(
         result.tombstones_new += 1
 
 
+def _post_like_count(post: dict[str, Any]) -> int:
+    """Likes from the reactions plugin, then core Discourse, then the legacy dict shape.
+
+    SPEC §1 "Post likes": `reaction_users_count` first; then `actions_summary[id=2].count`;
+    then the sum of `reactions[].count`. An older Discourse sends `reactions` as a dict with
+    `like_count`, which is read as it stands, and a plain `like_count` is the last resort.
+    """
+    count = post.get("reaction_users_count")
+    if count is None:
+        for action in post.get("actions_summary") or []:
+            if isinstance(action, dict) and action.get("id") == 2:
+                count = action.get("count")
+                break
+    if count is None:
+        reactions = post.get("reactions")
+        if isinstance(reactions, list):
+            count = sum(int(item.get("count") or 0) for item in reactions if isinstance(item, dict))
+        elif isinstance(reactions, dict):
+            count = reactions.get("like_count", post.get("like_count"))
+    if count is None:
+        count = post.get("like_count")
+    return int(count or 0)
+
+
 def _upsert_post(
     conn: sqlite3.Connection, topic_id: int, post: dict[str, Any], now_iso: str
 ) -> str:
     raw = post.get("raw") or ""
     content_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    reactions = post.get("reactions")
-    if isinstance(reactions, dict):
-        like_count = reactions.get("like_count", post.get("like_count", 0)) or 0
-    else:
-        like_count = post.get("like_count") or 0
+    like_count = _post_like_count(post)
+    accepted_answer = 1 if post.get("accepted_answer") else 0
     existing = conn.execute("SELECT content_hash FROM posts WHERE id=?", (post["id"],)).fetchone()
     values = (
         topic_id,
@@ -277,7 +298,7 @@ def _upsert_post(
         post.get("version"),
         post.get("reply_to_post_number"),
         like_count,
-        1 if post.get("accepted_answer") else 0,
+        accepted_answer,
         post.get("cooked"),
         raw,
         content_hash,
@@ -300,7 +321,12 @@ def _upsert_post(
             (*values, now_iso, now_iso, post["id"]),
         )
         return "changed"
-    conn.execute("UPDATE posts SET fetched_at=? WHERE id=?", (now_iso, post["id"]))
+    # Engagement metadata, not content: refresh likes and accepted answers on a re-fetch
+    # without touching content_hash or changed_at, so the post is not reported as edited.
+    conn.execute(
+        "UPDATE posts SET fetched_at=?, like_count=?, accepted_answer=? WHERE id=?",
+        (now_iso, like_count, accepted_answer, post["id"]),
+    )
     return "same"
 
 
