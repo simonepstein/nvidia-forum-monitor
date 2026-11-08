@@ -182,7 +182,15 @@ prompt_version = 1
 [websearch]
 enabled = false                  # needs BRAVE_API_KEY
 ```
-- **Secrets** come only from the environment: `GITHUB_TOKEN`, `BRAVE_API_KEY` and `SPARKWATCH_LLM__API_KEY`.
+- **Secrets** (`GITHUB_TOKEN`, `BRAVE_API_KEY`, `SPARKWATCH_LLM__API_KEY`) come from the environment, or from a `.env` file at the project root (revised 2026-11-08, ISSUES #51).
+  - **Loading:** `config.py` loads `PROJECT_ROOT/.env` once, before settings are built. It uses `python-dotenv` (`load_dotenv(path, override=False)`), so a variable already set in the environment always wins.
+    - The path is fixed to the project root, not the current directory, so the CLI, `uv run --directory …` and the MCP server all find the same file.
+    - A missing file is fine.
+    - `SPARKWATCH_ENV_FILE` overrides the path, and tests set it to a nonexistent file so a developer's `.env` never leaks into the test suite.
+  - **Hygiene:**
+    - `.env` is in `.gitignore`, and an `.env.example` with empty keys is committed.
+    - Secret values are never logged, echoed in tool or CLI output, or stored in the DB.
+    - `repos check` reports only `"auth": "token"|"anonymous"`.
 
 ## 1. Sync (`discourse.py`, `sync.py`, `links.py`, `watch.py`)
 
@@ -534,7 +542,7 @@ The number of watched repos is expected to be small, from a handful to about 20.
 ### `check_repos(repo=None)`
 This covers watched repos only.
 - **Requests:**
-  - GitHub REST API, plus `Authorization: Bearer $GITHUB_TOKEN` if it's set. It's optional: a handful of repos fits easily in the anonymous 60 requests/hour.
+  - GitHub REST API, plus `Authorization: Bearer $GITHUB_TOKEN` if it's set. It's optional, but recommended: a check costs about 4–5 requests per watched repo, and the anonymous limit is 60 requests/hour shared by everything on the IP. On 2026-11-08, five watched repos plus rehearsals exhausted it. A fine-grained token with public-repository read access and no permissions gives 5000/hour.
   - Every request is conditional, using the ETag stored for that endpoint; a 304 costs nothing.
   - The check stops cleanly when `X-RateLimit-Remaining` drops below 5.
 - **For each watched repo:**
@@ -965,6 +973,13 @@ MCP prompt templates encode the main workflows. They're short and instructional.
   - `repos check` stores ids for watched repos; then `repos check --repo <stale alias>` merges the alias row into the watched one: one row left, its `url` canonical, mentions summed, installs and events kept, no row deleted from the mirror's posts.
   - The live DB is repaired by the same two commands, in that order.
 - **Acceptance for #50:** `save_note(as_of="2026-11-08")` stores `2026-11-08T00:00:00+00:00`; an unparseable `as_of` is rejected with no row. The live row 5 is fixed by `UPDATE research_notes SET as_of='2026-11-08T00:00:00+00:00' WHERE id=5 AND as_of='2026-11-08';`, after which every `research_notes.as_of` matches the one stored format.
+
+**Run A follow-up (2026-11-08, ISSUES #51):** `.env` support for secrets (Configuration, Secrets).
+- **Acceptance:**
+  - With `GITHUB_TOKEN` only in `.env`, `repos check` reports `auth: "token"`, from both the CLI and MCP.
+  - With a different value exported in the shell, the exported one wins.
+  - The test suite passes with a dummy `.env` present and with none.
+  - `git check-ignore .env` succeeds.
 
 **Enhancement, after `global_digest` has been in use (ISSUES #38):** `save_newsletter`, the `'newsletter'` cursor and the `newsletter` workflow through all four channels (§5 Newsletter).
 - **Acceptance:** one real `newsletter` run in an MCP client. The issue is saved with sources, and `unresolved_links` is empty. The `'newsletter'` cursor moves, while `'global'` and `'default'` are unchanged.

@@ -721,3 +721,14 @@ Rendering only. `global_digest()` and its JSON payload are untouched.
   - A third `repos check` returned `stopped_early: true` after 1 request, because GitHub's anonymous limit was exhausted (`remaining 0/60`, reset 22:07). It stopped cleanly with no errors, which is the intended behaviour.
 
 **Note, not a bug:** five watched repos at about 4–5 requests each is roughly 25 requests per `repos check`. Anonymous GitHub allows 60 per hour, shared by everything on this IP; today that included rehearsals by two sessions. `GITHUB_TOKEN` is already supported (`repos.py:63`). A fine-grained token with no scopes, used read-only for public repos, raises the limit to 5000 per hour.
+
+### #51 (enhancement, small): read secrets from a `.env` file
+- **Why:** `GITHUB_TOKEN` currently has to be exported in the shell that starts Claude Code, so the MCP server inherits it. A `.env` in the project works the same for the CLI and MCP, with no shell setup and no token copied into `~/.claude.json`.
+  - A token is now recommended: on 2026-11-08 the anonymous 60/hour limit ran out (see the #48–#50 re-test).
+- **Spec:** SPEC Configuration, "Secrets" (revised 2026-11-08).
+  - `load_dotenv(PROJECT_ROOT/.env, override=False)` in `config.py`, so environment variables win. Add the dependency with `uv add python-dotenv`.
+  - `SPARKWATCH_ENV_FILE` overrides the path, and tests point it at a missing file.
+  - `.env` goes in `.gitignore`, with a committed `.env.example`.
+  - Secret values are never output. `repos check` reports `auth: token|anonymous`.
+  - Also fixes the SPEC line that said anonymous is plenty.
+- **Acceptance:** the build plan's "Run A follow-up (ISSUES #51)". Do not create a real `.env`; the user will add the token.
