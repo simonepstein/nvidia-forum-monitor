@@ -620,9 +620,9 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
       - `watch_labels`: labels with a body mention among the new posts;
       - `flags`: open flags on the topic or its posts, each with `id`, `label` and `url`.
     - `unanswered`: new topics in the window with no replies, as `{count, top: [3]}` by relevance, each with `url`, `date` and an OP snippet. These are often questions worth surfacing.
-    - `first_linked`: repos and HF models first linked anywhere in the window, as `{count, top: [5]}` by mention count, each with `url` and its first post's `url`.
+    - `first_linked`: repos and HF models first linked anywhere in the window, as `{count, top: [5]}` by mention count, each with `url` and its first post's `url`. A link with no mention on a window post is left out, so a repo first recorded during a backfill is not news.
     - `knowledge`: recipes, benchmarks and notes the agent recorded in the window (by `created_at`), at most 5 lines: recipe and benchmark lines carry their evidence `url`s, and a note line carries `sources: [{post_id, url, date}]` (§5 Knowledge). Newsletter issues (notes saved by `save_newsletter`, once that exists) are excluded.
-    - `repo_events`: releases and tags of watched repos in the window, with `url`.
+    - `repo_events`: releases and tags of watched repos in the window, as `{count, top: [5]}`, each with `url`.
     - `backfilled: {posts, topics}`.
     - `next`: when more hot topics remain, an argument set (`since`, `until`, `offset`) to pass back for the next page.
 - **CLI:** `sparkwatch global-digest [--since DATE|cursor] [--until DATE] [--forum ID] [--limit N] [--relevant-only] [--detail] [--no-advance] [--json]` runs the same library function, with readable text by default.

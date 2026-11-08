@@ -159,18 +159,22 @@ def global_digest(
 
     settings = _settings_or_exit()
     conn = open_db(settings)
-    payload = build_global_digest(
-        conn,
-        settings,
-        since=since,
-        until=until,
-        cursor=cursor,
-        forum_id=forum,
-        limit=limit,
-        relevant_only=relevant_only,
-        detail=detail,
-        advance=not no_advance,
-    )
+    try:
+        payload = build_global_digest(
+            conn,
+            settings,
+            since=since,
+            until=until,
+            cursor=cursor,
+            forum_id=forum,
+            limit=limit,
+            relevant_only=relevant_only,
+            detail=detail,
+            advance=not no_advance,
+        )
+    except ValueError as exc:
+        console.print(f"error: {exc}", style="red")
+        raise typer.Exit(code=1) from None
     if as_json:
         _print(payload)
     else:

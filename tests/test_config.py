@@ -33,6 +33,17 @@ def test_toml_values_are_loaded(settings):
     assert "dual spark" in settings.relevance.keywords["dual"]
 
 
+def test_global_digest_settings_validate_the_cap_and_weight_names():
+    from sparkwatch.config import GlobalDigestSettings
+
+    with pytest.raises(ValidationError):
+        GlobalDigestSettings(relevance_cap=0)
+    with pytest.raises(ValidationError):
+        GlobalDigestSettings(relevance_cap=-5)
+    with pytest.raises(ValidationError, match="unknown global_digest weight"):
+        GlobalDigestSettings(weights={"posts": 1.0, "postz": 2.0})
+
+
 def test_toml_defaults_point_at_the_live_forum(monkeypatch, tmp_path):
     monkeypatch.delenv("SPARKWATCH_FORUM__BASE_URL", raising=False)
     monkeypatch.delenv("SPARKWATCH_FORUM__REQUESTS_PER_SECOND", raising=False)

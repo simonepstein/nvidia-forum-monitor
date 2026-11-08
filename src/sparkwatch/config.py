@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -95,6 +95,16 @@ class McpSettings(BaseModel):
     max_chars: int = 40000
 
 
+GLOBAL_DIGEST_WEIGHTS: tuple[str, ...] = (
+    "posts",
+    "posters",
+    "likes",
+    "new_topic",
+    "accepted",
+    "staff",
+)
+
+
 class GlobalDigestSettings(BaseModel):
     weights: dict[str, float] = {
         "posts": 1.0,
@@ -104,7 +114,18 @@ class GlobalDigestSettings(BaseModel):
         "accepted": 1.0,
         "staff": 0.5,
     }
-    relevance_cap: float = 40.0
+    relevance_cap: float = Field(40.0, gt=0)
+
+    @field_validator("weights")
+    @classmethod
+    def _check_weight_keys(cls, value: dict[str, float]) -> dict[str, float]:
+        unknown = sorted(set(value) - set(GLOBAL_DIGEST_WEIGHTS))
+        if unknown:
+            raise ValueError(
+                "unknown global_digest weight(s): "
+                f"{', '.join(unknown)} (known: {', '.join(GLOBAL_DIGEST_WEIGHTS)})"
+            )
+        return value
 
 
 class LlmSettings(BaseModel):

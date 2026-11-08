@@ -114,6 +114,17 @@ def test_a_note_without_sources_returns_an_empty_list(settings, conn):
     assert m.get_notes()["notes"][0]["sources"] == []
 
 
+def test_a_recipe_flag_without_evidence_is_not_reported_missing(settings, conn):
+    seed(conn)
+    recipe = m.record_recipe(model="GLM 5.3 Flash", topology="dual-spark", status="works")
+    m.flag("recipe", str(recipe["recipe_id"]), "recipe", "quant unclear")
+
+    flag = m.list_flags()["flags"][0]
+
+    assert flag["url"] is None
+    assert "target_missing" not in flag
+
+
 def test_digest_open_flags_carry_urls(settings, conn):
     seed(conn)
     m.flag("topic", "700", "perf-claim", "60 tok/s claim")

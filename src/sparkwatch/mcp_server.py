@@ -57,7 +57,6 @@ from .workflows import INSTRUCTIONS
 from .workflows import get_workflow as _get_workflow
 from .workflows import list_workflows as _list_workflows
 
-FORUM_URL = "https://forums.developer.nvidia.com"
 EPOCH = "1970-01-01T00:00:00+00:00"
 
 mcp = FastMCP("sparkwatch", instructions=INSTRUCTIONS)
@@ -90,11 +89,11 @@ def _max_chars(value: int | None, settings: Settings) -> int:
 
 
 def _post_url(topic_id: int, post_number: int | None) -> str:
-    return f"{FORUM_URL}/t/{topic_id}/{post_number or 1}"
+    return knowledge.post_link(topic_id, post_number)
 
 
 def _topic_url(topic_id: int) -> str:
-    return f"{FORUM_URL}/t/{topic_id}"
+    return knowledge.topic_url(topic_id)
 
 
 def _snippet(text: str | None, length: int = 300) -> str | None:

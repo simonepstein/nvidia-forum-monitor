@@ -389,9 +389,11 @@ def test_cli_global_digest_renders_text_and_json(settings, conn):
 
     text = runner.invoke(app, ["global-digest", "--since", SINCE, "--until", UNTIL, "--no-advance"])
     assert text.exit_code == 0
-    assert "Hot topics" in text.stdout
+    assert "Hot topics (1/1)" in text.stdout
     assert "GLM on two Sparks" in text.stdout
-    assert "components" not in text.stdout.lower() or "posts" in text.stdout
+    assert "1 new posts by 1 posters" in text.stdout
+    assert "terms: posts +" in text.stdout
+    assert "new_topic +" not in text.stdout
 
     as_json = runner.invoke(
         app,
@@ -400,3 +402,93 @@ def test_cli_global_digest_renders_text_and_json(settings, conn):
     assert as_json.exit_code == 0
     assert '"hot_topics"' in as_json.stdout
     assert '"components"' in as_json.stdout
+
+
+def test_invalid_dates_raise_a_clear_error(settings, conn):
+    import pytest
+
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+
+    with pytest.raises(ValueError, match="invalid since date"):
+        global_digest(conn, settings, since="last week", advance=False)
+    with pytest.raises(ValueError, match="invalid until date"):
+        global_digest(conn, settings, since=SINCE, until="last week", advance=False)
+
+
+def test_cli_rejects_a_bad_date_with_one_line(settings, conn):
+    from typer.testing import CliRunner
+
+    from sparkwatch.cli import app
+
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    result = CliRunner().invoke(app, ["global-digest", "--since", SINCE, "--until", "last week"])
+
+    assert result.exit_code == 1
+    assert "invalid until date" in result.stdout
+    assert "Traceback" not in result.stdout
+
+
+def test_first_linked_ignores_links_with_no_in_window_mentions(settings, conn):
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    seed_topic(conn, 2)
+    seed_post(conn, 21, 2, created_at=BEFORE_GRACE, first_fetched_at=IN_WINDOW)
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, first_seen_at)"
+        " VALUES (1, 'o', 'old', 'https://github.com/o/old', ?)",
+        (IN_WINDOW,),
+    )
+    conn.execute(
+        "INSERT INTO repo_mentions (repo_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (1, 21, 2, 'https://github.com/o/old', ?)",
+        (IN_WINDOW,),
+    )
+
+    payload = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+
+    assert payload["first_linked"] == {"count": 0, "top": []}
+
+
+def test_hf_models_get_their_first_post_url(settings, conn):
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    conn.execute(
+        "INSERT INTO hf_models (id, repo_id, first_seen_at)"
+        " VALUES (1, 'nvidia/DeepSeek-V4.1-Flash', ?)",
+        (IN_WINDOW,),
+    )
+    conn.execute(
+        "INSERT INTO hf_mentions (hf_model_id, post_id, topic_id, url, mentioned_at)"
+        " VALUES (1, 11, 1, 'https://huggingface.co/nvidia/DeepSeek-V4.1-Flash', ?)",
+        (IN_WINDOW,),
+    )
+
+    payload = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+
+    item = payload["first_linked"]["top"][0]
+    assert item["type"] == "hf_model"
+    assert item["url"] == "https://huggingface.co/nvidia/DeepSeek-V4.1-Flash"
+    assert item["first_post_url"] == "https://forums.developer.nvidia.com/t/1/11"
+
+
+def test_repo_events_are_capped_with_a_total(settings, conn):
+    seed_topic(conn, 1)
+    seed_post(conn, 11, 1)
+    conn.execute(
+        "INSERT INTO repos (id, owner, name, url, watch, first_seen_at)"
+        " VALUES (1, 'o', 'r', 'https://github.com/o/r', 1, ?)",
+        (IN_WINDOW,),
+    )
+    for index in range(7):
+        conn.execute(
+            "INSERT INTO repo_events (repo_id, kind, ref, title, url, detected_at)"
+            " VALUES (1, 'release', ?, ?, 'https://github.com/o/r/releases', ?)",
+            (f"v{index}", f"release {index}", IN_WINDOW),
+        )
+
+    payload = global_digest(conn, settings, since=SINCE, until=UNTIL, advance=False)
+
+    assert payload["repo_events"]["count"] == 7
+    assert len(payload["repo_events"]["top"]) == 5

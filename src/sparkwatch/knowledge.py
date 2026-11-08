@@ -6,11 +6,13 @@ from typing import Any
 FORUM_URL = "https://forums.developer.nvidia.com"
 
 
-def _post_url(topic_id: int, post_number: int | None) -> str:
+def post_link(topic_id: int, post_number: int | None) -> str:
+    """The forum URL of a post: `/t/<topic_id>/<post_number>`."""
     return f"{FORUM_URL}/t/{topic_id}/{post_number or 1}"
 
 
-def _topic_url(topic_id: int) -> str:
+def topic_url(topic_id: int) -> str:
+    """The forum URL of a topic: `/t/<topic_id>`."""
     return f"{FORUM_URL}/t/{topic_id}"
 
 
@@ -22,7 +24,7 @@ def _post_target(conn: sqlite3.Connection, post_id: int) -> dict[str, Any] | Non
     ).fetchone()
     if row is None:
         return None
-    return {"url": _post_url(row["topic_id"], row["post_number"]), "title": row["title"]}
+    return {"url": post_link(row["topic_id"], row["post_number"]), "title": row["title"]}
 
 
 def post_url(conn: sqlite3.Connection, post_id: int) -> str | None:
@@ -45,7 +47,7 @@ def flag_target(conn: sqlite3.Connection, target_type: str, target_id: Any) -> d
             row = conn.execute("SELECT id, title FROM topics WHERE id=?", (int(value),)).fetchone()
         if row is None:
             return {"url": None, "target_missing": True}
-        return {"url": _topic_url(row["id"]), "title": row["title"]}
+        return {"url": topic_url(row["id"]), "title": row["title"]}
     if target_type == "post":
         target = _post_target(conn, int(value)) if value.isdigit() else None
         return target or {"url": None, "target_missing": True}
@@ -65,15 +67,19 @@ def flag_target(conn: sqlite3.Connection, target_type: str, target_id: Any) -> d
             return {"url": None, "target_missing": True}
         return {"url": f"https://huggingface.co/{row['repo_id']}"}
     if target_type == "recipe":
-        row = None
-        if value.isdigit():
-            row = conn.execute(
-                "SELECT post_id FROM evidence WHERE target_type='recipe' AND target_id=?"
-                " ORDER BY id LIMIT 1",
-                (int(value),),
-            ).fetchone()
+        if not value.isdigit():
+            return {"url": None, "target_missing": True}
+        recipe = conn.execute("SELECT id FROM recipes WHERE id=?", (int(value),)).fetchone()
+        if recipe is None:
+            return {"url": None, "target_missing": True}
+        row = conn.execute(
+            "SELECT post_id FROM evidence WHERE target_type='recipe' AND target_id=?"
+            " ORDER BY id LIMIT 1",
+            (int(value),),
+        ).fetchone()
+        # The recipe exists but has no citable post yet: no URL, but not "missing".
         target = _post_target(conn, row["post_id"]) if row is not None else None
-        return target or {"url": None, "target_missing": True}
+        return target or {"url": None}
     if target_type == "model":
         return {"url": None, "model": value}
     return {"url": None, "target_missing": True}
@@ -101,7 +107,7 @@ def note_sources(conn: sqlite3.Connection, note_id: int) -> list[dict[str, Any]]
     return [
         {
             "post_id": row["post_id"],
-            "url": _post_url(row["topic_id"], row["post_number"]),
+            "url": post_link(row["topic_id"], row["post_number"]),
             "date": row["created_at"],
         }
         for row in rows

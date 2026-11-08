@@ -6,12 +6,11 @@ import sqlite3
 from datetime import timedelta
 from typing import Any
 
-from . import knowledge
+from . import filters, knowledge
 from .config import Settings, get_settings
 from .util import parse_dt, to_iso, utcnow_iso
 
 EPOCH = "1970-01-01T00:00:00+00:00"
-FORUM_URL = "https://forums.developer.nvidia.com"
 GRACE = timedelta(hours=24)
 
 # The digest's three kinds of post (SPEC §5, "Timing"), written once and reused by
@@ -28,6 +27,15 @@ BACKFILLED_POSTS = (
     "julianday(p.first_fetched_at) >= julianday(:since)"
     " AND julianday(p.created_at) < julianday(:grace)"
 )
+# The same definitions with the window's exclusive upper bound (global_digest, SPEC §5).
+NEW_POSTS_UNTIL = (
+    f"({NEW_POSTS})"
+    " AND julianday(p.first_fetched_at) < julianday(:until)"
+    " AND julianday(p.created_at) < julianday(:until)"
+)
+BACKFILLED_POSTS_UNTIL = (
+    f"({BACKFILLED_POSTS}) AND julianday(p.first_fetched_at) < julianday(:until)"
+)
 
 
 def grace_floor(since_iso: str) -> str:
@@ -43,11 +51,11 @@ def window_params(since_iso: str) -> dict[str, str]:
 
 
 def _post_url(topic_id: int, post_number: int | None) -> str:
-    return f"{FORUM_URL}/t/{topic_id}/{post_number or 1}"
+    return knowledge.post_link(topic_id, post_number)
 
 
 def _topic_url(topic_id: int, slug: str | None = None) -> str:
-    return f"{FORUM_URL}/t/{topic_id}"
+    return knowledge.topic_url(topic_id)
 
 
 SNIPPET_CHARS = 120
@@ -437,18 +445,11 @@ GLOBAL_FLAGS_PER_TOPIC = 3
 GLOBAL_UNANSWERED = 3
 GLOBAL_FIRST_LINKED = 5
 GLOBAL_KNOWLEDGE_ITEMS = 5
+GLOBAL_REPO_EVENTS = 5
 
-GLOBAL_POSTS = (
-    "julianday(p.first_fetched_at) >= julianday(:since)"
-    " AND julianday(p.first_fetched_at) < julianday(:until)"
-    " AND julianday(p.created_at) >= julianday(:grace)"
-    " AND julianday(p.created_at) < julianday(:until)"
-)
-GLOBAL_BACKFILLED = (
-    "julianday(p.first_fetched_at) >= julianday(:since)"
-    " AND julianday(p.first_fetched_at) < julianday(:until)"
-    " AND julianday(p.created_at) < julianday(:grace)"
-)
+# The digest's own new/backfilled definitions with the window's exclusive upper bound.
+GLOBAL_POSTS = NEW_POSTS_UNTIL
+GLOBAL_BACKFILLED = BACKFILLED_POSTS_UNTIL
 
 
 def _global_window(since_iso: str, until_iso: str) -> dict[str, str]:
@@ -466,10 +467,8 @@ def _hotness(row: Any, settings: Settings, since_iso: str, until_iso: str) -> di
     `components` are the weighted terms already multiplied by the relevance factor, so they
     add up to `score`; `base` is the pre-factor total and `factor` is reported alongside.
     """
-    from . import filters
-
     weights = settings.global_digest.weights
-    cap = float(settings.global_digest.relevance_cap) or 1.0
+    cap = float(settings.global_digest.relevance_cap)
     relevant = filters.is_relevant(row)
     relevance = float(row["relevance_score"] or 0.0)
     factor = 0.5 if not relevant else 0.5 + min(relevance, cap) / cap
@@ -641,11 +640,14 @@ def _unanswered(
     }
 
 
-def _first_post_url(conn: sqlite3.Connection, repo_id: int) -> str | None:
+def _first_mention_url(
+    conn: sqlite3.Connection, table: str, id_column: str, model_id: int
+) -> str | None:
+    """The URL of the post that first mentioned a repo or HF model, by post date."""
     row = conn.execute(
-        "SELECT m.post_id FROM repo_mentions m WHERE m.repo_id = ?"
-        " ORDER BY m.mentioned_at IS NULL, m.mentioned_at, m.post_id LIMIT 1",
-        (repo_id,),
+        f"SELECT m.post_id FROM {table} m JOIN posts p ON p.id = m.post_id"
+        f" WHERE m.{id_column} = ? ORDER BY p.created_at, m.post_id LIMIT 1",
+        (model_id,),
     ).fetchone()
     return knowledge.post_url(conn, row["post_id"]) if row is not None else None
 
@@ -653,7 +655,11 @@ def _first_post_url(conn: sqlite3.Connection, repo_id: int) -> str | None:
 def _window_first_linked(
     conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
 ) -> dict[str, Any]:
-    """Repos and HF models first linked anywhere in the window, by mention count."""
+    """Repos and HF models first linked anywhere in the window, by mention count.
+
+    Only links with at least one mention on a new post in the window count, so a repo first
+    recorded during a backfill is not reported as news.
+    """
     forum_clause = " AND t.forum_id = :forum_id" if forum_id is not None else ""
     values = dict(params)
     if forum_id is not None:
@@ -665,7 +671,8 @@ def _window_first_linked(
         " LEFT JOIN topics t ON t.id = m.topic_id"
         " WHERE r.first_seen_at >= :since AND r.first_seen_at < :until"
         + forum_clause
-        + " GROUP BY r.id ORDER BY mentions DESC, r.first_seen_at DESC",
+        + " GROUP BY r.id HAVING mentions > 0"
+        " ORDER BY mentions DESC, r.first_seen_at DESC",
         values,
     ).fetchall()
     hf = conn.execute(
@@ -675,7 +682,8 @@ def _window_first_linked(
         " LEFT JOIN topics t ON t.id = m.topic_id"
         " WHERE h.first_seen_at >= :since AND h.first_seen_at < :until"
         + forum_clause
-        + " GROUP BY h.id ORDER BY mentions DESC, h.first_seen_at DESC",
+        + " GROUP BY h.id HAVING mentions > 0"
+        " ORDER BY mentions DESC, h.first_seen_at DESC",
         values,
     ).fetchall()
     items = [
@@ -684,7 +692,7 @@ def _window_first_linked(
             "name": f"{row['owner']}/{row['name']}",
             "url": row["url"],
             "mentions": row["mentions"],
-            "first_post_url": _first_post_url(conn, row["id"]),
+            "first_post_url": _first_mention_url(conn, "repo_mentions", "repo_id", row["id"]),
         }
         for row in repos
     ]
@@ -694,7 +702,7 @@ def _window_first_linked(
             "name": row["repo_id"],
             "url": f"https://huggingface.co/{row['repo_id']}",
             "mentions": row["mentions"],
-            "first_post_url": None,
+            "first_post_url": _first_mention_url(conn, "hf_mentions", "hf_model_id", row["id"]),
         }
         for row in hf
     )
@@ -779,7 +787,8 @@ def _window_knowledge(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[
 
 def _window_repo_events(
     conn: sqlite3.Connection, params: dict[str, Any], forum_id: int | None
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
+    """Releases and tags of watched repos in the window, newest first, capped like the rest."""
     rows = conn.execute(
         "SELECT e.kind, e.ref, e.title, e.url, e.detected_at, r.owner, r.name"
         " FROM repo_events e JOIN repos r ON r.id = e.repo_id"
@@ -788,7 +797,7 @@ def _window_repo_events(
         " ORDER BY e.detected_at DESC",
         params,
     ).fetchall()
-    return [
+    events = [
         {
             "repo": f"{row['owner']}/{row['name']}",
             "kind": row["kind"],
@@ -799,6 +808,7 @@ def _window_repo_events(
         }
         for row in rows
     ]
+    return {"count": len(events), "top": events[:GLOBAL_REPO_EVENTS]}
 
 
 def global_digest(
@@ -832,7 +842,15 @@ def global_digest(
     else:
         offset = 0
     since_iso = resolve_since(conn, since, cursor)
-    until_iso = to_iso(parse_dt(until)) if until else utcnow_iso()
+    if parse_dt(since_iso) is None:
+        raise ValueError(f"invalid since date: {since!r}; use an ISO date or 'cursor'")
+    if until:
+        parsed_until = parse_dt(until)
+        if parsed_until is None:
+            raise ValueError(f"invalid until date: {until!r}; use an ISO date")
+        until_iso = to_iso(parsed_until)
+    else:
+        until_iso = utcnow_iso()
     params = _global_window(since_iso, until_iso)
     cap = max(1, min(int(limit), GLOBAL_LIMIT_CAP))
 
@@ -888,12 +906,19 @@ def global_digest(
 
 
 def _render_global_topic(item: dict[str, Any]) -> str:
-    parts = ", ".join(f"{key} {value}" for key, value in item["components"].items())
-    return (
-        f"- {item['score']:.2f} {item['title']} — {item['url']}\n"
-        f"  {item['new_posts']} posts, {item['posters']} posters, {item['likes']} likes,"
-        f" factor {item['factor']:.2f} (base {item['base']:.2f}): {parts}"
+    counts = (
+        f"{item['new_posts']} new posts by {item['posters']} posters,"
+        f" {item['likes']} likes, factor {item['factor']:.2f} (base {item['base']:.2f})"
     )
+    terms = ", ".join(f"{key} +{value:.2f}" for key, value in item["components"].items() if value)
+    lines = [f"- {item['score']:.2f} {item['title']} — {item['url']}", f"  {counts}"]
+    if terms:
+        lines.append(f"  terms: {terms}")
+    return "\n".join(lines)
+
+
+def _capped_header(shown: int, total: int) -> str:
+    return f"{shown}/{total}"
 
 
 def render_global_digest(payload: dict[str, Any]) -> str:
@@ -902,7 +927,9 @@ def render_global_digest(payload: dict[str, Any]) -> str:
         f"sparkwatch global-digest — {payload['since']} → {payload['until']}"
         f" (cursor {payload['cursor']})"
     ]
-    lines.append(f"\n## Hot topics ({len(payload['hot_topics'])}/{payload['hot_topics_total']})")
+    lines.append(
+        f"\n## Hot topics ({_capped_header(len(payload['hot_topics']), payload['hot_topics_total'])})"
+    )
     lines.extend(_render_global_topic(item) for item in payload["hot_topics"])
     for item in payload["hot_topics"]:
         for post in item["top_posts"]:
@@ -911,23 +938,30 @@ def render_global_digest(payload: dict[str, Any]) -> str:
             )
 
     unanswered = payload["unanswered"]
-    lines.append(f"\n## Unanswered ({unanswered['count']})")
+    lines.append(f"\n## Unanswered ({_capped_header(len(unanswered['top']), unanswered['count'])})")
     for item in unanswered["top"]:
         lines.append(f"- {item['title']} — {item['url']} ({item['date']})")
 
     first_linked = payload["first_linked"]
-    lines.append(f"\n## First linked ({first_linked['count']})")
+    lines.append(
+        f"\n## First linked ({_capped_header(len(first_linked['top']), first_linked['count'])})"
+    )
     for item in first_linked["top"]:
         lines.append(f"- {item['name']} — {item['url']} ({item['mentions']} mentions)")
 
     knowledge = payload["knowledge"]
-    lines.append(f"\n## Recorded knowledge ({knowledge['count']})")
+    lines.append(
+        f"\n## Recorded knowledge ({_capped_header(len(knowledge['items']), knowledge['count'])})"
+    )
     for item in knowledge["items"]:
         urls = item.get("urls") or [source["url"] for source in item.get("sources") or []]
         lines.append(f"- [{item['kind']}] {item['summary']} — {' '.join(urls) or '(no evidence)'}")
 
-    lines.append(f"\n## Watched repo events ({len(payload['repo_events'])})")
-    for item in payload["repo_events"]:
+    repo_events = payload["repo_events"]
+    lines.append(
+        f"\n## Watched repo events ({_capped_header(len(repo_events['top']), repo_events['count'])})"
+    )
+    for item in repo_events["top"]:
         lines.append(f"- {item['repo']} {item['kind']} {item['ref']} — {item['url']}")
 
     if payload["backfilled"]["posts"]:
@@ -936,8 +970,10 @@ def render_global_digest(payload: dict[str, Any]) -> str:
             f" in {payload['backfilled']['topics']} topics"
         )
     if "next" in payload:
-        token = payload["next"]
-        lines.append(f"\nmore hot topics: pass next={json.dumps(token)}")
+        remaining = payload["hot_topics_total"] - (payload["next"]["offset"])
+        lines.append(
+            f"\n{remaining} more hot topic(s): raise --limit (cap {GLOBAL_LIMIT_CAP}) to see them"
+        )
     return "\n".join(lines)
 
 

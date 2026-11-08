@@ -125,3 +125,31 @@ def test_post_likes_update_on_unchanged_refetch_without_an_edit(settings, conn, 
 
     digest = build_digest(conn, settings, since=since, advance=False)
     assert all(item["edits"] == 0 for item in digest["sections"]["updated_topics"])
+
+
+def test_a_trimmed_refetch_payload_keeps_stored_likes(settings, conn):
+    liked = {
+        "reaction_users_count": 4,
+        "reactions": [{"id": "heart", "type": "emoji", "count": 4}],
+        "accepted_answer": True,
+    }
+    assert _store_post(conn, 9101, liked) == 4
+
+    trimmed = {
+        key: value
+        for key, value in {
+            "id": 9101,
+            "post_number": 1,
+            "post_type": 1,
+            "username": "alice",
+            "created_at": PAST,
+            "updated_at": PAST,
+            "raw": "dual spark vllm",
+            "cooked": "<p>dual spark vllm</p>",
+        }.items()
+    }
+    _upsert_post(conn, 901, trimmed, PAST)
+
+    row = conn.execute("SELECT like_count, accepted_answer FROM posts WHERE id=9101").fetchone()
+    assert row["like_count"] == 4
+    assert row["accepted_answer"] == 1

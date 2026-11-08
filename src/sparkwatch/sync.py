@@ -254,12 +254,15 @@ def _tombstone(
         result.tombstones_new += 1
 
 
-def _post_like_count(post: dict[str, Any]) -> int:
+def _post_like_count(post: dict[str, Any]) -> int | None:
     """Likes from the reactions plugin, then core Discourse, then the legacy dict shape.
 
     SPEC §1 "Post likes": `reaction_users_count` first; then `actions_summary[id=2].count`;
     then the sum of `reactions[].count`. An older Discourse sends `reactions` as a dict with
     `like_count`, which is read as it stands, and a plain `like_count` is the last resort.
+
+    Returns None when the payload carries no like field at all, so a re-fetch of a trimmed
+    payload never overwrites stored likes with 0.
     """
     count = post.get("reaction_users_count")
     if count is None:
@@ -275,7 +278,7 @@ def _post_like_count(post: dict[str, Any]) -> int:
             count = reactions.get("like_count", post.get("like_count"))
     if count is None:
         count = post.get("like_count")
-    return int(count or 0)
+    return None if count is None else int(count)
 
 
 def _upsert_post(
@@ -284,7 +287,7 @@ def _upsert_post(
     raw = post.get("raw") or ""
     content_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     like_count = _post_like_count(post)
-    accepted_answer = 1 if post.get("accepted_answer") else 0
+    accepted = post.get("accepted_answer")
     existing = conn.execute("SELECT content_hash FROM posts WHERE id=?", (post["id"],)).fetchone()
     values = (
         topic_id,
@@ -297,8 +300,8 @@ def _upsert_post(
         normalize_iso(post.get("updated_at")),
         post.get("version"),
         post.get("reply_to_post_number"),
-        like_count,
-        accepted_answer,
+        like_count or 0,
+        1 if accepted else 0,
         post.get("cooked"),
         raw,
         content_hash,
@@ -323,10 +326,17 @@ def _upsert_post(
         return "changed"
     # Engagement metadata, not content: refresh likes and accepted answers on a re-fetch
     # without touching content_hash or changed_at, so the post is not reported as edited.
-    conn.execute(
-        "UPDATE posts SET fetched_at=?, like_count=?, accepted_answer=? WHERE id=?",
-        (now_iso, like_count, accepted_answer, post["id"]),
-    )
+    # A trimmed payload without those fields leaves the stored values alone.
+    updates = ["fetched_at=?"]
+    params: list[Any] = [now_iso]
+    if like_count is not None:
+        updates.append("like_count=?")
+        params.append(like_count)
+    if accepted is not None:
+        updates.append("accepted_answer=?")
+        params.append(1 if accepted else 0)
+    params.append(post["id"])
+    conn.execute(f"UPDATE posts SET {', '.join(updates)} WHERE id=?", params)
     return "same"
 
 
