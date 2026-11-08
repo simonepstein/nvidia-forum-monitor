@@ -739,12 +739,16 @@ def get_posts(
         for block in blocks
     )
     page = _page(rendered, next, _max_chars(max_chars, settings))
+    topic_total = conn.execute(
+        "SELECT COUNT(*) FROM posts WHERE topic_id=?", (topic_id,)
+    ).fetchone()[0]
     return {
         "topic_id": topic_id,
         "title": topic["title"],
         "url": _topic_url(topic_id),
         "post_count": len(re.findall(r"(?m)^--- post \d+", page["text"])),
-        "topic_total": len(blocks),
+        "selected_total": len(blocks),
+        "topic_total": topic_total,
         **page,
     }
 

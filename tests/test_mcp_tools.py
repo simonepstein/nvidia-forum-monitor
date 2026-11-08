@@ -479,7 +479,12 @@ def test_get_posts_pages_break_at_word_and_line_boundaries(settings, conn):
     assert page["truncated"] is True
     assert page["text"].endswith(("\n", " "))
     assert page["topic_total"] == 2
+    assert page["selected_total"] == 2
     assert page["post_count"] >= 1
+
+    last = m.get_posts(700, last_n=1)
+    assert last["selected_total"] == 1
+    assert last["topic_total"] == 2
 
     collected = ""
     token = None

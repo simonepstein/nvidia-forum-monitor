@@ -586,7 +586,7 @@ There's no LLM here. The agent judges whether an update is worthwhile (§5, `sho
   - watch hits;
   - recipes, benchmarks, notes and flags that cite this topic.
 - `get_posts(topic_id, from_post?, to_post?, since?, last_n?, username?, max_chars?)`: the raw text of the selected posts.
-  - `post_count` is the number of posts in this page and `topic_total` the number the filter selected; pages break at a line or word boundary, so no word is split.
+  - `post_count` is the number of posts in this page, `selected_total` the number the filters selected and `topic_total` the topic's whole post count; pages break at a line or word boundary, so no word is split.
   - Use `last_n` for "what's the current state of this thread".
   - Use `since` for catching up.
 - `get_post(post_id, with_parent=True, with_replies=True)`
